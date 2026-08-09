@@ -171,8 +171,8 @@ export class Dial {
 
     this.yearEl.textContent = fmtYear(this.year);
     this.faceEl.textContent = this.face === 'indian'
-      ? '☀️☾ INDIAN LUNI-SOLAR FACE — months follow the sun and moon'
-      : 'GREGORIAN FACE — 12 months · 365 days';
+      ? '☀️☾ INDIAN LUNI-SOLAR FACE: months follow the sun and moon'
+      : 'GREGORIAN FACE: 12 months · 365 days';
   }
 
   show(on = true) { this.el.style.display = on ? '' : 'none'; }

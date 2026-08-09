@@ -353,15 +353,15 @@ export function siteReport(G) {
       <div class="rep-sec">${esc(S.act3.reportEmpty)}</div>
       <div class="rep-body">${esc(S.act3.basketSlotNote)}</div>
       <div class="rep-sec">${esc(S.act3.reportTimeline)}</div>
-      <div class="strip">${eras.map(([y, t]) => `<span>${fmtYear(y)} — ${esc(t)}</span>`).join('')}</div>
+      <div class="strip">${eras.map(([y, t]) => `<span>${fmtYear(y)}, ${esc(t)}</span>`).join('')}</div>
       <div class="rep-sec">${esc(S.act3.reportSources)}</div>
       <div class="strip">
         <span>⛏ ${esc(S.act3.sourceCategories.archaeological)}</span>
         <span>🗣 ${esc(S.act3.sourceCategories.oral)}</span>
         <span>🖼 ${esc(S.act3.sourceCategories.artistic)}</span>
-        <span>📜 ${esc(S.act3.sourceCategories.inscription)} — ${esc(S.act3.noneYet)}</span>
-        <span>📖 ${esc(S.act3.sourceCategories.literary)} — ${esc(S.act3.noneYet)}</span>
-        <span>🧭 ${esc(S.act3.sourceCategories.foreign)} — ${esc(S.act3.noneYet)}</span>
+        <span>📜 ${esc(S.act3.sourceCategories.inscription)}: ${esc(S.act3.noneYet)}</span>
+        <span>📖 ${esc(S.act3.sourceCategories.literary)}: ${esc(S.act3.noneYet)}</span>
+        <span>🧭 ${esc(S.act3.sourceCategories.foreign)}: ${esc(S.act3.noneYet)}</span>
         <span>🔬 ${esc(S.act3.sourceCategories.scientific)}</span>
         <span>${esc(S.act3.recentMedia)}</span>
       </div>

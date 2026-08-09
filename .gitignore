@@ -1,11 +1,67 @@
+# =============================================================================
+# STANDING RULE: GitHub carries the SHIPPED GAME and nothing else.
+#
+# No planning documents. No idea documents. No design docs, specs, research
+# notes, knowledge maps, allocation tables, brainstorms, meeting notes, drafts,
+# handoff scratch or review screenshots. Ever.
+#
+# Those live on disk and in the Obsidian vault, which is where thinking belongs.
+# The repo is for files the game needs to run, plus the minimum documentation
+# needed to pick the code back up.
+#
+# When adding a new file, ask: does the game need this to run, or does a
+# developer need it to understand what shipped? If neither, it is ignored here
+# BEFORE the first commit.
+#
+# Currently kept on GitHub: README.md, GAME-OVERVIEW.md (what shipped),
+# game/README.md, game/COVERAGE.md, game/EDITOR.md, and game/ itself.
+# =============================================================================
+
+# --- Planning, design and research (never on GitHub) ---
+chapter4-design-doc.md
+class6-history-knowledge-map.md
+ideas for game dev for each concept.md
+two-mode-allocation.md
+docs/
+*-design-doc.md
+*-knowledge-map.md
+*-spec.md
+*-plan.md
+*-notes.md
+*-brainstorm.md
+*-draft.md
+ideas*.md
+notes*.md
+plan*.md
+draft*.md
+research*.md
+TODO.md
+NOTES.md
+SCRATCH.md
+/plans/
+/planning/
+/research/
+/notes/
+/drafts/
+/specs/
+
+# --- Review and debug screenshots (never on GitHub) ---
+screenshots-visual-overhaul/
+screenshots/
+a1-*.png
+a2-*.png
+a3-*.png
+*-before.png
+*-after.png
+*-check*.png
+review-*.png
+shot-*.png
+.playwright-mcp/
+
 # --- Large source material (exceeds GitHub's 100 MB per-file limit) ---
 # "social science textbooks/class 6.zip" is the ~201 MB NCERT Class 6 textbook
-# bundle used as the content source. It is reference input, not project output,
-# and cannot be pushed to GitHub. Keep it locally / in cloud storage.
+# bundle used as the content source. Reference input, not project output.
 social science textbooks/
-
-# --- Tool scratch ---
-.playwright-mcp/
 
 # --- OS / editor cruft ---
 Thumbs.db

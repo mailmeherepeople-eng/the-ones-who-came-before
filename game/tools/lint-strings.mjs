@@ -5,6 +5,8 @@
 //    only in constants.js and strings.js (strings quote verbatim textbook
 //    figures, which are protected below).
 // 3. Protected strings: qualifiers that a careless copy-edit must not delete.
+// 4. No em/en dashes in anything the player reads (CLAUDE.md rule 2). Comments
+//    are exempt; quoted string contents are not.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +34,35 @@ const PROTECTED = [
 const DATE_RE = /\b\d[\d,._]*\s*(BCE|CE\b|years? ago|bya|mya)\b/g;
 const DATE_ALLOWED = new Set(['constants.js', 'strings.js']);
 
+// Em dash and en dash, banned from player-facing text. Use a comma, a full
+// stop, a colon or parentheses. Code comments are exempt because the player
+// never reads them; anything inside quotes is not.
+const DASH_RE = /[—–]/;
+const QUOTED_RE = /(['"`])((?:\\.|(?!\1)[^\\])*)\1/g;
+// src/dev/* is the world editor: developer-only UI, never shown to a player.
+const DASH_EXEMPT_DIRS = ['dev/'];
+
+// Strip line and block comments so only real code (and its strings) is checked.
+function stripComments(text) {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .split('\n')
+    .map((line) => {
+      // remove a trailing // comment, but not one inside a string literal
+      let inStr = null, esc = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (esc) { esc = false; continue; }
+        if (c === '\\') { esc = true; continue; }
+        if (inStr) { if (c === inStr) inStr = null; continue; }
+        if (c === '"' || c === "'" || c === '`') { inStr = c; continue; }
+        if (c === '/' && line[i + 1] === '/') return line.slice(0, i);
+      }
+      return line;
+    })
+    .join('\n');
+}
+
 const files = [];
 (function walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -49,6 +80,20 @@ for (const f of files) {
     const m = text.match(re);
     if (m) { console.error(`BLOCKLIST ${rel}: "${m[0]}"`); failures++; }
   }
+  // ---- em/en dash in player-facing strings ----
+  if (!DASH_EXEMPT_DIRS.some((d) => rel.startsWith(d))) {
+    const code = stripComments(text);
+    code.split('\n').forEach((line, i) => {
+      if (!DASH_RE.test(line)) return;
+      for (const m of line.matchAll(QUOTED_RE)) {
+        if (!DASH_RE.test(m[2])) continue;
+        const snippet = m[2].length > 70 ? m[2].slice(0, 70) + '...' : m[2];
+        console.error(`EM-DASH ${rel}:${i + 1}: "${snippet}" (use a comma, full stop, colon or parentheses)`);
+        failures++;
+      }
+    });
+  }
+
   const base = rel.split('/').pop();
   if (!DATE_ALLOWED.has(base)) {
     for (const line of text.split('\n')) {

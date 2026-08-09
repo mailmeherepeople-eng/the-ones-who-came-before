@@ -132,7 +132,7 @@ function buildSpecialistBar(ctx) {
       // small (0.09) — at 0.14 the additive motes bloomed into big white orbs
       FX.ring({ x: pp.x, y: ringY, z: pp.z }, { color: SPEC_FX[key].color, radius: 3.2, life: 0.9, width: 0.45 });
       FX.floaties({ x: pp.x, y: pp.y + 1.1, z: pp.z }, { color: SPEC_FX[key].color, count: 12, size: 0.09, life: 1.5, rise: 1.0 });
-      G.hud.toast(`${SPEC_ICONS[key]} ${S.act3.specialists[key]} — ${S.act3.specialistBlurbs[key]}`, 4200);
+      G.hud.toast(`${SPEC_ICONS[key]} ${S.act3.specialists[key]}, ${S.act3.specialistBlurbs[key]}`, 4200);
     });
     bar.appendChild(b);
   }
@@ -388,7 +388,7 @@ async function digs(ctx) {
       // the saved profile) — the bare mark PNG read as a broken spinner
       await showSourceCard(G, collectCard(G, 'pot', { photo: potPortrait(pot) ?? pot?.data?.mark ?? { emoji: '🏺' } }), { layer: '2' });
       // the empty basket slot — the flagship absence
-      await showSourceCard(G, collectCard(G, 'basket', { photo: { emoji: '∅' }, emptySlot: true }), { layer: '—' });
+      await showSourceCard(G, collectCard(G, 'basket', { photo: { emoji: '∅' }, emptySlot: true }), { layer: ', ' });
       await G.hud.narrator(S.act3.basketSlotNote);
       // obsidian kept in the same hut
       collectCard(G, 'obsidian', { photo: { emoji: '🖤' } });
