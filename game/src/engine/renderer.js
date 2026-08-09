@@ -3,7 +3,7 @@
 // Sky: gradient dome + sun disc/glow + drifting cloud billboards, all derived
 // from the two hexes acts already pass to setSky(skyHex, fogHex).
 import * as THREE from '../../vendor/three.module.js';
-import { PERF } from '../constants.js';
+import { PERF, QUALITY } from '../constants.js';
 
 // matches this.sun.position (40, 60, 20) so the disc sits on the light
 const SUN_DIR = new THREE.Vector3(40, 60, 20).normalize();
@@ -142,10 +142,12 @@ export class Renderer {
     disc.renderOrder = -19;
     group.add(disc);
 
-    // clouds: 8 flat billboards orbiting the camera very slowly
+    // clouds: flat billboards orbiting the camera very slowly (fewer on the
+    // low tier — they are large overlapping transparent sprites, so they cost
+    // fill rate, which is the one thing a weak mobile GPU has least of)
     const cloudTexA = this._cloudTex(1);
     const cloudTexB = this._cloudTex(2);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < QUALITY.clouds; i++) {
       const spr = new THREE.Sprite(new THREE.SpriteMaterial({
         map: i % 2 ? cloudTexB : cloudTexA,
         transparent: true,
@@ -153,7 +155,7 @@ export class Renderer {
         fog: false,
         depthWrite: false,
       }));
-      const a = (i / 8) * Math.PI * 2 + (i * 0.7) % 1;
+      const a = (i / QUALITY.clouds) * Math.PI * 2 + (i * 0.7) % 1;
       const r = R * (0.5 + ((i * 37) % 10) / 40); // 0.5R..0.72R
       const h = R * (0.26 + ((i * 53) % 10) / 45); // 0.26R..0.46R
       const w = R * (0.26 + ((i * 29) % 10) / 40);

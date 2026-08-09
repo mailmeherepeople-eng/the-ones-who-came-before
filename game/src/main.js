@@ -65,7 +65,7 @@ G.player.onSplash = (p) => FX.burst(p, { count: 24, size: 0.13, speed: 3, life: 
 // character collision: NPCs/animals treat the player as a solid body (npc.js),
 // and the player is pushed out of them each frame (see the ground loop below)
 import { setPlayerBody } from './npc/npc.js';
-import { PLAYER } from './constants.js';
+import { PLAYER, QUALITY, QUALITY_TIER } from './constants.js';
 setPlayerBody({ pos: G.player.pos, r: PLAYER.RADIUS });
 
 // ---------- stage clearing (interactables, NPCs, props) ----------
@@ -137,7 +137,7 @@ G.renderer.onFrame = (dt) => {
   }
   if (G.tick) G.tick(dt, inp);
   FX.update(dt);
-  G.mesher.flush(3);
+  G.mesher.flush(QUALITY.meshBudget);
 };
 
 // ---------- act flow ----------

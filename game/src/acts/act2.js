@@ -3,7 +3,7 @@
 // step locks (P4), calendar faces (P5), arrival at today (P6), and the
 // deep-time prologue (Fig 4.1).
 import * as THREE from '../../vendor/three.module.js';
-import { YEARS, UNITS, WORLD, gapYears, fmtYear, fmtNum } from '../constants.js';
+import { YEARS, UNITS, WORLD, QUALITY, gapYears, fmtYear, fmtNum } from '../constants.js';
 import { S } from '../strings.js';
 import { Save } from '../save.js';
 import { buildStage, applyBandDrift, SITES } from '../world/states.js';
@@ -97,7 +97,7 @@ export async function runAct2(G) {
   //    Android it is a few hundred; spread out, no single frame carries it.
   //    This is the same gradual path band drift already uses.
   const SETTLE_MS = 120;
-  const DRAIN = 12;
+  const DRAIN = QUALITY.drainBudget;
   let firstBuild = true;
   let lastEraWave = 0;
   let lastBandSwap = 0;

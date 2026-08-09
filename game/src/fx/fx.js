@@ -66,9 +66,14 @@
 //   update() re-attaches it.
 
 import * as THREE from '../../vendor/three.module.js';
+import { QUALITY } from '../constants.js';
 
-const ADD_CAP = 900;   // additive particle pool
-const NORM_CAP = 600;  // normal-blend particle pool (total 1500)
+// Pools are split 60/40 additive vs normal-blend out of the tier's total.
+// Particles are the cheapest thing to trim on a weak GPU: they are large
+// overlapping transparent quads, so they cost pure fill rate, and a thinner
+// confetti burst still reads as a confetti burst.
+const ADD_CAP = Math.round(QUALITY.particleCap * 0.6);  // additive particle pool
+const NORM_CAP = QUALITY.particleCap - ADD_CAP;         // normal-blend particle pool
 const MAX_POINT_PX = 64; // clamp near-camera quads: fill-rate guard
 
 const VERT = /* glsl */ `
