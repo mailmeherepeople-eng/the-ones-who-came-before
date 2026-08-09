@@ -13,9 +13,8 @@
 //      activate, so there is one obvious lever and no partial upgrades.
 //   2. skipWaiting + clients.claim, so a new worker takes over on the next
 //      load rather than waiting for every tab to close.
-//   3. Navigations are network-first. The HTML is what points at everything
-//      else, so if the network is up, the phone always learns about a new
-//      build; only assets are cache-first.
+//   3. Every request is network-first, with the cache as the offline fallback
+//      (see the fetch handler below for why cache-first was wrong here).
 //
 // BUMP CACHE ON EVERY DEPLOY.
 const CACHE = 'towcb-v3';
