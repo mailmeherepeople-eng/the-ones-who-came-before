@@ -18,7 +18,7 @@
 //      build; only assets are cache-first.
 //
 // BUMP CACHE ON EVERY DEPLOY.
-const CACHE = 'towcb-v2';
+const CACHE = 'towcb-v3';
 
 // Enumerated rather than globbed: no build step here, so there is nothing to
 // generate a manifest, and an explicit list is greppable and diffable. Missing
@@ -82,36 +82,37 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// NETWORK FIRST for everything, cache as the fallback.
+//
+// This started as cache-first for assets, which is the usual advice, and it
+// was wrong here. A cache-first worker serves the PREVIOUS build's modules on
+// the first load after a deploy: navigations fetched fresh HTML, that HTML
+// pulled its modules straight out of the old cache, and the page ran yesterday's
+// code. Only the second load came good. Caught on the live site, where a fresh
+// deploy booted with no settings button and no action rail.
+//
+// Network-first inverts the trade in the right direction for this project. The
+// offline promise is intact, because a failed fetch falls back to the cache,
+// and the whole game is 2.5 MB of small files that revalidate quickly. What it
+// buys is that an online player is NEVER a version behind, which matters far
+// more than shaving a few hundred milliseconds off a repeat load.
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // never touch cross-origin
 
-  // Navigations: network first, so a deployed fix is picked up as soon as the
-  // phone has a connection. Cache is the fallback, which is the offline path.
-  if (req.mode === 'navigate') {
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
+  e.respondWith(
+    fetch(req)
+      .then((res) => {
+        if (res.ok && res.type === 'basic') {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
-          return res;
-        })
-        .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
-    );
-    return;
-  }
-
-  // Assets: cache first. They are versioned by CACHE, so a bump refetches all
-  // of them and nothing can serve a stale module against fresh HTML.
-  e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      if (res.ok && res.type === 'basic') {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
-      }
-      return res;
-    }))
+        }
+        return res;
+      })
+      .catch(() => caches.match(req).then((hit) => (
+        hit || (req.mode === 'navigate' ? caches.match('./index.html') : undefined)
+      )))
   );
 });
