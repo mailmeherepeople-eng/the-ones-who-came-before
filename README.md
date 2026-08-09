@@ -58,14 +58,20 @@ worked example, the "Perhaps they believed" hedge). Keep it green.
 
 ## Documentation
 
+**Picking this up cold? Read [HANDOFF.md](HANDOFF.md) first.** It is the
+five-minute orientation: current state, how to run and test, the rules that
+must not be broken, open work, and the traps that cost time here.
+
 | File | What's in it |
 |---|---|
+| [HANDOFF.md](HANDOFF.md) | Start here. Session-start orientation and current state |
 | [GAME-OVERVIEW.md](GAME-OVERVIEW.md) | The complete reference: architecture, every act beat by beat, the living-world systems, the editor, known bugs |
 | [game/COVERAGE.md](game/COVERAGE.md) | Every examinable syllabus item → the beat that teaches it |
 | [game/EDITOR.md](game/EDITOR.md) | World editor user guide |
-| [chapter4-design-doc.md](chapter4-design-doc.md) | The original design document |
-| [class6-history-knowledge-map.md](class6-history-knowledge-map.md) | Chapter knowledge map |
-| [docs/superpowers/specs/](docs/superpowers/specs/) | Design spec addendum (2026-08-07) |
+| [CLAUDE.md](CLAUDE.md) | Standing rules for this repo, both enforced by tooling |
+
+The design documents, knowledge map and spec are deliberately **not** in this
+repo (see CLAUDE.md rule 1). They live on the author's disk and in the vault.
 
 ## Debug parameters
 
