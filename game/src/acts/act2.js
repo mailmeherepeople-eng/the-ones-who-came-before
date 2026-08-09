@@ -84,14 +84,43 @@ export async function runAct2(G) {
   // rebuild world stages at a throttle while scrubbing; BETWEEN stages, seeded
   // per-band flora drift keeps the centuries visibly moving (defect fix: the
   // valley used to be pixel-identical across multi-millennium scrubs)
+  // An era flip rewrites the whole valley: buildBase() wipes the voxel array
+  // and regenerates every column, so there is no smaller set of chunks to
+  // remesh. What CAN change is when the work happens and how much of it lands
+  // on one frame. Two guards, both aimed at the phone:
+  //
+  //  SETTLE_MS — the dial is a drag, and a drag that sweeps four eras used to
+  //    fire four full rebuilds, one per frame it crossed a boundary. Wait for
+  //    the year to hold still, then build once.
+  //  DRAIN     — remesh a few chunks per frame instead of all 64 in one call.
+  //    Measured on a fast desktop a full remesh is ~34 ms, so on a budget
+  //    Android it is a few hundred; spread out, no single frame carries it.
+  //    This is the same gradual path band drift already uses.
+  const SETTLE_MS = 120;
+  const DRAIN = 12;
   let firstBuild = true;
   let lastEraWave = 0;
   let lastBandSwap = 0;
+  let askedStage = null, askedAt = 0;
+
   G.tick = () => {
     const now = performance.now();
-    if (ctx.pendingStage !== null && !ctx.rebuilding) {
+
+    // finish the rebuild in flight before considering another
+    if (ctx.rebuilding) {
+      if (G.mesher.flush(DRAIN) === 0) {
+        ctx.rebuilding = false;
+        refreshSkirt(ctx);
+      }
+      return;
+    }
+
+    if (ctx.pendingStage !== null) {
       const s = ctx.pendingStage;
+      if (s !== askedStage) { askedStage = s; askedAt = now; }
+      if (!firstBuild && now - askedAt < SETTLE_MS) return; // still scrubbing
       ctx.pendingStage = null;
+      askedStage = null;
       ctx.rebuilding = true;
       buildStage(G.world, s, true); // true: strata-dress the diorama's cut edges
       ctx.stage = s;
@@ -100,8 +129,10 @@ export async function runAct2(G) {
       ctx.band = bandFor(ctx.year);
       ctx.pendingBand = null;
       applyBandDrift(G.world, ctx.band, s, moundAge(ctx));
-      G.mesher.remeshAll();
-      refreshSkirt(ctx);
+
+      // Sky and fog switch immediately, so the era reads as changed on the
+      // frame you cross the boundary even though the terrain is still catching
+      // up over the next few frames.
       G.renderer.setSky(s === 0 ? 0xbcd3e6 : 0x9ec8e8, s === 0 ? 0xd4e2ec : 0xcfe0ee);
       // sky-mode fog: setSky just rebuilt scene.fog for a GROUND camera; from
       // 70+ units up those defaults wash the whole far half of the valley to
@@ -109,16 +140,23 @@ export async function runAct2(G) {
       // the extreme corners soften.
       const fog = G.renderer.scene.fog;
       if (fog) { fog.near = 95; fog.far = 175; }
-      ctx.rebuilding = false;
-      // time-sweep over the village when the era flips (throttled; none on
-      // the initial build so the intro card isn't upstaged)
-      if (!firstBuild && now - lastEraWave > 600) {
-        lastEraWave = now;
-        eraSweep(G, 30);
+
+      G.world.markAllDirty();
+      if (firstBuild) {
+        // the opening build sits behind the intro card, so take it in one go
+        // rather than letting the act open on a half-built valley
+        G.mesher.flush(Infinity);
+        ctx.rebuilding = false;
+        refreshSkirt(ctx);
+      } else {
+        if (G.mesher.flush(DRAIN) === 0) { ctx.rebuilding = false; refreshSkirt(ctx); }
+        // time-sweep over the village when the era flips (throttled; none on
+        // the initial build so the intro card isn't upstaged)
+        if (now - lastEraWave > 600) { lastEraWave = now; eraSweep(G, 30); }
       }
       firstBuild = false;
     } else if (ctx.pendingBand !== null && ctx.pendingBand !== ctx.band &&
-               !ctx.rebuilding && now - lastBandSwap > 250) {
+               now - lastBandSwap > 250) {
       // band drift: at most one swap per 250ms; a fast scrub jumps straight
       // to the newest band (intermediates are skipped, never queued)
       lastBandSwap = now;
