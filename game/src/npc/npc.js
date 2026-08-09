@@ -17,6 +17,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { WORLD } from '../constants.js';
 import { isSolid, isWater } from '../world/blocks.js';
+import { foldStatic } from '../world/merge.js';
 
 const SY = WORLD.SIZE_Y;
 
@@ -395,6 +396,19 @@ export class Npc {
     this.shadow = makeShadow(this._shR);
     this.shadow.position.y = 0.02;
     g.add(fig, this.shadow);
+
+    // Fold the static parts into their animated parent, ~16 draw calls -> ~8.
+    // Every part listed in a `keep` array is one the update loop moves, so it
+    // has to survive as its own object: body breathes (scale.y), head turns,
+    // limbs swing. Their static decoration has no such claim — eyes, brow and
+    // hair ride the head; feet ride their leg; the belt and drape never move
+    // relative to the torso group. The blob shadow is transparent so foldStatic
+    // skips it on its own. Carried items attach after this and are unaffected.
+    foldStatic(this.head);
+    foldStatic(this.legL);
+    foldStatic(this.legR);
+    foldStatic(this.armR); // the elder's staff, when there is one
+    foldStatic(fig, [this.body, this.head, this.legL, this.legR, this.armL, this.armR]);
 
     this.group = g;
     this.pos = g.position;
@@ -804,6 +818,14 @@ export class Animal {
     this.shadow = makeShadow(this._shR);
     this.shadow.position.y = 0.02;
     g.add(fig, this.shadow);
+
+    // Same fold as the human figure. The head carries the whole species
+    // silhouette as static decoration — antlers, horns, beard, muzzle, the
+    // predator's mask, teeth and ears — so a prowler drops from 8 head meshes
+    // to 1. Body, head, tail and the four gait legs all animate, so they stay.
+    foldStatic(this.head);
+    foldStatic(fig, [this.body, this.head, this._tail, ...this.legs].filter(Boolean));
+
     this.group = g;
     this.pos = g.position;
     this.pos.set(opts.x, 0, opts.z);
