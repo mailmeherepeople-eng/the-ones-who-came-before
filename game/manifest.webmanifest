@@ -1,0 +1,20 @@
+{
+  "name": "The Ones Who Came Before",
+  "short_name": "Came Before",
+  "description": "Live an early human's life, watch time bury it, then excavate your own past. NCERT Class 6 History, Chapter 4.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#1a130c",
+  "theme_color": "#1a130c",
+  "categories": ["education", "games"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

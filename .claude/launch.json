@@ -12,6 +12,13 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["--yes", "serve", "-l", "8322", "game"],
       "port": 8322
+    },
+    {
+      "//": "Serves the REPO ROOT, so /game/ and /game-baseline/ are both reachable for A/B comparison, same as GitHub Pages.",
+      "name": "compare",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve", "-l", "8323", "."],
+      "port": 8323
     }
   ]
 }

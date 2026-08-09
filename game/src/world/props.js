@@ -2,6 +2,7 @@
 // boulders, driftwood, cattails, butterflies, dust motes.
 // Cheap primitives only; every factory returns { group, update? }.
 import * as THREE from '../../vendor/three.module.js';
+import { foldStatic, MERGED_MAT } from './merge.js';
 
 const MAT = {
   wood: new THREE.MeshLambertMaterial({ color: 0x6d5028 }),
@@ -83,6 +84,10 @@ export function makeCampfire(x, y, z) {
   const light = new THREE.PointLight(0xff9d3c, 6, 9);
   light.position.y = 0.9;
   g.add(light);
+  // 4 logs + 6 stones fold to one call. No keep list is needed: the flames,
+  // core and embers are MeshBasicMaterial, which foldStatic declines on its
+  // own, and the PointLight is not a mesh at all.
+  foldStatic(g);
   let t = Math.random() * 10;
   return {
     group: g,
@@ -516,19 +521,27 @@ export function makeBerryBush(x, y, z) {
     [-0.16, 0.98, -0.28, 0], [0.1, 1.05, 0.2, 1], [-0.48, 0.5, -0.02, 0],
     [0.2, 0.64, 0.44, 0],
   ];
-  const berries = [];
+  // Berries go in their own group so the cluster folds to ONE mesh and
+  // setBerries() toggles that group rather than seven separate meshes. The two
+  // berry colours merge without trouble — colour is baked per vertex, not per
+  // material. Six bushes at 11 meshes each was the heaviest prop cluster in
+  // Act 1; this makes it 2 each.
+  const berryGroup = new THREE.Group();
+  berryGroup.name = 'berries';
   for (const [px, py, pz, bright] of spots) {
     const b = new THREE.Mesh(BERRY_GEO, bright ? MAT.berryBright : MAT.berry);
     b.position.set(px, py, pz);
-    g.add(b);
-    berries.push(b);
+    berryGroup.add(b);
   }
+  g.add(berryGroup);
+  foldStatic(berryGroup);      // 7 berries -> 1
+  foldStatic(g, [berryGroup]); // trunk stub + 3 foliage blobs -> 1
   const api = {
     group: g,
     hasBerries: true,
     setBerries(v) {
       api.hasBerries = !!v;
-      for (const b of berries) b.visible = api.hasBerries;
+      berryGroup.visible = api.hasBerries;
     },
   };
   return api;
@@ -614,6 +627,18 @@ export function makeCommunityChest(x, y, z) {
   spear.rotation.z = -0.26;
   g.add(spear);
 
+  // The chest is the heaviest prop in the game at ~30 meshes. Fold it in three
+  // pieces rather than one, because two of its parts have to keep moving:
+  //   g     — skids, body, plank bands, corner posts, latch. foldStatic skips
+  //           the `inside` and `lid` sub-groups on its own (it never folds a
+  //           Group, precisely because a Group may be a pivot like this one).
+  //   lid   — slab, lip, straps, handle, folded INTO the pivot group's child
+  //           set so the whole lid still swings as one.
+  //   spear — dressing that never moves; a group only so it can be tilted once.
+  foldStatic(g);
+  foldStatic(lid);
+  foldStatic(spear);
+
   const OPEN_ANGLE = -1.95;
   let ang = 0, want = 0, holds = 0, autoT = 0;
   const api = {
@@ -661,6 +686,7 @@ export function makeMeat(x, y, z) {
   inner.add(box(0.1, 0.07, 0.1, MAT.bone, -0.22, 0.3, 0));    // bone-cream cap
   inner.position.y = 0.28;
   g.add(inner);
+  foldStatic(inner); // haunch, shank and bone bob and spin as one group
   let t = Math.random() * 6;
   return {
     group: g,
@@ -674,9 +700,35 @@ export function makeMeat(x, y, z) {
 
 export const PROP_MATS = MAT;
 
+// Fold a finished prop down to one draw call, but ONLY when it is provably
+// inert.
+//
+// The test is the shape of the returned object. A factory that hands back
+// nothing but `group` has given no caller a reference to its own children, so
+// nothing can rotate, retexture or hide them later. The moment a factory
+// exposes anything else — makeCampfire's `update`, makeBerryBush's
+// `setBerries`, makeCommunityChest's `setOpen`, makeLantern's `light` — it is
+// left alone, because that handle almost certainly reaches a child mesh.
+//
+// Checking the return shape rather than keeping a list means this stays
+// correct on its own: add a method to a factory and it drops out of folding
+// automatically, with no list to remember to update.
+export function foldIfStatic(prop) {
+  if (!prop || !prop.group || prop._folded) return 0;
+  // Read the shape BEFORE marking, and mark non-enumerably — an ordinary
+  // `prop._folded = true` would itself become a second key and make the test
+  // below fail for every prop.
+  const keys = Object.keys(prop);
+  Object.defineProperty(prop, '_folded', { value: true });
+  if (keys.length !== 1 || keys[0] !== 'group') return 0;
+  return foldStatic(prop.group);
+}
+
 // Dispose a group's GPU resources: geometries always; materials/textures only
-// when not from the shared pool above.
-const SHARED_MATS = new Set(Object.values(MAT));
+// when not from the shared pool above. MERGED_MAT is shared across every
+// folded prop and character, so it belongs in that pool — disposing it once
+// would blank every folded mesh in the scene.
+const SHARED_MATS = new Set([...Object.values(MAT), MERGED_MAT]);
 export function disposeGroup(scene, group) {
   scene.remove(group);
   group.traverse?.((o) => {

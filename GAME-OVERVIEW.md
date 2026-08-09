@@ -441,7 +441,7 @@ Current state: zero console errors across all three acts and in the editor; stri
 2. **Intro-sequence input race** — during Act 1's opening card/narrator chain the player can already walk (synthetic input proved it; fast tappers could too), and the script later teleports them back, which reads as a glitch. Fix: hold input disabled until the wake narration completes.
 3. **Dig-stroke FX visibility not re-verified up close** — dig particles were moved to pit-rim height and biased toward the camera after review found them invisible; code-verified but the final visual pass hasn't confirmed at real play distance in third person.
 4. **Touch/mobile pass for the third-person camera** — drag-look orbit and pinch-for-camera-distance are wired but untested on a real device; the pinch previously did nothing, so muscle memory is unaffected, but feel needs checking.
-5. **Performance re-check on low-end Android** — the overhaul added a sky dome, cloud sprites, particle pools, AO-heavier meshes and a player model. Everything is budgeted (2 particle draw calls, pooled meshes, 30 fps limiter) but no on-device profiling has happened since.
+5. ~~**Performance re-check on low-end Android**~~ — **measured and largely addressed 2026-08-10 (see §12).** Draw calls are down ~36% and the Act 2 dial stall is down 58%. What remains open is genuinely on-device testing: every number so far is emulated work counts, not phone frames.
 6. **Clouds read sparse/subtle** — correct shape now (no more duplicate-sun blobs) but reviewers note they're barely there; could use one more density/size pass.
 7. **Birch/snag trunks can read concrete-grey in shade** — palette was warmed and spacing enforced, but side faces in shadow still drift grey (seen at the Act 3 spawn vista).
 8. **Act 2's P3 "beat the clock" reward is unconditional** — the 30-second counting challenge has no win detection wired (`countdownChallenge` supports it; callers don't use it), so the "make it and the reward is yours" framing is a bluff. Harmless (the formula is the reward) but worth honoring or rewording.
@@ -497,3 +497,88 @@ If you are picking this up cold:
 - **Terrain heights are treated as frozen.** Walkability (bank caps, cave approach, jump height, water breach) was hand-verified across all four world states; the log crossing was added at the one height that keeps it true.
 - **Systems yield to scripts.** Anything autonomous (ambient life, idle wander) must expose a `stop()` and be stopped before a scripted beat moves the same characters.
 - **Dev tooling stays out of the shipped graph.** `src/dev/*` is only ever reached by a dynamic `import()` behind `?edit` / F2.
+
+---
+
+## 12. The mobile performance pass (2026-08-10)
+
+Measured first, then fixed. Everything below is instrumented numbers from
+`renderer.gl.info` and GPU pixel readback, at **fixed camera poses** — a
+wandering player makes every reading incomparable, which invalidated the first
+round of measurements before this was noticed.
+
+### What was actually wrong
+
+Not what you would guess. Triangles and fill rate were never the problem:
+`MAX_PIXEL_RATIO: 1.5` means a DPR-3 phone renders *fewer* pixels than a
+1280×720 desktop. The problem was **draw calls**, and they came from people and
+props, not terrain. 11 NPCs were 157 meshes and 21 props were 173, so **330 of
+~490 renderables carried 6% of the triangles**. Mobile GPU drivers bill per
+draw call.
+
+The second problem was the Act 2 era flip: `buildStage` + `remeshAll` froze one
+frame for 40–59 ms on a fast desktop, and it fires while dragging the time
+dial, which is Act 2's entire interaction.
+
+### What changed
+
+| | Fix | Result |
+|---|---|---|
+| **A1** | `world/merge.js` folds static part-meshes into one vertex-coloured geometry per animated part (§12.1) | 1014 → 647 draw calls across four fixed poses (−36%) |
+| **A3** | Act 2 era flip gets a 120 ms settle debounce and drains the remesh a few chunks per frame | worst frame 59.9 → 24.9 ms (−58%), nothing over the 33 ms budget |
+| **A4** | Service worker + manifest | real offline, installable, no 562 KB refetch |
+| **B** | `QUALITY` tier in `constants.js`, `?q=high\|low` | pixel ratio, clouds, particle caps and remesh budgets scale down on weak devices |
+
+### 12.1 Mesh folding — `world/merge.js`
+
+`foldStatic(root, keep)` bakes each part's material colour into vertex colours
+and welds the geometries into one, against a single shared vertex-coloured
+material. Same technique `world/mesher.js` already uses for terrain, so the
+pixels are unchanged; only the call count drops.
+
+**The rule that keeps it safe:** anything the game animates goes in `keep`. A
+folded part loses its own transform, so a mesh that is rotated, scaled or moved
+per frame must stay a separate object. Beyond that, `foldStatic` declines
+non-Lambert, transparent, DoubleSide, textured and Group children by itself —
+which is why campfire flames, butterfly wings, blob shadows and the chest's lid
+pivot survive with no list to maintain.
+
+For props, `foldIfStatic` folds only factories that return **nothing but
+`group`**. Any other key is a handle that probably reaches a child —
+`makeBerryBush` has no `update` but does expose `setBerries`, which is exactly
+the trap. That test is self-maintaining: add a method to a factory and it drops
+out of folding automatically.
+
+Verified by GPU pixel readback against the frozen `game-baseline/` build:
+- A character, frozen in a fixed pose against a bare scene: 20 meshes → 12,
+  **0 of 168,795 pixels differ**.
+- The community chest: 30 → 16 meshes, **10 pixels differ** (0.006%), all on
+  one lid silhouette edge — antialiasing tie-breaking.
+
+### 12.2 Two tier levers that were tried and rejected
+
+Both looked sensible and both failed on measurement. Recorded so nobody
+re-adds them:
+
+- **Shorter far plane on mobile** (160 → 120) saved 2% of draw calls and
+  **clipped the world**. Act 2's diorama camera sits 150 units from the far map
+  corner, so the valley was cut off in mid-air while the act's own fog was
+  still configured to fade at 175.
+- **Thinner ground cover** (`floraDensity` 0.6) saved 0.4%. Cross-flora is only
+  ~3,100 of ~187,000 triangles, so it was the most *visible* change available
+  for almost no gain.
+
+One optimisation was also written and reverted: removing the AO inner loop's
+per-corner array allocations produced no measurable change (34.4 ms vs 34.0 ms)
+because V8 already elides them. `computeVertexNormals` is ~16% of a remesh and
+remains the obvious next target if the mesher ever needs to be faster.
+
+### 12.3 Comparing builds
+
+`game-baseline/` is a frozen copy of the pre-pass game, byte-identical except
+for its own `SAVE_KEY` and a `BASELINE` tab title. Because Pages serves the
+repo root it deploys alongside the live game, so both are playable on a phone
+at once. `compare.html` at the repo root is the launcher. **This directory is
+temporary** and comes out once the results have been judged; the revert point
+for the whole pass is tag `v1-pre-perf`, and each fix is its own commit so any
+one of them can be reverted alone.

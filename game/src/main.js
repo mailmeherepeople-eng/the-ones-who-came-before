@@ -65,11 +65,11 @@ G.player.onSplash = (p) => FX.burst(p, { count: 24, size: 0.13, speed: 3, life: 
 // character collision: NPCs/animals treat the player as a solid body (npc.js),
 // and the player is pushed out of them each frame (see the ground loop below)
 import { setPlayerBody } from './npc/npc.js';
-import { PLAYER } from './constants.js';
+import { PLAYER, QUALITY, QUALITY_TIER } from './constants.js';
 setPlayerBody({ pos: G.player.pos, r: PLAYER.RADIUS });
 
 // ---------- stage clearing (interactables, NPCs, props) ----------
-import { disposeGroup } from './world/props.js';
+import { disposeGroup, foldIfStatic } from './world/props.js';
 
 export function clearStage(G) {
   G.interactables.length = 0;
@@ -129,11 +129,15 @@ G.renderer.onFrame = (dt) => {
       G.hud.hidePrompt();
     }
     for (const n of G.npcs) n.update?.(dt);
-    for (const p of G.props) p.update?.(dt);
+    // foldIfStatic is a no-op after the first sighting of a prop (it sets its
+    // own flag). Doing it here rather than at each push site is deliberate:
+    // acts add props through several paths and the editor spawns them at
+    // runtime, and this is the one place every prop is guaranteed to pass.
+    for (const p of G.props) { if (!p._folded) foldIfStatic(p); p.update?.(dt); }
   }
   if (G.tick) G.tick(dt, inp);
   FX.update(dt);
-  G.mesher.flush(3);
+  G.mesher.flush(QUALITY.meshBudget);
 };
 
 // ---------- act flow ----------

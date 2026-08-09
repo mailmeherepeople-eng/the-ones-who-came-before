@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#1a130c">
 <title>The Ones Who Came Before</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏺</text></svg>">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -14,5 +16,16 @@
   <div id="ui-root"></div>
 </div>
 <script type="module" src="src/main.js"></script>
+<script>
+  // Offline cache. Registered from here rather than main.js so it is entirely
+  // outside the game's module graph, and after load so it never competes with
+  // the first paint for bandwidth. Scope is this directory, which keeps it off
+  // the sibling game-baseline/ build during A/B comparison.
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => { /* offline is a bonus, never a blocker */ });
+    });
+  }
+</script>
 </body>
 </html>
