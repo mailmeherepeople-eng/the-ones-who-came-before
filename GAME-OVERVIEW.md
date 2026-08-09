@@ -582,3 +582,61 @@ at once. `compare.html` at the repo root is the launcher. **This directory is
 temporary** and comes out once the results have been judged; the revert point
 for the whole pass is tag `v1-pre-perf`, and each fix is its own commit so any
 one of them can be reverted alone.
+
+---
+
+## 13. Change log (2026-08-09 22:34 IST)
+
+Ten requested changes. Each is its own commit, so any one can be reverted
+alone; the revert point for the whole performance pass before it is tag
+`v1-pre-perf`.
+
+### 13.1 Standing rules (now enforced, not remembered)
+
+**GitHub carries the shipped game only.** No planning documents, idea
+documents, specs, research notes or review screenshots, ever. `.gitignore`
+blocks the category by pattern (`*-design-doc.md`, `ideas*.md`, `plan*.md`,
+`/specs/`, `review-*.png`), not just the names that existed on the day. The
+repo went from ~53 MB to 5.8 MB. Everything removed is still on disk.
+
+**No em dash or en dash in anything the player reads.** 77 lines scrubbed
+across `strings.js`, `act3.js`, `report.js` and `dial.js`, rewritten per
+sentence rather than blanket-replaced: a colon where the dash labelled, a full
+stop where it joined clauses, parentheses where a pair bracketed. `lint-strings`
+now strips comments and fails on a dash inside any quoted string, so it cannot
+come back. `src/dev/*` is exempt as developer-only UI.
+
+Both rules live in `CLAUDE.md` at the repo root.
+
+### 13.2 Gameplay and content
+
+| | Change |
+|---|---|
+| Wording | "band" is **"tribe"** everywhere the player reads it; the band's store is the **Community Chest**. The village granary keeps the word "store", it is a different object and the Scene C lesson depends on the distinction. |
+| Hunt | Asks for **three deer**, not one. Herd raised 4 to 6 so a scattered herd cannot strand the player. Live (n/3) objective count. |
+| Hunt | **Take Aim / Fire** on a right-hand action rail. Take Aim drops to first person with a crosshair; the rail swaps to Fire and Lower bow. Two big thumb targets on a phone, and E/Enter still fire for keyboard players. |
+| Sharing | Everything gathered must be **placed in the store box** beside the Community Chest, not merely carried home. Berries, meat and fish each hold the next task until the deposit happens. The box fills visibly as the day's haul accumulates. |
+| Tribe | Tribe members are **talkable** (💬). They reply in pictograms, never words: Act 1 teaches that their language is lost, and English would undo it. |
+| Predator | The prowler is now a **bear**: roughly double a deer in every dimension, shoulder hump, blunt muzzle, and slowed from 2.4 to 1.7 against a player who moves at 5.2. Big and unhurried beats small and fast. |
+| NPCs | Step-ups are **hopped, not glided**, and characters try level ground before allowing a climb, so they walk around obstacles rather than over them. |
+| Camera | **Settings panel** (gear, top left) with "Lock camera behind me": the camera swings around to stay behind you, so crossing the valley needs no dragging. Preference persists outside the save file. |
+
+### 13.3 Details worth knowing before touching these
+
+- **The store box is the lesson, not busywork.** The chapter teaches that the
+  tribe's food belongs to everyone. Being made to hand your catch over before
+  you may do anything else carries that better than the narrator line that used
+  to carry it alone. Do not "streamline" it away.
+- **Talk replies must stay pictographic.** `npc.talk.icons`, edited in the
+  world editor's "when talked to" section. The section carries the rule as an
+  on-screen note.
+- **Interactables can follow a moving target** (`follow`, see `interactAt` in
+  main.js). That is how a talk prompt tracks a walking character.
+- **The NPC step ceiling stays at 1.05 blocks.** Terrain heights are integers,
+  so every rise in this world is a full block; lowering the ceiling strands
+  characters on open ground. The fix for "they float over things" was the hop
+  and the level-first search, not a smaller ceiling.
+- **Settings are not in the save file.** `src/settings.js` has its own key, so
+  "start over" and `?act=N` never lose them.
+- **The service worker is off on localhost.** It was serving stale modules
+  during development, which is the staleness footgun called out in §12.
