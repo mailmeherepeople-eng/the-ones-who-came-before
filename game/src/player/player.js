@@ -212,6 +212,14 @@ export class Player {
       g.add(box(0.1, 0.22, 0.04, 0x777777, 0, 1.24, 0)); // knapped stone tip
       g.position.set(0.02, -0.45, 0.05);
       g.rotation.set(0.18, 0, -0.08);
+    } else if (kind === 'meat') {
+      // the haul from the hunt, hoisted on the shoulder: a dark haunch with a
+      // pale bone end so it is readable in silhouette from the follow camera
+      g.add(box(0.3, 0.24, 0.42, 0x7a3b2c, 0, 0, 0));
+      g.add(box(0.2, 0.16, 0.2, 0x8f4a37, 0.04, 0.12, -0.1));
+      g.add(box(0.06, 0.26, 0.06, 0xd8cfae, -0.1, 0.14, 0.16)); // bone
+      g.position.set(0.06, -0.34, -0.02);
+      g.rotation.set(0.2, 0, 0.25);
     } else { // waterskin: plump dark pouch slung at the hip (model-root local)
       const pouch = new THREE.Mesh(
         new THREE.SphereGeometry(0.13, 7, 6),
@@ -247,6 +255,36 @@ export class Player {
     } else if (el) {
       el.style.display = 'none';
     }
+  }
+
+  // First-person sighting mode for the bow. Collapses the third-person boom so
+  // the camera sits at the head, which also hides the character model through
+  // the existing CAM.HIDE_BELOW rule in syncCamera, and swaps the small aim dot
+  // for a full crosshair. The previous follow distance is restored on exit, so
+  // a player who had zoomed the camera keeps their preference.
+  setFirstPerson(on) {
+    if (on === !!this._fpsOn) return;
+    this._fpsOn = on;
+    if (on) {
+      this._fpsPrevDist = this.camDist;
+      this.camDist = 0;          // syncCamera clamps to a 0.5 minimum
+      this._snapCam = true;      // no sweep: cut straight to the sights
+      this.setAim(false);
+      let x = document.getElementById('aim-cross');
+      if (!x) {
+        x = document.createElement('div');
+        x.id = 'aim-cross';
+        x.innerHTML = '<span class="gap"></span><span class="dot"></span>';
+        document.body.appendChild(x);
+      }
+      x.style.display = 'block';
+    } else {
+      this.camDist = this._fpsPrevDist ?? CAM.DIST;
+      this._snapCam = true;
+      const x = document.getElementById('aim-cross');
+      if (x) x.style.display = 'none';
+    }
+    this.syncCamera();
   }
 
   // true if the collision box overlaps any solid block
@@ -358,7 +396,9 @@ export class Player {
     }
     // wheel/pinch adjusts the follow distance (was unused in the FP build —
     // the sky transition uses the HUD button, not the wheel)
-    if (inp.zoom) this.camDist = Math.max(CAM.MIN, Math.min(CAM.MAX, this.camDist + inp.zoom * 0.6));
+    // ignored while sighting the bow: a stray wheel or pinch must not pull the
+    // camera back out of first person mid-shot
+    if (inp.zoom && !this._fpsOn) this.camDist = Math.max(CAM.MIN, Math.min(CAM.MAX, this.camDist + inp.zoom * 0.6));
 
     // camera forward: syncCamera applies rotateY(-yaw) to (0,0,-1), giving
     // (sin yaw, 0, -cos yaw). Movement MUST use the same basis so W is always

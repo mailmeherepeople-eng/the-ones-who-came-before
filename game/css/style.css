@@ -884,3 +884,59 @@ body { font-family: var(--font-ui); color: var(--ink); -webkit-user-select: none
 .settings-label { font-size: 15px; color: var(--ink); }
 .settings-note { font-size: 12.5px; line-height: 1.45; color: #a89272; }
 .settings-panel .set-close { width: 100%; min-height: 46px; }
+
+/* ============================================================
+   Action rail (2026-08-09 IST): right-side verb buttons
+   Sits above the touch jump button so a thumb reaches both, and
+   clear of #hud-satchel at the top right. Used by the bow.
+   ============================================================ */
+#hud-actions {
+  position: absolute; z-index: 23;
+  right: max(18px, calc(env(safe-area-inset-right) + 14px));
+  bottom: max(112px, calc(env(safe-area-inset-bottom) + 104px));
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+  opacity: 0; pointer-events: none; transition: opacity 0.22s;
+}
+#hud-actions.on { opacity: 1; pointer-events: auto; }
+.act-btn {
+  min-width: 132px; min-height: 52px; padding: 12px 20px;
+  font-family: var(--font-ui); font-size: 16px; font-weight: 600;
+  letter-spacing: 0.01em; color: var(--ink); cursor: pointer;
+  background: linear-gradient(180deg, rgba(52, 38, 22, 0.96), rgba(30, 21, 13, 0.95));
+  border: 1px solid #7a6440; border-radius: 12px;
+  box-shadow: var(--hilite), var(--shadow-soft);
+  transition: transform 0.12s, border-color 0.18s, background 0.18s;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.act-btn:hover { border-color: var(--accent); }
+.act-btn:active { transform: scale(0.95); }
+.act-btn.primary {
+  background: linear-gradient(180deg, #8a5a24, #6b4420);
+  border-color: #e0a25e88; color: #fbe6c8;
+}
+.act-btn.primary:active { background: linear-gradient(180deg, #9a662a, #7a4e24); }
+/* the desktop layout has no jump button under the rail */
+body.no-touch #hud-actions { bottom: max(30px, calc(env(safe-area-inset-bottom) + 24px)); }
+
+/* first-person crosshair while aiming the bow */
+#aim-cross {
+  position: fixed; left: 50%; top: 50%; width: 34px; height: 34px;
+  margin: -17px 0 0 -17px; pointer-events: none; z-index: 40;
+}
+#aim-cross::before, #aim-cross::after {
+  content: ''; position: absolute; background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65);
+}
+#aim-cross::before { left: 50%; top: 0; width: 2px; height: 34px; margin-left: -1px; }
+#aim-cross::after { top: 50%; left: 0; height: 2px; width: 34px; margin-top: -1px; }
+#aim-cross .dot {
+  position: absolute; left: 50%; top: 50%; width: 6px; height: 6px;
+  margin: -3px 0 0 -3px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65);
+}
+/* punch a gap in the middle of the cross so the dot reads clearly */
+#aim-cross .gap {
+  position: absolute; left: 50%; top: 50%; width: 14px; height: 14px;
+  margin: -7px 0 0 -7px; border-radius: 50%;
+  box-shadow: 0 0 0 6px rgba(0, 0, 0, 0.001);
+}

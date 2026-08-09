@@ -16,6 +16,7 @@ export class HUD {
         <button class="btn" id="zoom-out-btn" title="${S.ui.zoomOutHint}">🔍−</button>
       </div>
       <button id="hud-settings" title="${S.ui.settings}" aria-label="${S.ui.settings}">⚙</button>
+      <div id="hud-actions"></div>
       <div id="fader"></div>
     `);
     this.objectiveEl = this.root.querySelector('#hud-objective');
@@ -41,7 +42,32 @@ export class HUD {
     this.settingsBtn = this.root.querySelector('#hud-settings');
     this.settingsBtn.addEventListener('click', () => this.openSettings());
     this._settingsPanel = null;
+    this.actionsEl = this.root.querySelector('#hud-actions');
   }
+
+  // Right-hand action rail: big labelled buttons stacked above the jump
+  // control, for verbs the interact pill cannot express (Take Aim, Fire).
+  // Thumb-reachable on a phone and clickable on desktop, so neither platform
+  // needs a special case.
+  //
+  // setActions([]) or setActions(null) clears the rail.
+  setActions(actions) {
+    this.actionsEl.innerHTML = '';
+    if (!actions || !actions.length) { this.actionsEl.classList.remove('on'); return; }
+    for (const a of actions) {
+      const b = document.createElement('button');
+      b.className = 'act-btn' + (a.primary ? ' primary' : '');
+      b.textContent = a.label;
+      // pointerdown must not reach the canvas, or pressing Fire also starts a
+      // drag-look and the shot pulls off target
+      b.addEventListener('pointerdown', (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => { e.stopPropagation(); a.onClick?.(); });
+      this.actionsEl.appendChild(b);
+    }
+    this.actionsEl.classList.add('on');
+  }
+
+  clearActions() { this.setActions(null); }
 
   // Settings panel. Built from the SETTINGS list so a new option is one entry
   // in settings.js plus one string, never another block of DOM here.

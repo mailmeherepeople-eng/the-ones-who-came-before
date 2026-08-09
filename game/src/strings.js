@@ -194,6 +194,15 @@ export const S = {
     obj_store_bow: "Take the bow from the Community Chest",
     obj_store_rod: "Take the fishing rod from the Community Chest",
     aimHint: 'Aim with the camera. Press E or tap to loose an arrow',
+    obj_huntN: (n, total) => `Hunt deer for the tribe (${n}/${total})`,
+    obj_meatN: (n, total) => `Pick up the meat (${n}/${total})`,
+    obj_depositBerries: 'Put the berries in the store box',
+    obj_depositMeat: 'Put the meat in the store box',
+    obj_depositFish: 'Put the fish in the store box',
+    depositBerriesDone: 'Into the box it goes. What one pair of hands gathers, the whole tribe eats.',
+    depositMeatDone: 'Three animals, one box. Nobody here eats before the box is filled.',
+    depositFishDone: 'The box takes the catch too. Everything found is everything shared.',
+
     obj_meat: 'Pick up the meat for the tribe',
   },
 

@@ -140,6 +140,46 @@ export function makePot(record, scale = 0.5) {
   return { group: g };
 }
 
+// The store box: an open-topped crate that stands beside the Community Chest
+// and receives everything the player brings home. Deliberately OPEN, unlike
+// the lidded chest, so it reads at a glance as "put things in here" rather
+// than "take things out of here".
+//
+// setFill(0..1) raises a layer of goods inside as the day's haul accumulates,
+// which is the only feedback the deposit beats need.
+export function makeStoreBox(x, y, z) {
+  const g = grp(x, y, z);
+  g.name = 'storeBox';
+  const W = 0.92, D = 0.72, H = 0.46;
+  g.add(box(W, 0.08, D, MAT.woodDark, 0, 0.04, 0));                       // base
+  for (const dz of [-D / 2, D / 2]) g.add(box(W, H, 0.07, MAT.wood, 0, H / 2 + 0.05, dz));
+  for (const dx of [-W / 2, W / 2]) g.add(box(0.07, H, D, MAT.wood, dx, H / 2 + 0.05, 0));
+  for (const dx of [-W / 2, W / 2]) for (const dz of [-D / 2, D / 2]) {
+    g.add(box(0.1, H + 0.06, 0.1, MAT.woodDark, dx, H / 2 + 0.06, dz));   // corner posts
+  }
+  g.add(box(W + 0.04, 0.05, D + 0.04, MAT.woodPale, 0, H + 0.08, 0));     // pale rim
+  // contents: one slab that rises as the box fills
+  const fill = new THREE.Mesh(new THREE.BoxGeometry(W - 0.16, 1, D - 0.16), MAT.meat);
+  fill.visible = false;
+  g.add(fill);
+  foldStatic(g, [fill]);
+  let level = 0;
+  const api = {
+    group: g,
+    level: 0,
+    setFill(v) {
+      level = Math.max(0, Math.min(1, v));
+      api.level = level;
+      if (level <= 0.001) { fill.visible = false; return; }
+      const h = 0.06 + level * (H - 0.12);
+      fill.visible = true;
+      fill.scale.y = h;
+      fill.position.y = 0.09 + h / 2;
+    },
+  };
+  return api;
+}
+
 export function makeBasket(scale = 0.5) {
   const g = new THREE.Group();
   g.name = 'basket';

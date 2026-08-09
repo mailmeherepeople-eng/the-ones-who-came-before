@@ -111,6 +111,33 @@ function objectiveCue(G, text, at = null, color = 0xffe9a8) {
   FX.ring(p, { color, radius: 2.0, life: 0.55 });
 }
 
+// The store box, set beside the Community Chest. Everything the player brings
+// home is PLACED in it: walking back to camp is not enough, the deposit is the
+// act that completes a task.
+//
+// That is the whole point of the beat. The chapter's lesson is that the tribe's
+// food and tools belong to everyone, and reading that in a narrator box is much
+// weaker than being made to hand your catch over before you are allowed to do
+// anything else. Set by sceneA before the first gather.
+let STORE_BOX = null;
+let STORE_BOX_AT = null;
+
+async function depositAtStore(G, objectiveText, doneText) {
+  if (!STORE_BOX_AT) return; // scene jumped straight past the camp setup
+  objectiveCue(G, objectiveText, STORE_BOX_AT);
+  await interactOnce(G, {
+    id: 'store-box', x: STORE_BOX_AT.x, z: STORE_BOX_AT.z, r: 2.6, prompt: '📦',
+  });
+  STORE_BOX?.setFill(Math.min(1, (STORE_BOX.level || 0) + 0.34));
+  G.player.equip(null); // it is in the box now, not in your hands
+  const at = fxAt(G, STORE_BOX_AT.x, STORE_BOX_AT.z, 0.7);
+  FX.puff(at, { count: 10, size: 0.22, life: 0.5, color: 0xd8c9a4 });
+  FX.ring(at, { color: 0xffd28a, radius: 1.5, life: 0.6 });
+  G.audio?.success?.();
+  setBeacon(G, null);
+  if (doneText) await G.hud.narrator(doneText);
+}
+
 // "this will matter later" — marks the creation of a source record that
 // Act 3 digs up (painting, beads, arrowheads, pot…). Brief, warm, additive.
 function recordTell(pos) {
@@ -186,6 +213,10 @@ const ARROW_UPBIAS = 1.5; // blocks/s added to vy at launch
 const ARROW_GRAV = 12;    // blocks/s² downward
 const ARROW_LIFE = 3;     // seconds in flight before despawn
 const ARROW_HIT_R = 0.9;  // hit radius against a deer's body centre
+// One kill fed nobody. The tribe is six people, so the hunt asks for three
+// animals: enough that the player has to re-stalk a spooked herd rather than
+// land one lucky shot, and it makes the store box beat below carry real weight.
+const HUNT_TARGET = 3;
 const _arrowDir = new THREE.Vector3(); // scratch — synchronous use only
 const _ARROW_Z = new THREE.Vector3(0, 0, 1);
 
@@ -281,6 +312,10 @@ async function sceneA(G) {
   // footprints and the walk lines to the beat sites.
   const STORE_A = { x: 44, z: 22 };
   const chest = addProp(G, P.makeCommunityChest(STORE_A.x, groundY(G, STORE_A.x, STORE_A.z), STORE_A.z));
+  // the open store box, two blocks along the same line so both read as one
+  // station: take tools out of the chest, put food into the box
+  STORE_BOX_AT = { x: STORE_A.x + 2, z: STORE_A.z };
+  STORE_BOX = addProp(G, P.makeStoreBox(STORE_BOX_AT.x, groundY(G, STORE_BOX_AT.x, STORE_BOX_AT.z), STORE_BOX_AT.z));
 
   // REAL berry bushes: swap the BUSH blocks at the gather sites for leafy
   // props with pickable berries (world.set marks the chunks dirty; the mesher
@@ -311,10 +346,13 @@ async function sceneA(G) {
   addProp(G, P.makeDustMotes(SITES.shelter.x, 10, 16));
 
   // deer herd on the plains + shells by the river
+  // Six, for a hunt that asks for three. Spooked deer scatter and drift back
+  // to their own home, so the margin is what stops a bad volley from leaving
+  // the player with nothing left to stalk.
   const deer = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     deer.push(new Animal(G.renderer.scene, {
-      kind: 'deer', x: SITES.plains.x - 4 + i * 3, z: SITES.plains.z + (i % 2) * 4, world: G.world, wander: 6,
+      kind: 'deer', x: SITES.plains.x - 6 + i * 2.6, z: SITES.plains.z + (i % 3) * 4, world: G.world, wander: 6,
     }));
   }
   G.npcs.push(...deer);
@@ -399,6 +437,7 @@ async function sceneA(G) {
     });
     G.interactables = G.interactables.filter((o) => !String(o.id).startsWith('berry-'));
     await G.hud.narrator(S.act1.gatherDone);
+    await depositAtStore(G, S.act1.obj_depositBerries, S.act1.depositBerriesDone);
     await G.hud.narrator(S.act1.huntersGatherers);
     Save.addRecord({ id: 'gathered', type: 'camp', pos: { ...camp }, made: YEARS.SCENE_A_YEAR, data: { label: 'gather' } });
   }
@@ -413,16 +452,40 @@ async function sceneA(G) {
 
     objectiveCue(G, S.act1.obj_hunt, SITES.plains);
     await reach(G, SITES.plains.x, SITES.plains.z, 8);
-    setBeacon(G, null); // you are here — clear the sightline for aiming
-    G.player.setAim(true);
+    setBeacon(G, null); // you are here, clear the sightline for aiming
     G.hud.hint(S.act1.aimHint, 7000);
 
-    // arrows simulated in the act tick; resolves with the first deer downed
+    // Sighting is an explicit mode now, not "press E and hope". Take Aim drops
+    // to first person with a crosshair and swaps the rail to Fire / Lower bow,
+    // so on a phone the whole hunt is two big thumb targets instead of a tap
+    // that competes with tap-to-interact.
+    let aiming = false;
+    const rail = () => {
+      if (!aiming) {
+        G.hud.setActions([{ label: S.ui.takeAim, primary: true, onClick: enterAim }]);
+      } else {
+        G.hud.setActions([
+          { label: S.ui.fire, primary: true, onClick: () => { fireRequested = true; } },
+          { label: S.ui.lowerBow, onClick: exitAim },
+        ]);
+      }
+    };
+    let fireRequested = false;
+    const enterAim = () => { aiming = true; G.player.setFirstPerson(true); rail(); };
+    const exitAim = () => { aiming = false; G.player.setFirstPerson(false); G.player.setAim(true); rail(); };
+    G.player.setAim(true);
+    rail();
+
+    // arrows simulated in the act tick; resolves once HUNT_TARGET deer are down
     const arrows = [];
-    const downed = await new Promise((resolve) => {
-      let hit = null;
+    const downedList = await new Promise((resolve) => {
+      const bag = [];
+      let hit = null; // set for one frame per kill, so a shot never double-counts
       G.tick = (dt, inp) => {
-        if (!hit && inp.interact && !interactableNear(G)) spawnArrow(G, arrows);
+        // E / Enter still fires while aiming, for players on a keyboard
+        const wantShot = fireRequested || (aiming && inp.interact && !interactableNear(G));
+        fireRequested = false;
+        if (bag.length < HUNT_TARGET && wantShot) spawnArrow(G, arrows);
         for (let i = arrows.length - 1; i >= 0; i--) {
           const a = arrows[i];
           if (a.stuck > 0) {
@@ -435,25 +498,29 @@ async function sceneA(G) {
           a.group.quaternion.setFromUnitVectors(_ARROW_Z, _arrowDir.copy(a.vel).normalize());
           a.life += dt;
           const p = a.group.position;
-          if (!hit) {
-            for (const d of deer) {
-              if (d.downed) continue;
-              if (Math.hypot(p.x - d.pos.x, p.y - (d.pos.y + 0.55), p.z - d.pos.z) < ARROW_HIT_R) {
-                hit = d;
-                d.down();
-                FX.puff(d.pos, { count: 10, size: 0.32, life: 0.6, color: 0xb9a77e });
-                for (const o of deer) {
-                  if (o !== d && !o.downed && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < 8) {
-                    o.fleeFrom(p.x, p.z); // their home stays the plains — they drift back
-                  }
+          hit = null;
+          for (const d of deer) {
+            if (d.downed) continue;
+            if (Math.hypot(p.x - d.pos.x, p.y - (d.pos.y + 0.55), p.z - d.pos.z) < ARROW_HIT_R) {
+              hit = d;
+              d.down();
+              bag.push(d);
+              FX.puff(d.pos, { count: 10, size: 0.32, life: 0.6, color: 0xb9a77e });
+              for (const o of deer) {
+                if (o !== d && !o.downed && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < 8) {
+                  o.fleeFrom(p.x, p.z); // their home stays the plains, they drift back
                 }
-                removeArrow(G, arrows, i);
-                resolve(d);
-                break;
               }
+              removeArrow(G, arrows, i);
+              // the tribe needs more than one animal: keep hunting until the
+              // bag is full, and keep the count on screen so the goal is plain
+              if (bag.length >= HUNT_TARGET) { resolve(bag); return; }
+              G.hud.setObjective(S.act1.obj_huntN(bag.length, HUNT_TARGET));
+              G.audio?.blip?.();
+              break;
             }
-            if (hit) continue;
           }
+          if (hit) continue;
           // miss: stick in the ground for a beat, spook nearby deer
           const gy2 = G.world.topAt(Math.floor(p.x), Math.floor(p.z)) + 1 + 0.15;
           if (p.y <= gy2) {
@@ -470,22 +537,36 @@ async function sceneA(G) {
     });
 
     await wait(700); // the fall animation plays out
-    const meatPos = { x: downed.pos.x, y: downed.pos.y, z: downed.pos.z };
-    downed.dispose();
-    G.npcs = G.npcs.filter((n) => n !== downed);
-    deer.splice(deer.indexOf(downed), 1);
-    const meat = addProp(G, P.makeMeat(meatPos.x, meatPos.y, meatPos.z));
-    objectiveCue(G, S.act1.obj_meat, meatPos);
-    await interactOnce(G, { id: 'meat', x: meatPos.x, z: meatPos.z, r: 2.6, prompt: '🍖' });
-    P.disposeGroup(G.renderer.scene, meat.group);
-    G.props = G.props.filter((pp) => pp !== meat);
-    FX.floaties({ x: meatPos.x, y: meatPos.y + 0.5, z: meatPos.z }, { color: 0xffd9a0, count: 12, size: 0.11, life: 1.6, rise: 1.0 });
-    FX.confetti({ x: G.player.pos.x, y: G.player.pos.y + 1.2, z: G.player.pos.z }, { count: 18 });
-    await G.hud.narrator(S.act1.huntSuccess);
-    Save.addRecord({ id: 'hunted', type: 'camp', pos: { ...SITES.plains }, made: YEARS.SCENE_A_YEAR, data: { label: 'hunt' } });
-    G.player.setAim(false); // aim dot off before the predator beat
     G.tick = null;
+    G.hud.clearActions();
+    G.player.setFirstPerson(false);
+    G.player.setAim(false);
     while (arrows.length) removeArrow(G, arrows, arrows.length - 1);
+
+    // one carcass becomes one meat pickup; collect them all before carrying
+    // the haul home, so the walk back happens once rather than three times
+    const meats = [];
+    for (const d of downedList) {
+      const at = { x: d.pos.x, y: d.pos.y, z: d.pos.z };
+      d.dispose();
+      G.npcs = G.npcs.filter((n) => n !== d);
+      const k = deer.indexOf(d);
+      if (k >= 0) deer.splice(k, 1);
+      meats.push({ at, prop: addProp(G, P.makeMeat(at.x, at.y, at.z)) });
+    }
+    for (let i = 0; i < meats.length; i++) {
+      const m = meats[i];
+      objectiveCue(G, S.act1.obj_meatN(i + 1, meats.length), m.at);
+      await interactOnce(G, { id: `meat${i}`, x: m.at.x, z: m.at.z, r: 2.6, prompt: '🍖' });
+      P.disposeGroup(G.renderer.scene, m.prop.group);
+      G.props = G.props.filter((pp) => pp !== m.prop);
+      FX.floaties({ x: m.at.x, y: m.at.y + 0.5, z: m.at.z }, { color: 0xffd9a0, count: 12, size: 0.11, life: 1.6, rise: 1.0 });
+    }
+    G.player.equip('meat');
+    await G.hud.narrator(S.act1.huntSuccess);
+    await depositAtStore(G, S.act1.obj_depositMeat, S.act1.depositMeatDone);
+    FX.confetti({ x: G.player.pos.x, y: G.player.pos.y + 1.2, z: G.player.pos.z }, { count: 18 });
+    Save.addRecord({ id: 'hunted', type: 'camp', pos: { ...SITES.plains }, made: YEARS.SCENE_A_YEAR, data: { label: 'hunt', count: HUNT_TARGET } });
   }
 
   // --- predator tension → run to fire ---
@@ -528,8 +609,9 @@ async function sceneA(G) {
     FX.burst(splash, { color: 0xbfe4f5, count: 26, size: 0.13, speed: 3.4, life: 0.6, gravity: 9, additive: false });
     FX.burst(splash, { color: 0x9fd8ff, count: 8, size: 0.1, speed: 2.4, life: 0.45 });
     await G.hud.narrator(S.act1.fishCaught);
+    await depositAtStore(G, S.act1.obj_depositFish, S.act1.depositFishDone);
     Save.addRecord({ id: 'fished', type: 'camp', pos: { ...SITES.fishSpot }, made: YEARS.SCENE_A_YEAR, data: { label: 'fish' } });
-    G.player.equip(null); // the rod's task chain is done — back to the band
+    G.player.equip(null); // the rod's task chain is done, back to the tribe
   }
 
   // --- fire circle: lost language (4.35) ---
