@@ -1,0 +1,20 @@
+# --- Large source material (exceeds GitHub's 100 MB per-file limit) ---
+# "social science textbooks/class 6.zip" is the ~201 MB NCERT Class 6 textbook
+# bundle used as the content source. It is reference input, not project output,
+# and cannot be pushed to GitHub. Keep it locally / in cloud storage.
+social science textbooks/
+
+# --- Tool scratch ---
+.playwright-mcp/
+
+# --- OS / editor cruft ---
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# --- Node (the game has no build step; this is only for ad-hoc tooling) ---
+node_modules/
+npm-debug.log*
