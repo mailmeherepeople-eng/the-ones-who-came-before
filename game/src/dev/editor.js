@@ -1352,6 +1352,50 @@ function charSel(ed, c) {
       { type: 'head', label: 'what they say' },
       { label: 'bubble', type: 'text', get: () => say.text, set: (v) => { say.text = v; } },
       { type: 'button', label: 'say it', onclick: () => { c.say(say.text, say.ms); ed.record({ kind: 'behaviour', name: c.name || c.kind, action: `say("${say.text}")`, file: 'src/acts/act1.js · src/strings.js' }); } },
+
+      // ---- when talked to -------------------------------------------------
+      // The player-facing conversation, edited live. This is npc.talk, plain
+      // data on the character, so authoring tribe dialogue never means opening
+      // an act script. Every change lands in the change list against
+      // strings.js, which is where the final wording has to end up.
+      { type: 'head', label: 'when talked to' },
+      {
+        type: 'note',
+        label: 'Reply in PICTOGRAMS, not words. Act 1 teaches that their language is lost, and an English reply undoes it.',
+      },
+      {
+        label: 'talkable', type: 'select', options: ['yes', 'no'],
+        get: () => (c.talk?.enabled === false ? 'no' : 'yes'),
+        set: (v) => {
+          if (!c.talk) c.talk = { icons: '', note: '', enabled: true };
+          c.talk.enabled = v === 'yes';
+          ed.record({ kind: 'set', what: 'npc', name: c.name || c.kind, prop: 'talk.enabled', from: v === 'yes' ? 'no' : 'yes', to: v, file: 'src/acts/act1.js' });
+        },
+      },
+      {
+        label: 'reply (icons)', type: 'text',
+        get: () => c.talk?.icons ?? '',
+        set: (v) => {
+          if (!c.talk) c.talk = { icons: '', note: '', enabled: true };
+          const from = c.talk.icons;
+          c.talk.icons = v;
+          ed.record({ kind: 'set', what: 'npc', name: c.name || c.kind, prop: 'talk.icons', from, to: v, file: 'src/strings.js' });
+        },
+      },
+      {
+        label: 'your thought', type: 'text',
+        get: () => c.talk?.note ?? '',
+        set: (v) => {
+          if (!c.talk) c.talk = { icons: '', note: '', enabled: true };
+          const from = c.talk.note;
+          c.talk.note = v;
+          ed.record({ kind: 'set', what: 'npc', name: c.name || c.kind, prop: 'talk.note', from, to: v, file: 'src/strings.js' });
+        },
+      },
+      {
+        type: 'button', label: 'preview the reply',
+        onclick: () => c.say(c.talk?.icons || '…', 3000),
+      },
     );
     const amb = H.ambient?.();
     const w = amb?.workers.find((w) => w.npc === c);

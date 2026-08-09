@@ -138,6 +138,34 @@ async function depositAtStore(G, objectiveText, doneText) {
   if (doneText) await G.hud.narrator(doneText);
 }
 
+// Make characters talkable. Registers one follow-interactable per character,
+// so the 💬 prompt tracks them around their errands instead of hanging where
+// they spawned.
+//
+// What they SAY is npc.talk, which lives on the character as plain data. The
+// world editor edits it live under "when talked to", so writing tribe dialogue
+// never means editing an act script.
+//
+// The reply is pictograms, never words. Act 1's whole language beat is that
+// their speech was rich and is completely lost, and a tribe member answering
+// in English would quietly undo it. The optional `note` is the player's own
+// thought about the exchange, which is allowed to be words.
+function makeTalkable(G, characters) {
+  for (const c of characters) {
+    if (!c || c.kind === 'deer' || c.kind === 'goat' || c.kind === 'cattle' || c.kind === 'predator') continue;
+    G.interactables.push({
+      id: `talk-${c.name}`, follow: c, r: 2.5, enabled: true, prompt: S.act1.talkPrompt,
+      async onInteract() {
+        if (!c.talk?.enabled) return;
+        c.faceToward?.(G.player.pos.x, G.player.pos.z);
+        c.say(c.talk.icons || S.act1.talkIcons[0], 3000);
+        G.audio?.blip?.();
+        if (c.talk.note) await G.hud.narrator(c.talk.note);
+      },
+    });
+  }
+}
+
 // "this will matter later" — marks the creation of a source record that
 // Act 3 digs up (painting, beads, arrowheads, pot…). Brief, warm, additive.
 function recordTell(pos) {
@@ -292,6 +320,7 @@ async function sceneA(G) {
     }));
   }
   G.npcs.push(...band);
+  makeTalkable(G, band); // 💬 on every tribe member, editable in the world editor
 
   // idle purposes: one tends the fire, one works the knap station, the child
   // stays by the warmth. Scripted goTo calls still override these freely.
@@ -897,6 +926,7 @@ async function sceneC(G) {
     }));
   }
   G.npcs.push(...villagers);
+  makeTalkable(G, villagers);
 
   const goats = [];
   for (let i = 0; i < 2; i++) {
@@ -1095,6 +1125,7 @@ async function sceneD(G) {
     }));
   }
   G.npcs.push(...villagers);
+  makeTalkable(G, villagers);
   const goats = [];
   for (let i = 0; i < 2; i++) {
     goats.push(new Animal(G.renderer.scene, { kind: 'goat', x: SITES.pen.x, z: SITES.pen.z + i, world: G.world, wander: 2 }));

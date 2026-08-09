@@ -66,6 +66,12 @@ export const S = {
     gatherDone: 'Food gathered. Nothing is planted here. You take what the land gives.',
     huntersGatherers: 'Hunting animals. Gathering fruits and plants. That is the whole larder: hunters and gatherers.',
 
+    // Pictogram speech. Act 1's tribe has a rich spoken language and NOT ONE
+    // WORD of it survives, which is the whole point of the language beat, so
+    // talking to a tribe member must never produce English. These are the
+    // invented signs the elder uses; the editor can retune them per character.
+    talkIcons: ['◈ ﬦ ◇', 'ᨐ ◈◈ ﬦ', '◇ᨏ ﬦ ◈', '◈ ᨏ ◇◇', 'ﬦ ◉ ᨐ', '◇ ﬦﬦ ◈'],
+    talkPrompt: '💬',
     obj_hunt: 'Join the hunt by the plains',
     huntStart: 'A deer. Draw… hold… release when the aim steadies.',
     huntSuccess: 'The hunt succeeds. The tribe eats tonight.',

@@ -18,6 +18,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { WORLD } from '../constants.js';
 import { isSolid, isWater } from '../world/blocks.js';
 import { foldStatic } from '../world/merge.js';
+import { S } from '../strings.js';
 
 const SY = WORLD.SIZE_Y;
 
@@ -449,6 +450,21 @@ export class Npc {
     this._groundY = this.pos.y;
     this.snapToGround();
     scene.add(g);
+
+    // What this character does when the player talks to them. Held as plain
+    // data so the world editor can retune it live and the change list can
+    // record it (see dev/editor.js "when talked to"), rather than being baked
+    // into an act script.
+    //
+    // `icons` is deliberately pictograms, never words: Act 1's whole language
+    // beat is that their speech is rich and completely lost, and a tribe member
+    // answering in English would undo it. `note` is the optional narrator line
+    // that the PLAYER's own thoughts supply, which is allowed to be words.
+    this.talk = {
+      icons: S.act1.talkIcons[hashStr(this.name || 'x') % S.act1.talkIcons.length],
+      note: '',
+      enabled: true,
+    };
 
     this.bubbleEl = null;
     this._t = Math.random() * 10;

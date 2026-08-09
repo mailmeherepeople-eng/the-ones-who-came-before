@@ -98,11 +98,20 @@ export function removeInteract(id) {
 }
 export function clearInteracts() { G.interactables = []; }
 
+// An interactable may FOLLOW a moving thing (`follow` is anything with a
+// `pos`), which is what lets a talk prompt track a tribe member walking their
+// errand instead of hanging in the air where they were standing at spawn.
+export function interactAt(o) {
+  return o.follow ? o.follow.pos : o;
+}
+
 function nearestInteract() {
   let best = null, bestD = 1e9;
   for (const o of G.interactables) {
     if (!o.enabled) continue;
-    const d = Math.hypot(G.player.pos.x - o.x, G.player.pos.z - o.z);
+    if (o.follow && (o.follow.downed || o.follow.dead)) continue;
+    const at = interactAt(o);
+    const d = Math.hypot(G.player.pos.x - at.x, G.player.pos.z - at.z);
     if (d < (o.r ?? 2.6) && d < bestD) { best = o; bestD = d; }
   }
   return best;
