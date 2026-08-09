@@ -1,6 +1,7 @@
 // HUD + dialog primitives every act uses: objective line, interact prompt,
 // narrator boxes, full-screen cards, choice prompts, fader, satchel counter.
 import { S } from '../strings.js';
+import { Settings, SETTINGS } from '../settings.js';
 
 export class HUD {
   constructor(uiRoot) {
@@ -14,6 +15,7 @@ export class HUD {
       <div id="hud-zoom" class="fade-out">
         <button class="btn" id="zoom-out-btn" title="${S.ui.zoomOutHint}">🔍−</button>
       </div>
+      <button id="hud-settings" title="${S.ui.settings}" aria-label="${S.ui.settings}">⚙</button>
       <div id="fader"></div>
     `);
     this.objectiveEl = this.root.querySelector('#hud-objective');
@@ -36,6 +38,52 @@ export class HUD {
     });
     this.satchelEl.addEventListener('click', () => this.onSatchel && this.onSatchel());
     this.root.querySelector('#zoom-out-btn').addEventListener('click', () => this.onZoomOut && this.onZoomOut());
+    this.settingsBtn = this.root.querySelector('#hud-settings');
+    this.settingsBtn.addEventListener('click', () => this.openSettings());
+    this._settingsPanel = null;
+  }
+
+  // Settings panel. Built from the SETTINGS list so a new option is one entry
+  // in settings.js plus one string, never another block of DOM here.
+  openSettings() {
+    if (this._settingsPanel) return;
+    const el = document.createElement('div');
+    el.className = 'panel-dim';
+    el.innerHTML = `
+      <div class="settings-panel" role="dialog" aria-label="${S.ui.settingsTitle}">
+        <h3>${S.ui.settingsTitle}</h3>
+        <div class="settings-list"></div>
+        <button class="btn primary set-close">${S.ui.close}</button>
+      </div>`;
+    const list = el.querySelector('.settings-list');
+    for (const s of SETTINGS) {
+      const row = document.createElement('label');
+      row.className = 'settings-row';
+      row.innerHTML = `
+        <input type="checkbox">
+        <span class="settings-text"><span class="settings-label"></span><span class="settings-note"></span></span>`;
+      const box = row.querySelector('input');
+      box.checked = !!Settings.get(s.id);
+      row.querySelector('.settings-label').textContent = s.label();
+      row.querySelector('.settings-note').textContent = s.note ? s.note() : '';
+      box.addEventListener('change', () => Settings.set(s.id, box.checked));
+      list.appendChild(row);
+    }
+    const close = () => {
+      el.remove();
+      this._settingsPanel = null;
+      this.input?.clearEdges(); // the closing tap must not also interact
+    };
+    el.querySelector('.set-close').addEventListener('click', close);
+    // click the dimmed backdrop (but not the panel) to dismiss
+    el.addEventListener('pointerdown', (e) => { if (e.target === el) close(); });
+    addEventListener('keydown', function onEsc(e) {
+      if (e.code !== 'Escape') return;
+      removeEventListener('keydown', onEsc);
+      close();
+    });
+    this.root.appendChild(el);
+    this._settingsPanel = el;
   }
 
   setObjective(text) {

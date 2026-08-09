@@ -832,3 +832,55 @@ body { font-family: var(--font-ui); color: var(--ink); -webkit-user-select: none
   .panel-dim { animation: none !important; }
 }
 /* ===================== end round-3 interaction & panel fixes ===================== */
+
+/* ============================================================
+   Settings (2026-08-09 IST): gear button + panel
+   Sits top-left, tucked under the zoom button so it never covers
+   the centred objective line. 44px minimum touch target.
+   ============================================================ */
+#hud-settings {
+  position: absolute;
+  top: max(58px, calc(env(safe-area-inset-top) + 52px));
+  left: 10px; z-index: 21;
+  width: 44px; height: 44px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, rgba(43, 32, 18, 0.95), rgba(24, 17, 10, 0.92));
+  border: 1px solid #7a6440; border-radius: 999px;
+  font-size: 20px; color: var(--ink); cursor: pointer;
+  box-shadow: var(--hilite), var(--shadow-soft);
+  transition: transform 0.2s, border-color 0.2s;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+#hud-settings:hover { border-color: var(--accent); }
+#hud-settings:active { transform: scale(0.94) rotate(35deg); }
+
+.settings-panel {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(80vh, 560px); overflow-y: auto;
+  background: linear-gradient(180deg, rgba(46, 34, 20, 0.98), rgba(26, 19, 12, 0.98));
+  border: 1px solid #7a6440; border-radius: 16px;
+  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  box-shadow: var(--hilite), 0 18px 50px rgba(0, 0, 0, 0.6);
+  z-index: 61;
+}
+.settings-panel h3 {
+  margin: 0 0 14px; font-family: var(--font-title); color: var(--accent);
+  font-size: 20px; letter-spacing: 0.02em;
+}
+.settings-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.settings-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px; border-radius: 10px; cursor: pointer;
+  background: rgba(0, 0, 0, 0.18); border: 1px solid transparent;
+  transition: background 0.18s, border-color 0.18s;
+}
+.settings-row:hover { background: rgba(0, 0, 0, 0.3); border-color: #7a644066; }
+.settings-row input[type="checkbox"] {
+  flex: 0 0 auto; width: 22px; height: 22px; margin: 1px 0 0;
+  accent-color: var(--accent); cursor: pointer;
+}
+.settings-text { display: flex; flex-direction: column; gap: 3px; }
+.settings-label { font-size: 15px; color: var(--ink); }
+.settings-note { font-size: 12.5px; line-height: 1.45; color: #a89272; }
+.settings-panel .set-close { width: 100%; min-height: 46px; }

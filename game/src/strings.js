@@ -31,6 +31,15 @@ export const S = {
     evidence: 'Evidence',
     sourceCards: 'Source Cards',
     loading: 'Shaping the valley…',
+    settings: 'Settings',
+    settingsTitle: 'Settings',
+    close: 'Close',
+    setLockCamera: 'Lock camera behind me',
+    setLockCameraNote: 'The camera swings around to stay behind you as you walk, so you do not have to keep dragging. Dragging still works whenever you want it.',
+    takeAim: 'Take Aim',
+    fire: 'Fire',
+    lowerBow: 'Lower bow',
+    talk: 'Talk',
   },
 
   // Tab act-select menu (jump between acts without replaying; wipes progress)

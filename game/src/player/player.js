@@ -337,6 +337,25 @@ export class Player {
     }
     this.yaw += inp.look.x;
     this.pitch = Math.max(-1.2, Math.min(1.35, this.pitch + inp.look.y));
+
+    // Camera lock (Settings): swing the camera around to sit behind the
+    // direction of travel, so crossing the valley needs no dragging at all.
+    //
+    // This cannot oscillate even though movement is camera-relative: walking
+    // forward already points the camera along the velocity, so W is a fixed
+    // point and nothing moves. Only strafing and back-pedalling pull the yaw
+    // round, which is exactly the wanted behaviour. Any active look input wins
+    // outright, so dragging still works whenever the player wants it.
+    if (this.lockCamera && !inp.look.x) {
+      const sp = Math.hypot(this.vel.x, this.vel.z);
+      if (sp > 0.6) {
+        // yaw convention: forward = (sin yaw, -cos yaw)
+        let d = Math.atan2(this.vel.x, -this.vel.z) - this.yaw;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        this.yaw += d * Math.min(1, 2.6 * dt);
+      }
+    }
     // wheel/pinch adjusts the follow distance (was unused in the FP build —
     // the sky transition uses the HUD button, not the wheel)
     if (inp.zoom) this.camDist = Math.max(CAM.MIN, Math.min(CAM.MAX, this.camDist + inp.zoom * 0.6));

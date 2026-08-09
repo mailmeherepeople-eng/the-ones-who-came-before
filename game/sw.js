@@ -18,7 +18,7 @@
 //      build; only assets are cache-first.
 //
 // BUMP CACHE ON EVERY DEPLOY.
-const CACHE = 'towcb-v1';
+const CACHE = 'towcb-v2';
 
 // Enumerated rather than globbed: no build step here, so there is nothing to
 // generate a manifest, and an explicit list is greppable and diffable. Missing
@@ -35,6 +35,7 @@ const ASSETS = [
   './src/constants.js',
   './src/strings.js',
   './src/save.js',
+  './src/settings.js',
   './src/audio.js',
   './src/engine/renderer.js',
   './src/engine/input.js',

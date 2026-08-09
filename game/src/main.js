@@ -11,6 +11,7 @@ import { Save } from './save.js';
 import { runAct1 } from './acts/act1.js';
 import { SFX } from './audio.js';
 import { FX } from './fx/fx.js';
+import { Settings } from './settings.js';
 
 const canvas = document.getElementById('gl');
 const uiRoot = document.getElementById('ui-root');
@@ -55,6 +56,12 @@ G.mesher = new ChunkMesher(G.world, G.renderer.scene);
 G.renderer.onContextRestored = () => G.mesher.remeshAll();
 G.hud.input = G.input;
 G.audio = SFX;
+
+// settings -> live game state. subscribe() fires once immediately, so the
+// saved preference is applied at boot without duplicating the logic here.
+Settings.subscribe(() => {
+  G.player.lockCamera = Settings.get('lockCamera');
+});
 
 // visual FX layer: init once on the persistent scene; wire player juice hooks
 FX.init(G.renderer.scene);

@@ -21,10 +21,20 @@
   // outside the game's module graph, and after load so it never competes with
   // the first paint for bandwidth. Scope is this directory, which keeps it off
   // the sibling game-baseline/ build during A/B comparison.
+  // NOT on localhost: a cache-first worker serves yesterday's modules to a
+  // developer who just edited one, which costs more time than offline dev
+  // support is worth. Any existing worker is torn down so a machine that
+  // registered one before this rule cannot keep haunting the dev server.
+  var isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => { /* offline is a bonus, never a blocker */ });
-    });
+    if (isLocal) {
+      navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
+      if (window.caches) caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
+    } else {
+      addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => { /* offline is a bonus, never a blocker */ });
+      });
+    }
   }
 </script>
 </body>
