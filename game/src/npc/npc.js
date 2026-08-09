@@ -15,7 +15,7 @@
 //   slides, and if still stalled take perpendicular detours; a scripted
 //   target is force-cleared after 3 failed detours so beats never hang.
 import * as THREE from '../../vendor/three.module.js';
-import { WORLD } from '../constants.js';
+import { WORLD, PLAYER } from '../constants.js';
 import { isSolid, isWater } from '../world/blocks.js';
 import { foldStatic } from '../world/merge.js';
 import { S } from '../strings.js';
@@ -171,14 +171,64 @@ function tryMove(e, dx, dz, dist) {
     [pos.x + sx2 * dist, pos.z + sz2 * dist],
   ];
 
+  // The DIRECT move goes first, step-up allowed. Trying level candidates
+  // before the direct one (an earlier attempt at "walk around, don't climb")
+  // made characters prefer a sideways slide along any obstacle over dealing
+  // with it, so they slithered along ledges instead of crossing them.
+  const direct = cands[0];
+  {
+    const nx = clampX(direct[0]), nz = clampZ(direct[1]);
+    if (ok(nx, nz)) { pos.x = nx; pos.z = nz; return true; }
+  }
+  // Direct is blocked. Now prefer a LEVEL way round before a climbing one, so
+  // a character walks around a boulder when there is room and only climbs when
+  // there is not.
   for (const test of [level, ok]) {
-    for (const c of cands) {
+    for (let i = 1; i < cands.length; i++) {
+      const c = cands[i];
       if (!c) continue;
       const nx = clampX(c[0]), nz = clampZ(c[1]);
       if (test(nx, nz)) { pos.x = nx; pos.z = nz; return true; }
     }
   }
   return false;
+}
+
+// ---- jumping -------------------------------------------------------------
+// Characters had no jump at all, so anything over a one-block step was a hard
+// wall: hut walls, boulders, the two-block bank cap, terrain shelves. They
+// would walk up to it and stop, which is what "the NPCs are stuck" was.
+//
+// They now jump exactly like the player: same impulse, same gravity, so the
+// same obstacles are passable for both, and it never looks like a character
+// doing something the player cannot.
+const JUMP_V0 = PLAYER.JUMP;      // 9.9 blocks/s, clears ~2.2 blocks
+const JUMP_G = PLAYER.GRAVITY;    // 22 blocks/s²
+const JUMP_REACH = 2.2;
+
+// Is there something just ahead that a jump would clear but a step will not?
+function jumpWouldHelp(e, dx, dz) {
+  const world = e.world;
+  if (!world) return false;
+  const r = e._r, pos = e.pos;
+  const nx = clampX(pos.x + dx * (r + 0.75));
+  const nz = clampZ(pos.z + dz * (r + 0.75));
+  // scan from above the jump apex so a tall ledge top is actually seen
+  const t = footTop(world, nx, nz, r, pos.y + JUMP_REACH + 0.6);
+  if (t < 0) return false;
+  const rise = t + 1 - pos.y;
+  if (rise <= 1.05) return false;      // a plain step handles it
+  if (rise > JUMP_REACH) return false; // genuinely too tall, go around
+  // need somewhere to actually stand up there
+  return !isSolid(world.get(Math.floor(nx), t + 2, Math.floor(nz)));
+}
+
+function startJump(e) {
+  if (e._jumpV != null || e._hop) return false;
+  e._jumpV = JUMP_V0;
+  e._fallV = 0;
+  e._hop = null;
+  return true;
 }
 
 // ---- character registry / NPC-NPC separation --------------------------------
@@ -261,6 +311,21 @@ function groundTick(e, dt) {
       target = Math.max(g + 1, w + 0.4 + Math.sin(e._t * 2.6) * 0.05);
     }
   }
+  // A jump in flight owns the character's height until it lands. Note that
+  // nothing special is needed to let it CLEAR the obstacle: tryMove checks
+  // passability against the character's current feet height, so as soon as the
+  // arc lifts it above the ledge top the way forward simply becomes legal.
+  if (e._jumpV != null) {
+    e._jumpV -= JUMP_G * dt;
+    e.pos.y += e._jumpV * dt;
+    if (e._jumpV <= 0 && e.pos.y <= target) { // landed
+      e.pos.y = target;
+      e._jumpV = null;
+      e._fallV = 0;
+    }
+    return wading;
+  }
+
   const dy = target - e.pos.y;
 
   // A real step up is HOPPED, not glided. Terrain heights are integers, so
@@ -498,6 +563,9 @@ export class Npc {
       for (const bz of [Math.floor(this.pos.z - this._r), Math.floor(this.pos.z + this._r)])
         top = Math.max(top, this.world.topAt(bx, bz));
     if (top >= 0) { this.pos.y = top + 1; this._groundY = this.pos.y; }
+    // a teleport cancels any jump or hop in flight, or the arc resumes from
+    // the old height and drags the character back through the floor
+    this._jumpV = null; this._hop = null; this._fallV = 0;
   }
 
   goTo(x, z) {
@@ -543,8 +611,25 @@ export class Npc {
           const dx = nav.x - this.pos.x, dz = nav.z - this.pos.z;
           const d = Math.hypot(dx, dz) || 1;
           const step = Math.min(this.speed * dt, d);
-          moving = tryMove(this, dx / d, dz / d, step);
-          if (moving) this._yawTarget = Math.atan2(dx, dz);
+          const ux = dx / d, uz = dz / d;
+          moving = tryMove(this, ux, uz, step);
+          this._yawTarget = Math.atan2(dx, dz); // face the goal even while blocked
+
+          // Blocked on the ground: jump if a jump would clear what is in the
+          // way. `_noProgT` is the safety net for anything jumpWouldHelp reads
+          // wrongly (an awkward corner, a prop, a character in the doorway):
+          // half a second of going nowhere while still trying earns a jump
+          // regardless, so a character can never be permanently pinned.
+          if (this._jumpV == null && !this._hop) {
+            this._noProgT = moving ? 0 : (this._noProgT || 0) + dt;
+            this._jumpCool = Math.max(0, (this._jumpCool || 0) - dt);
+            const wantJump = !moving && this._jumpCool === 0 &&
+              (jumpWouldHelp(this, ux, uz) || this._noProgT > 0.5);
+            if (wantJump && startJump(this)) {
+              this._noProgT = 0;
+              this._jumpCool = 0.65; // no machine-gun bouncing at a real wall
+            }
+          }
         }
       } else {
         navIdle(this);
@@ -922,6 +1007,9 @@ export class Animal {
       for (const bz of [Math.floor(this.pos.z - this._r), Math.floor(this.pos.z + this._r)])
         top = Math.max(top, this.world.topAt(bx, bz));
     if (top >= 0) { this.pos.y = top + 1; this._groundY = this.pos.y; }
+    // a teleport cancels any jump or hop in flight, or the arc resumes from
+    // the old height and drags the character back through the floor
+    this._jumpV = null; this._hop = null; this._fallV = 0;
   }
 
   goTo(x, z) {
@@ -1000,8 +1088,17 @@ export class Animal {
           const d = Math.hypot(dx, dz) || 1;
           const sp = this.fleeing ? this.speed * 2.2 : this.speed;
           const step = Math.min(sp * dt, d);
-          moving = tryMove(this, dx / d, dz / d, step);
-          if (moving) this._yawTarget = Math.atan2(dx, dz);
+          const ux = dx / d, uz = dz / d;
+          moving = tryMove(this, ux, uz, step);
+          this._yawTarget = Math.atan2(dx, dz);
+          // animals jump obstacles too, same rule as the tribe (see Npc.update)
+          if (!this.downed && this._jumpV == null && !this._hop) {
+            this._noProgT = moving ? 0 : (this._noProgT || 0) + dt;
+            this._jumpCool = Math.max(0, (this._jumpCool || 0) - dt);
+            const wantJump = !moving && this._jumpCool === 0 &&
+              (jumpWouldHelp(this, ux, uz) || this._noProgT > 0.5);
+            if (wantJump && startJump(this)) { this._noProgT = 0; this._jumpCool = 0.65; }
+          }
         } else if (!this._target) {
           this.fleeing = false; // stall cleared the flee target
         }
