@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a130c">
+<title>Compare builds — The Ones Who Came Before</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚖️</text></svg>">
+<style>
+  :root {
+    --bg: #1a130c; --panel: #241a10; --line: #3b2b1a;
+    --ink: #e8d8bc; --dim: #a8927240; --muted: #a89272;
+    --ember: #e0a25e; --teal: #6fb3ae;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: max(20px, env(safe-area-inset-top)) 18px max(28px, env(safe-area-inset-bottom));
+    max-width: 620px; margin: 0 auto;
+    -webkit-text-size-adjust: 100%;
+  }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 0.92rem; margin: 0 0 22px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 1.02rem; margin: 0 0 3px; display: flex; align-items: center; gap: 8px; }
+  .tag { font-size: 0.68rem; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; font-weight: 600; }
+  .tag.new { background: #e0a25e22; color: var(--ember); border: 1px solid #e0a25e55; }
+  .tag.old { background: #6fb3ae22; color: var(--teal); border: 1px solid #6fb3ae55; }
+  .note { color: var(--muted); font-size: 0.86rem; margin: 0 0 13px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  a.btn, button.btn {
+    flex: 1 1 auto; min-width: 74px; min-height: 46px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 11px 14px; border-radius: 9px; text-decoration: none;
+    background: #2f2214; border: 1px solid var(--line); color: var(--ink);
+    font: inherit; font-size: 0.93rem; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  a.btn:active, button.btn:active { background: #3b2b1a; }
+  a.btn.play { flex-basis: 100%; font-weight: 600; font-size: 1rem; min-height: 52px; }
+  section.new a.btn.play { background: #6b4420; border-color: #e0a25e66; color: #fbe6c8; }
+  section.old a.btn.play { background: #23423f; border-color: #6fb3ae66; color: #d8f0ee; }
+  .lbl { font-size: 0.74rem; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 14px 0 7px; }
+  footer { color: var(--muted); font-size: 0.83rem; margin-top: 8px; }
+  footer code { background: #00000045; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+  #msg { color: var(--ember); font-size: 0.86rem; min-height: 1.3em; margin-top: 9px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<h1>⚖️ Compare builds</h1>
+<p class="sub">Two copies of the same game, same origin, separate saves. Open one in each browser tab and flip between them.</p>
+
+<section class="new">
+  <h2>Current <span class="tag new">with changes</span></h2>
+  <p class="note">The live game, including the performance pass.</p>
+  <div class="row"><a class="btn play" href="game/">▶ Play current</a></div>
+  <div class="lbl">Jump to an act</div>
+  <div class="row">
+    <a class="btn" href="game/?act=1&amp;fast">Act 1</a>
+    <a class="btn" href="game/?act=2&amp;fast">Act 2</a>
+    <a class="btn" href="game/?act=3&amp;fast">Act 3</a>
+  </div>
+  <div class="lbl">Force a quality tier</div>
+  <div class="row">
+    <a class="btn" href="game/?q=high&amp;act=1&amp;fast">High (PC settings)</a>
+    <a class="btn" href="game/?q=low&amp;act=1&amp;fast">Low (phone settings)</a>
+  </div>
+</section>
+
+<section class="old">
+  <h2>Baseline <span class="tag old">before changes</span></h2>
+  <p class="note">Frozen copy of 2026-08-10, before the performance pass. Identical except for its save key and tab title.</p>
+  <div class="row"><a class="btn play" href="game-baseline/">▶ Play baseline</a></div>
+  <div class="lbl">Jump to an act</div>
+  <div class="row">
+    <a class="btn" href="game-baseline/?act=1&amp;fast">Act 1</a>
+    <a class="btn" href="game-baseline/?act=2&amp;fast">Act 2</a>
+    <a class="btn" href="game-baseline/?act=3&amp;fast">Act 3</a>
+  </div>
+</section>
+
+<section>
+  <h2>Housekeeping</h2>
+  <p class="note">Act jumps only work with no saved progress, so clear the saves if a jump sends you to the title screen instead.</p>
+  <div class="row">
+    <button class="btn" id="clear">Reset both saves</button>
+  </div>
+  <div id="msg"></div>
+</section>
+
+<footer>
+  Same-device comparison is the point: emulated numbers on a PC do not tell you how a phone feels.
+  Add <code>&amp;dev</code> to any link to expose <code>window.G</code> for console inspection.
+</footer>
+
+<script>
+  document.getElementById('clear').addEventListener('click', () => {
+    const keys = ['towcb-save-v1', 'towcb-save-v1-baseline'];
+    let n = 0;
+    for (const k of keys) if (localStorage.getItem(k) !== null) { localStorage.removeItem(k); n++; }
+    document.getElementById('msg').textContent =
+      n ? `Cleared ${n} save${n > 1 ? 's' : ''}. Act jumps will work now.` : 'No saves were set. Act jumps already work.';
+  });
+</script>
+
+</body>
+</html>
