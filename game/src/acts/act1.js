@@ -354,7 +354,7 @@ async function sceneA(G) {
   await G.hud.card([S.act1.sceneA_card, S.act1.sceneA_card2]);
   G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
   await G.hud.narrator(S.act1.wake);
-  await G.hud.narrator(S.act1.bandNote); // 4.32 bands help each other
+  await G.hud.narrator(S.act1.tribeNote); // 4.32 groups help each other
 
   // --- gather berries (4.33) — but first, a basket from the band's store ---
   if (!Save.getRecord('gathered')) {
@@ -490,8 +490,11 @@ async function sceneA(G) {
 
   // --- predator tension → run to fire ---
   await G.hud.narrator(S.act1.predatorNear);
+  // A bear, and it takes its time. Spawned further out than the old prowler
+  // (14 blocks rather than 10) so the player gets a good look at the size
+  // before it starts closing, and slow enough that walking away always works.
   const predator = new Animal(G.renderer.scene, {
-    kind: 'predator', x: G.player.pos.x + 8, z: G.player.pos.z + 6, world: G.world, wander: 2, speed: 2.4,
+    kind: 'predator', x: G.player.pos.x + 11, z: G.player.pos.z + 9, world: G.world, wander: 2, speed: 1.7,
   });
   G.npcs.push(predator);
   // fast red-tinted danger flash where it appears + dust as it breaks cover

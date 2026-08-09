@@ -145,26 +145,38 @@ function hitsPlayer(e, nx, nz) {
 }
 
 // Try the full move, then axis-separated, then 45° slides. Mutates e.pos.
+//
+// Each candidate is tried twice over: first demanding LEVEL ground, and only
+// if nothing level works, allowing a one-block step up. That single change is
+// what makes characters walk around a boulder or a hut corner instead of
+// straight over it — climbing becomes the last resort rather than the first
+// option, and the hop in groundTick then makes the remaining climbs visible.
 function tryMove(e, dx, dz, dist) {
   const world = e.world, pos = e.pos, r = e._r;
-  const ok = (nx, nz) => passable(world, nx, nz, r, pos.y) && !hitsPlayer(e, nx, nz);
   if (!world) { pos.x += dx * dist; pos.z += dz * dist; return true; }
-  let nx = clampX(pos.x + dx * dist), nz = clampZ(pos.z + dz * dist);
-  if (ok(nx, nz)) { pos.x = nx; pos.z = nz; return true; }
-  if (Math.abs(dx) > 1e-4) {
-    nx = clampX(pos.x + dx * dist);
-    if (ok(nx, pos.z)) { pos.x = nx; return true; }
+
+  const ok = (nx, nz) => passable(world, nx, nz, r, pos.y) && !hitsPlayer(e, nx, nz);
+  // how far the ground rises at a candidate spot, in blocks
+  const rise = (nx, nz) => footTop(world, nx, nz, r, pos.y + 0.1) + 1 - pos.y;
+  const level = (nx, nz) => ok(nx, nz) && rise(nx, nz) <= 0.35;
+
+  const sx1 = (dx - dz) * S45, sz1 = (dx + dz) * S45;
+  const sx2 = (dx + dz) * S45, sz2 = (dz - dx) * S45;
+  const cands = [
+    [pos.x + dx * dist, pos.z + dz * dist],
+    Math.abs(dx) > 1e-4 ? [pos.x + dx * dist, pos.z] : null,
+    Math.abs(dz) > 1e-4 ? [pos.x, pos.z + dz * dist] : null,
+    [pos.x + sx1 * dist, pos.z + sz1 * dist],
+    [pos.x + sx2 * dist, pos.z + sz2 * dist],
+  ];
+
+  for (const test of [level, ok]) {
+    for (const c of cands) {
+      if (!c) continue;
+      const nx = clampX(c[0]), nz = clampZ(c[1]);
+      if (test(nx, nz)) { pos.x = nx; pos.z = nz; return true; }
+    }
   }
-  if (Math.abs(dz) > 1e-4) {
-    nz = clampZ(pos.z + dz * dist);
-    if (ok(pos.x, nz)) { pos.z = nz; return true; }
-  }
-  let sx = (dx - dz) * S45, sz = (dx + dz) * S45; // slide 45° one way
-  nx = clampX(pos.x + sx * dist); nz = clampZ(pos.z + sz * dist);
-  if (ok(nx, nz)) { pos.x = nx; pos.z = nz; return true; }
-  sx = (dx + dz) * S45; sz = (dz - dx) * S45;     // then the other
-  nx = clampX(pos.x + sx * dist); nz = clampZ(pos.z + sz * dist);
-  if (ok(nx, nz)) { pos.x = nx; pos.z = nz; return true; }
   return false;
 }
 
@@ -249,6 +261,27 @@ function groundTick(e, dt) {
     }
   }
   const dy = target - e.pos.y;
+
+  // A real step up is HOPPED, not glided. Terrain heights are integers, so
+  // every rise in this world is a full block, and the old code slid the body
+  // up at 3 blocks/s — which read as characters floating over obstacles the
+  // player has to jump. An arc over ~0.36 s costs nothing and makes the effort
+  // visible. Wading is excluded: bobbing in water is not a step.
+  if (!wading && !e._hop && dy > 0.55) {
+    e._hop = { from: e.pos.y, t: 0 };
+  }
+  if (e._hop) {
+    const h = e._hop;
+    h.t += dt;
+    const k = Math.min(1, h.t / 0.36);
+    // linear climb plus a sine arch, so the body rises past the step and
+    // settles onto it rather than clipping up through the corner
+    e.pos.y = h.from + (target - h.from) * k + Math.sin(Math.PI * k) * 0.26;
+    if (k >= 1) { e.pos.y = target; e._hop = null; }
+    e._fallV = 0;
+    return wading;
+  }
+
   if (dy > 0.001) {
     e._fallV = 0;
     e.pos.y = Math.min(target, e.pos.y + Math.max(3 * dt, dy * Math.min(1, 14 * dt)));
@@ -746,23 +779,30 @@ export class Animal {
     this.world = opts.world;
     this.home = { x: opts.x, z: opts.z };
     this.wanderR = opts.wander ?? 5;
-    this.speed = opts.speed ?? (this.kind === 'predator' ? 3.2 : 1.6);
+    // The predator is a BEAR: heavy, slow and inevitable rather than fast.
+    // A big animal that saunters at you is far more frightening than a small
+    // one that sprints, and the player (5.2 blocks/s) can always out-walk it,
+    // which keeps this a tension beat with no way to actually lose.
+    this.speed = opts.speed ?? (this.kind === 'predator' ? 1.7 : 1.6);
     this.followTarget = null;
     this.fleeing = false;
     this.frozen = false;
 
     const K = this.kind;
-    this._r = K === 'cattle' ? 0.36 : 0.3;
-    this._shR = K === 'cattle' ? 0.55 : 0.45;
+    this._r = K === 'predator' ? 0.62 : K === 'cattle' ? 0.36 : 0.3;
+    this._shR = K === 'predator' ? 0.95 : K === 'cattle' ? 0.55 : 0.45;
 
-    const colors = { deer: 0x9a7448, goat: 0xd8d3c8, cattle: 0x6b4d3a, predator: 0x5a4a3c };
+    const colors = { deer: 0x9a7448, goat: 0xd8d3c8, cattle: 0x6b4d3a, predator: 0x5b3d24 };
     const c = colors[K] ?? 0x9a7448;
     const dark = shade(c, 0.7);
 
     // distinct silhouettes per kind
     let bw, bh, blen, by, hw, hh, hd, hy, legH, legW;
     if (K === 'cattle') { bw = 0.6; bh = 0.5; blen = 0.95; by = 0.74; hw = 0.3; hh = 0.3; hd = 0.32; hy = 0.94; legH = 0.5; legW = 0.13; }
-    else if (K === 'predator') { bw = 0.4; bh = 0.34; blen = 1.05; by = 0.52; hw = 0.3; hh = 0.26; hd = 0.34; hy = 0.6; legH = 0.36; legW = 0.1; } // low, long prowl posture
+    // BEAR: roughly double a deer in every dimension and much deeper through
+    // the chest. Standing it is about 1.9 blocks tall, so it reads as taller
+    // than the player from any angle.
+    else if (K === 'predator') { bw = 1.05; bh = 1.0; blen = 1.85; by = 1.16; hw = 0.62; hh = 0.54; hd = 0.66; hy = 1.3; legH = 0.72; legW = 0.27; }
     else if (K === 'goat') { bw = 0.36; bh = 0.38; blen = 0.7; by = 0.62; hw = 0.24; hh = 0.26; hd = 0.28; hy = 0.8; legH = 0.44; legW = 0.09; }
     else { bw = 0.4; bh = 0.4; blen = 0.8; by = 0.68; hw = 0.26; hh = 0.28; hd = 0.3; hy = 0.88; legH = 0.48; legW = 0.09; }
 
@@ -794,13 +834,18 @@ export class Animal {
       this.head.add(box(0.24, 0.13, 0.08, 0xcbb79f, 0, -0.09, hd / 2)); // muzzle
       this._tail = box(0.06, 0.42, 0.06, dark, 0, by + 0.14, -blen / 2 - 0.03, true); // hanging tail
       this._tailAxis = 'z';
-    } else { // predator
-      this.head.add(box(0.32, 0.1, 0.05, 0x2b211a, 0, 0.03, hd / 2)); // dark mask
-      this.head.add(box(0.18, 0.05, 0.06, 0xe8e2d4, 0, -hh / 2 + 0.01, hd / 2 - 0.03)); // teeth notch
-      this.head.add(box(0.07, 0.09, 0.06, dark, -0.1, hh / 2 + 0.03, -0.05)); // ears
-      this.head.add(box(0.07, 0.09, 0.06, dark, 0.1, hh / 2 + 0.03, -0.05));
-      this._tail = box(0.07, 0.07, 0.5, dark, 0, by + 0.08, -blen / 2 - 0.22);
-      this._tail.rotation.x = -0.45;
+    } else { // predator = bear
+      // blunt muzzle, small round ears set wide and high, pale claws — the
+      // three things that make a brown box read as "bear" rather than "dog"
+      this.head.add(box(0.34, 0.26, 0.26, shade(c, 0.78), 0, -0.08, hd / 2 + 0.06)); // muzzle
+      this.head.add(box(0.12, 0.07, 0.1, 0x2b211a, 0, -0.1, hd / 2 + 0.19));         // nose
+      this.head.add(box(0.16, 0.16, 0.09, dark, -0.22, hh / 2 + 0.05, -0.04));       // ears
+      this.head.add(box(0.16, 0.16, 0.09, dark, 0.22, hh / 2 + 0.05, -0.04));
+      // the shoulder hump: the bear silhouette's single most recognisable line
+      fig.add(box(bw * 0.86, 0.3, 0.62, shade(c, 1.08), 0, by + bh / 2 + 0.08, blen * 0.18));
+      // heavy haunches
+      fig.add(box(bw * 0.92, bh * 0.72, 0.55, shade(c, 0.92), 0, by - 0.05, -blen * 0.3));
+      this._tail = box(0.16, 0.16, 0.16, dark, 0, by + 0.02, -blen / 2 - 0.04); // stub
     }
     if (this._tail) fig.add(this._tail);
     fig.add(this.body, this.head);

@@ -49,27 +49,27 @@ export const S = {
     sceneA_card: 'A valley, about 38,000 years ago.',
     sceneA_card2: 'You are one of the ones who came before.',
 
-    wake: 'You wake in a rock shelter. Your band is stirring.',
-    bandNote: 'Your band. Six of you, together. Alone, the wild wins. Together, you eat.',
+    wake: 'You wake in a rock shelter. Your tribe is stirring.',
+    tribeNote: 'Your tribe. Six of you, together. Alone, the wild wins. Together, you eat.',
 
-    obj_gather: 'Gather berries for the band (0/4)',
-    obj_gather_n: (n) => `Gather berries for the band (${n}/4)`,
+    obj_gather: 'Gather berries for the tribe (0/4)',
+    obj_gather_n: (n) => `Gather berries for the tribe (${n}/4)`,
     gatherDone: 'Food gathered. Nothing is planted here. You take what the land gives.',
     huntersGatherers: 'Hunting animals. Gathering fruits and plants. That is the whole larder: hunters and gatherers.',
 
     obj_hunt: 'Join the hunt by the plains',
     huntStart: 'A deer. Draw… hold… release when the aim steadies.',
-    huntSuccess: 'The hunt succeeds. The band eats tonight.',
+    huntSuccess: 'The hunt succeeds. The tribe eats tonight.',
     huntMiss: 'It bolts. Steady the aim in the centre of the ring, then release.',
     predatorNear: 'Something watches from the tall grass. Stay close to the fire after dark.',
     predatorChase: 'RUN. It does not like the fire, get to camp!',
-    predatorSafe: 'It turns away from the flames. The band pulls closer together.',
+    predatorSafe: 'It turns away from the flames. The tribe pulls closer together.',
 
     obj_fish: 'Try the river. Tap when the float dips',
     fishCaught: 'A fish, silver and quick. The river feeds you too.',
     fishMissed: 'Too slow, the fish slips away. Watch for the dip.',
 
-    obj_fire: 'Sit with the band at the fire',
+    obj_fire: 'Sit with the tribe at the fire',
     elderSpeaks: 'The elder speaks. You understand her. Every sound rich with meaning.',
     elderSpeech: '…',
     languageNote:
@@ -78,7 +78,7 @@ export const S = {
     obj_knap: 'Shape a new blade at the knapping stone',
     knapIntro: 'Strike the core where it glints. Three good strikes: axe, blade, arrowhead.',
     knapStep: (n) => ['A clean flake. The axe edge is born.', 'Again. A long blade this time.', 'Small, sharp: an arrowhead.'][n],
-    knapDone: 'Fire in the hearth. Better tools in the hand. The band is stronger this season.',
+    knapDone: 'Fire in the hearth. Better tools in the hand. The tribe is stronger this season.',
     knapFail: 'The strike glances off. Watch the glint and tap in rhythm.',
 
     obj_paint: 'Paint on the shelter wall',
@@ -92,7 +92,7 @@ export const S = {
     obj_drill: 'Drill the shells into beads at the knapping stone',
     drillIntro: 'Hold steady… the bow-drill bites the shell. Hold until it sings through.',
     drillDone: 'A string of shell beads. Small suns against the skin.',
-    obj_trade: 'A strange band approaches. Meet them at the edge of camp.',
+    obj_trade: 'A strange tribe approaches. Meet them at the edge of camp.',
     tradeIntro:
       'They speak, you understand nothing. But they hold up dark glass-stone, and look at your beads.',
     tradeChoiceTitle: 'They wait. What do you do?',
@@ -107,11 +107,11 @@ export const S = {
     campMoves: 'Camp is packed in a morning. A temporary camp is a tool, not a home.',
 
     burial_card: 'That winter, the elder does not wake.',
-    burial1: 'The band gathers. No one speaks your language of grief better than silence.',
+    burial1: 'The tribe gathers. No one speaks your language of grief better than silence.',
     obj_burial_beads: 'Place her bead string in the grave',
     obj_burial_tool: 'Place her favourite blade beside her',
     burialNote: 'Perhaps they believed something continued.',
-    burialDone: 'Stone over soil. The band stands a long time before moving on.',
+    burialDone: 'Stone over soil. The tribe stands a long time before moving on.',
 
     interstitial_generations: 'Generations pass. Your people continue.',
 
@@ -180,12 +180,12 @@ export const S = {
     act1End2: 'Remember where everything is.',
 
     // Community store + real bow hunt (equipment-loop rework; append-only)
-    obj_store_basket: "Take a basket from the band's store",
-    storeLesson: "The band's tools belong to everyone. Take what the task needs. Bring it back for the next hands.",
-    obj_store_bow: "Take the bow from the band's store",
-    obj_store_rod: "Take the fishing rod from the band's store",
+    obj_store_basket: "Take a basket from the Community Chest",
+    storeLesson: "The tribe's tools belong to everyone. Take what the task needs. Bring it back for the next hands.",
+    obj_store_bow: "Take the bow from the Community Chest",
+    obj_store_rod: "Take the fishing rod from the Community Chest",
     aimHint: 'Aim with the camera. Press E or tap to loose an arrow',
-    obj_meat: 'Pick up the meat for the band',
+    obj_meat: 'Pick up the meat for the tribe',
   },
 
   // ---------- ACT 2 — PASS ----------
@@ -391,7 +391,7 @@ export const S = {
     recentMedia: '📰 newspapers · 📺 electronic media (recent centuries)',
     satchelTitle: 'EVIDENCE',
     eraLabels: {
-      band: '👣 the band by the shelter',
+      tribe: '👣 the tribe by the shelter',
       iceEnd: '🧊 end of the last ice age',
       settle: '🌾 settling and farming',
       pottery: '🏺 pottery',
