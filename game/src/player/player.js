@@ -10,6 +10,14 @@ import { isSolid, isWater } from '../world/blocks.js';
 // orbit pivot height above the feet, and how far short of a wall hit to stop
 const CAM = { DIST: 4.6, MIN: 2.2, MAX: 7.5, PIVOT: 1.5, PAD: 0.3, HIDE_BELOW: 1.15 };
 
+// Auto step-up height. 1.05 matches the ceiling NPCs get in npc.js passable(),
+// so a person and a character can walk exactly the same ground.
+const STEP_UP = 1.05;
+// How fast the visual catches up after a step. The body snaps instantly (the
+// physics must stay exact) and only the CAMERA and MODEL are eased, so a kerb
+// does not jolt the view.
+const STEP_SMOOTH = 9;
+
 export class Player {
   constructor(world, camera, scene = null) {
     this.world = world;
@@ -20,6 +28,9 @@ export class Player {
     this.pitch = 0;
     this.onGround = false;
     this.frozen = false;
+    // step assist: how much of the last auto-step is still being smoothed out
+    // of the camera and model height (see _stepMove)
+    this._stepLift = 0;
 
     // ---- third-person rig state ----
     this.camDist = CAM.DIST;      // desired boom length (player-adjustable)
@@ -115,7 +126,7 @@ export class Player {
   _updateModel(dt) {
     if (!this.model) return;
     const g = this.model;
-    g.position.set(this.pos.x, this.pos.y, this.pos.z);
+    g.position.set(this.pos.x, this.pos.y - this._stepLift, this.pos.z); // eased after an auto-step
     const hs = Math.hypot(this.vel.x, this.vel.z);
     if (hs > 0.6) {
       // face where we're going (shortest-arc lerp, matches NPC yaw feel)
@@ -303,7 +314,9 @@ export class Player {
   // (interstitial restore, FX aiming) keep working — the camera just sits
   // `boom` units behind the head instead of inside it.
   syncCamera() {
-    const px = this.pos.x, py = this.pos.y + CAM.PIVOT, pz = this.pos.z;
+    // _stepLift eases the camera up after an auto-step so a kerb reads as a
+    // stride rather than a jolt; the body itself has already snapped.
+    const px = this.pos.x, py = this.pos.y - this._stepLift + CAM.PIVOT, pz = this.pos.z;
     const cp = Math.cos(this.pitch);
     const fx = Math.sin(this.yaw) * cp;
     const fy = -Math.sin(this.pitch);
@@ -432,8 +445,12 @@ export class Player {
     }
 
     const fallSpeed = -this.vel.y; // FX only: read before collision zeroes it
-    this.moveAxis(0, this.vel.x * dt);
-    this.moveAxis(2, this.vel.z * dt);
+    this._stepMove(0, this.vel.x * dt);
+    this._stepMove(2, this.vel.z * dt);
+    // decay the visual catch-up from any step taken above
+    if (this._stepLift > 0) {
+      this._stepLift = Math.max(0, this._stepLift - this._stepLift * Math.min(1, STEP_SMOOTH * dt) - 0.01);
+    }
     this.onGround = false;
     // substep vertical motion ≤0.9 blocks so lag spikes cannot tunnel terrain
     let dy = this.vel.y * dt;
@@ -538,6 +555,58 @@ export class Player {
       }
     } else {
       this._strideAcc = 0;
+    }
+  }
+
+  // Is the player's box free of solid blocks at this position?
+  _free(x, y, z) {
+    const r = PLAYER.RADIUS, h = 1.75;
+    for (let bx = Math.floor(x - r); bx <= Math.floor(x + r); bx++)
+      for (let by = Math.floor(y); by <= Math.floor(y + h); by++)
+        for (let bz = Math.floor(z - r); bz <= Math.floor(z + r); bz++)
+          if (isSolid(this.world.get(bx, by, bz))) return false;
+    return true;
+  }
+
+  // Horizontal move WITH step assist.
+  //
+  // Terrain heights in this world are integers, so every rise is a full block,
+  // and without this the player has to jump over every kerb, doorway sill,
+  // riverbank and terrace while NPCs walk up them. That asymmetry is what made
+  // the valley feel sticky. A one-block rise is now walked, exactly the height
+  // NPCs are allowed by passable() in npc.js.
+  //
+  // Nothing new becomes reachable: the jump already cleared 2.2 blocks, so
+  // anything a step can reach was always climbable. This only removes the
+  // keypress, which is why the hand-verified walkability of the banks, the
+  // cave approach and the log crossing is untouched.
+  _stepMove(axis, amount) {
+    if (amount === 0) return;
+    const p = this.pos;
+    const comp = axis === 0 ? 'x' : 'z';
+    const from = p[comp];
+    const wasGround = this.onGround;
+    this.moveAxis(axis, amount);
+    if (!wasGround) return;                                   // no climbing in mid-air
+    if (Math.abs(p[comp] - from) >= Math.abs(amount) - 1e-6) return; // never blocked
+
+    const want = from + amount;
+    const keepVel = axis === 0 ? this.vel.x : this.vel.z;
+    // find the smallest lift that clears the obstruction, in quarter blocks so
+    // a slab or a partially buried block is met at its real height
+    for (let lift = 0.25; lift <= STEP_UP + 1e-6; lift += 0.25) {
+      const y = p.y + lift;
+      // room to rise where we stand, AND room to stand where we are going
+      if (!this._free(p.x, y, p.z)) break;                    // ceiling: no point trying higher
+      const nx = axis === 0 ? want : p.x;
+      const nz = axis === 2 ? want : p.z;
+      if (!this._free(nx, y, nz)) continue;
+      p.y = y;
+      p[comp] = want;
+      if (axis === 0) this.vel.x = keepVel; else this.vel.z = keepVel; // moveAxis zeroed it
+      this.onGround = true;
+      this._stepLift = Math.min(STEP_UP, this._stepLift + lift); // smoothed out visually
+      return;
     }
   }
 
