@@ -433,6 +433,21 @@ function angTo(a, b) {
 
 const _V = new THREE.Vector3(); // reused — no per-frame allocation
 
+// Beyond this many blocks from the camera an ANIMAL sleeps: hidden, and its
+// update returns immediately. Squared so the check needs no sqrt. 46 blocks is
+// comfortably past the 120-block fog/far plane's useful read at ground level,
+// and well past any distance a deer reads as more than a speck.
+const FAR_SLEEP = 46;
+const FAR_SLEEP_SQ = FAR_SLEEP * FAR_SLEEP;
+
+// Who the distance gate measures from. Animals are constructed as
+// `new Animal(scene, opts)` with no camera (unlike Npc, which is handed one),
+// so rather than thread a camera through every spawn site this is set once at
+// boot beside setPlayerBody. Null means the gate is off and every animal ticks,
+// which is the correct fallback for the world editor.
+let OBSERVER = null;
+export function setObserver(o) { OBSERVER = o; }
+
 // ---- Npc --------------------------------------------------------------------
 export class Npc {
   constructor(scene, uiRoot, camera, opts = {}) {
@@ -1058,6 +1073,22 @@ export class Animal {
       this.shadow.scale.setScalar(this._shR);
       return;
     }
+    // Distance gate. Herds live 57 blocks from camp, so for most of act 1 the
+    // plains deer are neither visible nor relevant: hide them and skip the AI,
+    // gait, separation and breathing entirely. This is what makes a bigger herd
+    // free rather than a per-frame cost you carry everywhere.
+    //
+    // followTarget is exempt on purpose: a predator chasing the player must
+    // keep closing even when the camera has swung away from it.
+    if (OBSERVER && !this.followTarget) {
+      const cx = OBSERVER.position.x - this.pos.x;
+      const cz = OBSERVER.position.z - this.pos.z;
+      if (cx * cx + cz * cz > FAR_SLEEP_SQ) {
+        if (this.group.visible) this.group.visible = false;
+        return;
+      }
+    }
+    if (!this.group.visible) this.group.visible = true;
     let moving = false;
     if (!this.frozen) {
       this._wt -= dt;
