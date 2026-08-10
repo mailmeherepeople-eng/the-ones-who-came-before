@@ -34,12 +34,44 @@ export const S = {
     settings: 'Settings',
     settingsTitle: 'Settings',
     close: 'Close',
+    setSound: 'Sound',
+    setSoundNote: 'Narration, effects and the sounds of the valley. Turn this off and the game plays in silence.',
+    setMusic: 'Music',
+    setMusicNote: 'Background music only. Narration and effects keep playing.',
     setLockCamera: 'Lock camera behind me',
     setLockCameraNote: 'The camera swings around to stay behind you as you walk, so you do not have to keep dragging. Dragging still works whenever you want it.',
     takeAim: 'Take Aim',
     fire: 'Fire',
     lowerBow: 'Lower bow',
     talk: 'Talk',
+  },
+
+  // Item display names (src/inventory.js holds the item table; the names live
+  // here like every other user-visible string).
+  items: {
+    basket: 'Basket',
+    bow: 'Bow and arrows',
+    rod: 'Fishing rod',
+    spear: 'Spear',
+    waterskin: 'Waterskin',
+    berry: 'Berries',
+    meat: 'Meat',
+    fish: 'Fish',
+    firewood: 'Firewood',
+  },
+
+  // The community chest and store box panels
+  container: {
+    chestTitle: 'Community Chest',
+    chestNote: 'The tools belong to everyone. Take what you need, bring it back when you are done.',
+    storeTitle: 'Store Box',
+    storeNote: 'Everything the band gathers goes in here, and everyone eats from it.',
+    youTitle: 'You are carrying',
+    empty: 'Nothing in here yet',
+    carryNothing: 'Your hands are empty',
+    takeHint: 'Tap a tool or a pile to move it',
+    tools: 'Tools',
+    food: 'Food',
   },
 
   // Tab act-select menu (jump between acts without replaying; wipes progress)
@@ -64,8 +96,8 @@ export const S = {
     wake: 'You wake in a rock shelter. Your tribe is stirring.',
     tribeNote: 'Your tribe. Six of you, together. Alone, the wild wins. Together, you eat.',
 
-    obj_gather: 'Gather berries for the tribe (0/4)',
-    obj_gather_n: (n) => `Gather berries for the tribe (${n}/4)`,
+    obj_gather: 'Gather berries for the tribe',
+    obj_gather_n: (n) => `Gather berries for the tribe (${n} picked)`,
     gatherDone: 'Food gathered. Nothing is planted here. You take what the land gives.',
     huntersGatherers: 'Hunting animals. Gathering fruits and plants. That is the whole larder: hunters and gatherers.',
 
@@ -213,6 +245,45 @@ export const S = {
     depositFishDone: 'The box takes the catch too. Everything found is everything shared.',
 
     obj_meat: 'Pick up the meat for the tribe',
+
+    // Borrowed tools: the chest lends, the store box receives, and every tool
+    // has to go back. The lesson used to be one narrator line (storeLesson);
+    // these are the objectives that make it a rule you have to obey.
+    openChest: 'Open the Community Chest',
+    openStore: 'Open the store box',
+    pickBerry: 'Pick berries',
+    takeMeat: 'Take the meat',
+    castLine: 'Cast a line',
+
+    // Interact labels. The prompt used to be a bare emoji and the player had to
+    // guess the verb; these name the action, as in the reference screenshot.
+    lbl_knap: 'Knap a blade',
+    lbl_paint: 'Paint the wall',
+    lbl_drill: 'Drill the shells',
+    lbl_shell: 'Collect shell',
+    lbl_trade: 'Trade with the visitors',
+    lbl_graveBeads: 'Lay the beads',
+    lbl_graveBlade: 'Lay the blade',
+    lbl_plant: 'Plant the seed',
+    lbl_waterskin: 'Take the waterskin',
+    lbl_farfield: 'Water the far field',
+    lbl_kiln: 'Use the kiln',
+    lbl_reeds: 'Cut reeds',
+    lbl_shelf: 'Set them on the shelf',
+    lbl_sack: 'Pick up the sack',
+    lbl_neigh: 'Give the cloth',
+    lbl_home: 'Head home',
+    obj_returnBasket: 'Put the basket back in the Community Chest',
+    returnBasketDone: 'The basket goes back on the pile. Someone else will need it before the day is out.',
+    obj_returnRod: 'Put the fishing rod back in the Community Chest',
+    returnRodDone: "The rod goes back. Nothing here belongs to one person.",
+
+    // The second hunt, which is a ruse: it exists to walk the player out to
+    // the plains, still carrying the bow, so the bear can appear far from camp.
+    moreMeat: 'One day of food is not a winter. The tribe asks you to go back out for more.',
+    obj_huntMore: 'Return to the plains and hunt for more meat',
+    obj_returnBow: 'Put the bow back in the Community Chest',
+    returnBowDone: 'You are still shaking, and you still hand it over. It was never yours to keep.',
   },
 
   // ---------- ACT 2 — PASS ----------
