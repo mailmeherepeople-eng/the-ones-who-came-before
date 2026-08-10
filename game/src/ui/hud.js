@@ -2,6 +2,7 @@
 // narrator boxes, full-screen cards, choice prompts, fader, satchel counter.
 import { S } from '../strings.js';
 import { Settings, SETTINGS } from '../settings.js';
+import { Sound, voiceIdFor } from '../sound.js';
 
 export class HUD {
   constructor(uiRoot) {
@@ -121,8 +122,34 @@ export class HUD {
     this.objectiveEl.classList.remove('fade-out');
   }
 
-  showPrompt(text) {
-    this.promptEl.textContent = text;
+  // Icon plus what the action actually IS ("Pick berries"), instead of a bare
+  // emoji the player has to guess at.
+  //
+  // This is called EVERY FRAME from main.js while a target is in range, so it
+  // rebuilds only when the content genuinely changes. Without the guard it
+  // would thrash the DOM sixty times a second and restart the pill's entrance
+  // animation on every one of them.
+  showPrompt(icon, label) {
+    // JSON, not a delimiter: concatenating needs a separator that cannot occur
+    // in either half, and reaching for a control character is how a stray NUL
+    // ends up in a source file (there was already one of those in strings.js).
+    const key = JSON.stringify([icon ?? '', label ?? '']);
+    if (key !== this._promptKey) {
+      this._promptKey = key;
+      this.promptEl.textContent = '';
+      if (icon) {
+        const i = document.createElement('span');
+        i.className = 'p-icon';
+        i.textContent = icon;
+        this.promptEl.appendChild(i);
+      }
+      if (label) {
+        const l = document.createElement('span');
+        l.className = 'p-label';
+        l.textContent = label;
+        this.promptEl.appendChild(l);
+      }
+    }
     this.promptEl.classList.remove('fade-out');
   }
   hidePrompt() { this.promptEl.classList.add('fade-out'); }
@@ -159,13 +186,35 @@ export class HUD {
     await wait(ms);
   }
 
-  // narrator box; resolves on tap/click/E
-  narrator(text, { tapLabel = S.ui.continue } = {}) {
+  // Narrator box. Resolves on tap/click/E, and ALSO when its voice clip ends.
+  //
+  // When a recording exists for this line the box narrates and then closes
+  // itself, so pacing comes from how the line was read rather than from how
+  // fast the player taps. A tap still skips ahead at any point. With no
+  // recording the behaviour is exactly what it always was: wait for a tap.
+  narrator(text, { tapLabel = S.ui.continue, voice = null } = {}) {
     return new Promise((resolve) => {
       const el = document.createElement('div');
       el.className = 'narrator';
       el.innerHTML = `<span></span><span class="tap">▼ ${tapLabel}</span>`;
       el.querySelector('span').textContent = text;
+      const clip = Sound.playVoice(voice ?? voiceIdFor(text));
+      if (clip) {
+        // a voiced box closes on its own, so it needs to SHOW that it is
+        // running or a player who looks away thinks it vanished on them
+        el.classList.add('voiced');
+        const bar = document.createElement('div');
+        bar.className = 'narrator-progress';
+        el.appendChild(bar);
+        const tick = () => {
+          if (!el.isConnected) return;
+          const d = clip.el.duration;
+          if (d) bar.style.transform = `scaleX(${Math.min(1, clip.el.currentTime / d)})`;
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        clip.ended.then(() => done());
+      }
       // announce and activate as a button for assistive tech. Kept a div on
       // purpose: `.narrator .tap` is styled for a span, and a real <button>
       // would drag in a UA background/border reset for no behavioural gain.
@@ -180,9 +229,12 @@ export class HUD {
         // the listeners going on late, a dispatched click aimed at the box
         // landed before anything was listening and was silently swallowed, so
         // automated runs (and some assistive tech) could not advance a beat.
-        if (closed || performance.now() - openedAt < 350) return;
+        // the guard applies to INPUT only: a clip finishing must always close
+        // the box, however soon after it opened
+        if (closed || (e && performance.now() - openedAt < 350)) return;
         closed = true;
         e?.preventDefault?.();
+        clip?.stop(); // tapping through cuts the narration with it
         removeEventListener('keydown', onKey);
         el.remove();
         this.input?.clearEdges(); // the dismissing press must not re-trigger interact/jump
