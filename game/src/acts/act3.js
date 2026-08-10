@@ -31,6 +31,11 @@ export async function runAct3(G, resumeBeat = null) {
   G.player.teleport(SITES.digCamp.x, SITES.digCamp.z + 2, Math.PI * 1.1);
   G.mode = 'ground';
   G.input.setEnabled(true);
+  // safety sweep, same spirit as the setEnabled above: act 2 hides the body for
+  // its overhead diorama, and act 3 is where it walks again. Covers the paths
+  // that never reach act 2's own restore (a jump straight here, or act 2
+  // throwing part way through).
+  G.player.setModelHidden(false);
   await G.hud.fadeIn(600);
   await G.hud.card([S.act3.title, S.act3.card]);
 
@@ -570,12 +575,68 @@ function disposeAmbients(ctx) {
   ctx.ambients = null;
 }
 
+// Same job as disposeAmbients, but for the one call that happens while the
+// player may be looking. Deleting two villagers mid-frame was a visible pop;
+// walking them out of the village first reads as two people stepping aside,
+// which is exactly what the beat needs them to do. Fire and forget: the beat
+// must not wait on a stroll, and disposeAmbients stays the hard sweep for act
+// teardown and resumed sessions.
+function retireAmbients(ctx) {
+  if (!ctx.ambients) return;
+  const leaving = ctx.ambients;
+  ctx.ambients = null; // claimed: a later sweep is a no-op, never a double free
+  const m = SITES.modernVillage;
+  for (const a of leaving) {
+    // Straight out along their own bearing from the village centre. `home` has
+    // to move with the target: idle wander pulls toward home, and a blocked
+    // goTo gives itself up after three failed detours (see navTick), at which
+    // point the old home would have walked them right back into the beat they
+    // are supposed to be leaving. This is the "systems yield to scripts" rule,
+    // applied to the wander system rather than to ambient work.
+    const dx = a.pos.x - m.x, dz = a.pos.z - m.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const tx = m.x + (dx / d) * 16, tz = m.z + (dz / d) * 16;
+    a.home = { x: tx, z: tz };
+    a.goTo(tx, tz);
+  }
+  // Retire them once they are genuinely out of SHOT, not on a fixed timer and
+  // not on distance alone. The village is dense enough that a walk-off can be
+  // blocked, so what actually matters is whether the player can see it happen:
+  // gone from the frustum, or far enough away to be a speck. The cap
+  // guarantees they always go even if the player stands and stares.
+  const cam = ctx.G.renderer.camera;
+  const frustum = new THREE.Frustum();
+  const mat = new THREE.Matrix4();
+  const at = new THREE.Vector3();
+  const clear = () => {
+    for (const a of leaving) {
+      a.dispose(); // idempotent: detaches from the scene, caches are shared
+      const i = ctx.G.npcs.indexOf(a);
+      if (i >= 0) ctx.G.npcs.splice(i, 1);
+    }
+  };
+  let waited = 0;
+  const poll = () => {
+    waited += 700;
+    cam.updateMatrixWorld();
+    frustum.setFromProjectionMatrix(mat.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    const unseen = leaving.every((a) => {
+      at.set(a.pos.x, a.pos.y + 0.9, a.pos.z); // chest height, not the feet
+      return !frustum.containsPoint(at) ||
+        Math.hypot(a.pos.x - cam.position.x, a.pos.z - cam.position.z) > 26;
+    });
+    if (unseen || waited >= 14000) clear();
+    else setTimeout(poll, 700);
+  };
+  setTimeout(poll, 700);
+}
+
 async function interviews(ctx) {
   const { G } = ctx;
   G.hud.setObjective(S.act3.obj_talk);
   // hand the stage to the real interviewees — the ambient wanderers step off
   // so they can never crowd a talk interactable or steal a listening ring
-  disposeAmbients(ctx);
+  retireAmbients(ctx);
   const m = SITES.modernVillage;
   // the present-day village is another long walk — beacon until the first chat
   ctx.way = plantWayfinder(ctx, m, { color: SPEC_FX.anthropologist.color });
