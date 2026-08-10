@@ -153,6 +153,19 @@ characters then prefer sliding sideways along an obstacle over crossing it.
   worked. It shipped a build that appeared to have none of its new features.
   The worker is network-first now and skips localhost entirely, but check with
   a hard reload anyway.
+- **Unregistering the worker is not enough: the HTTP cache is a second layer.**
+  Pages sets a ten minute max-age, so after a push the browser keeps serving the
+  old modules even with no worker and an empty Cache Storage. Two things follow.
+  First, `fetch(url, {cache:'no-store'})` proves the SERVER has the new build but
+  does nothing for the running page, because no-store deliberately does not
+  write through; use `{cache:'reload'}` on the changed files, which bypasses the
+  cache AND repopulates it, then reload. Second, confirm what is actually
+  running before trusting any check: read something that cannot exist in the old
+  build (a new string key, or a deleted one now `undefined`). Every check run
+  against a stale bundle is worse than no check, because it looks like evidence.
+- **`gh api repos/OWNER/REPO/pages/builds` tells you if Pages has caught up.**
+  It reports the built commit sha and status, which separates "not deployed yet"
+  from "deployed, and my browser is lying to me". Those need opposite responses.
 - **Fixed camera poses for any performance measurement.** A wandering player
   makes readings incomparable; a whole first round of numbers was junk.
 - **The `high` quality tier is not "desktop".** `pickTier()` returns `high` for
