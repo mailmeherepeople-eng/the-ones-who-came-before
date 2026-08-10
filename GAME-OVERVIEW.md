@@ -649,6 +649,119 @@ Both rules live in `CLAUDE.md` at the repo root.
 
 ---
 
+## 15. Act 1: borrowed tools, inventory and audio (2026-08-10 16:45 IST)
+
+Act 1 only; acts 2 and 3 are untouched. Ten requested changes, but they are not
+ten features. The spine is one idea made mechanical:
+
+> **The community chest lends tools. The store box receives food. You own
+> nothing.**
+
+That used to be a single narrator line (`storeLesson`) while the game quietly
+contradicted it: the basket vanished the instant you picked a berry, and the
+bow was gone two beats before the bear ever appeared. Now the tool stays in
+your hands until you put it back, which is why item 6's restructure needed the
+inventory first.
+
+### 15.1 What is new
+
+| Area | Change | Files |
+|---|---|---|
+| Inventory | Item table, containers (`player` / `chest` / `store`), counts, persistence | `src/inventory.js` (new) |
+| Container UI | Square-slot grid, take and deposit by tapping, carry view | `src/ui/container.js` (new) |
+| Act 1 loop | Borrow, use, deposit, **return** for basket, bow and rod | `src/acts/act1.js` |
+| The bear | A second hunt that is a ruse; bear spawns at the plains, 73 blocks from camp | `src/acts/act1.js` |
+| Wild berries | ~110 harvestable `B.SHRUB_BERRY` blocks across the valley | `src/acts/act1.js` |
+| Herds | 6 to 10 plains deer, plus a distance gate so far animals sleep | `src/acts/act1.js`, `src/npc/npc.js` |
+| Fishing | 1 spot to 4, derived from `riverX()` so they are on the water | `src/acts/act1.js` |
+| Readability | Narrator, cards, objective and prompt all substantially larger | `css/style.css` |
+| Prompts | Icon **and** verb ("Pick berries"), 16 labelled interactables | `src/ui/hud.js`, `src/main.js` |
+| Audio | Files layered over the synth: voice, music, sfx | `src/sound.js` (new), `game/audio/` |
+
+### 15.2 Things not to undo
+
+- **Tools and harvests are carried together.** `Inv.contents('player')` returning
+  `[{basket,1},{berry,15}]` is the whole point. `player.equip()` stays visual and
+  one-slot; `syncEquip()` decides what the hands show (tool first, else the
+  carried harvest).
+- **The second hunt is a ruse and has no deer in it.** Its only job is to walk
+  the player to the plains still holding the bow so the bear appears 73 blocks
+  from safety. The old version spawned it beside the store box and the "run to
+  camp" was a seven block stroll. It is now save-guarded (`bear` record), which
+  it never was.
+- **Wild berries are BLOCKS, not props.** `B.SHRUB_BERRY` is cross flora and all
+  cross flora in a chunk merges into one mesh, so ~110 of them cost **zero**
+  extra draw calls. As props they would have cost ~220. Scene A needs the
+  explicit `scatterWildBerries` pass because terrain's bush-blob generator is
+  skipped entirely when the world is iced.
+- **The animal distance gate keys off a module-level `OBSERVER`**, set once in
+  main.js, because `Animal` is constructed without a camera (unlike `Npc`).
+  `followTarget` is exempt so a chasing bear never sleeps.
+- **A tap takes one TOOL but the whole STACK of a harvest.** Taking one bow is
+  obviously right; making a child tap twenty times to hand over twenty berries
+  obviously is not.
+- **The container panel freezes the player**, and it is the only panel that
+  does. The others are read-only, so wandering while they are open is harmless;
+  here you are reaching into a box two feet away.
+
+### 15.3 Audio
+
+**AAC in `.m4a`**, single format, because iPhone support was required (Opus is
+about twice as efficient for speech but needs iOS 17.5+). Full details and the
+recording workflow are in [`game/audio/README.md`](game/audio/README.md).
+
+- **The game plays identically with the folder empty**, and keeps playing as
+  clips are added one at a time. A missing file is a silent no-op.
+- **Voice ids are `strings.js` key paths.** `S.act1.wake` resolves to
+  `voice/act1.wake.m4a` via a value-to-key map built once by walking `S`, so
+  **none of the 88 narrator call sites changed.** Template strings (functions)
+  get no voice; pass `{ voice: 'id' }` to override.
+- **A voiced line auto-advances** when the clip ends, with a progress line and
+  tap-to-skip. Unvoiced lines wait for a tap exactly as before.
+- **Voice and music stream; only short sfx are decoded.** Decoded audio costs
+  ~192 KB per second, so decoding seven minutes of narration would cost ~80 MB
+  on a phone.
+- Both file audio and the synth bed run through one master gain, so the Sound
+  and Music settings cover everything. That also works around iOS treating
+  `HTMLAudioElement.volume` as read-only.
+- `ctx.resume()` and `visibilitychange` handling were **missing entirely** and
+  are now present: a context suspended by a lock screen used to stay suspended
+  for the rest of the session.
+
+### 15.4 Measured
+
+At the Act 1 spawn, same pose as the previous baseline:
+
+| | Before | After |
+|---|---|---|
+| Draw calls | 295 | **271** |
+| Triangles | 92,236 | 90,312 |
+| Plains deer | 6 | 10 |
+| Harvestable berries | 5 | **115** |
+| Fishing spots | 1 | 4 |
+
+Draw calls went **down** while adding four deer and 110 bushes, because the
+distance gate sleeps ten of twelve animals at camp and cross flora is free.
+
+Verified in-game: the borrow loop carries `[{basket,1},{berry,15}]`
+simultaneously, the basket survives the berry deposit, returning it puts the
+chest back to 4; the bear spawns only on reaching the plains, 73 blocks from
+camp, with the bow still held, and the return-bow prompt fires only after it
+flees; `showPrompt` performs **0 DOM mutations** across 30 identical calls;
+auto-advance fires at 5.6s on a 5.57s clip.
+
+### 15.5 A CSS bug worth remembering
+
+The narrator was **188px wide on a 375px phone** no matter what `max-width`
+said. It is absolutely positioned with only `left: 50%`, and for an auto-width
+absolute box that makes the containing block the space from the 50% line to the
+right edge, so shrink-to-fit clamped it to half the screen. `max-width:
+min(620px, 92vw)` was never reachable. An explicit `width` is not subject to
+that clamp. **That, not the font size, is why the boxes read as an
+afterthought.** Same fix applied to `#hud-prompt` and the story cards.
+
+---
+
 ## 14. The known-bugs pass (2026-08-10 14:10 IST)
 
 Every open item in §10 closed. Two of the twelve needed no code (§10.3 and

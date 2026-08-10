@@ -3,7 +3,7 @@
 Written for a session starting cold with no memory of this project. Read this
 top to bottom (five minutes), then open the two files in §7.
 
-Last updated **2026-08-10 14:10 IST**.
+Last updated **2026-08-10 16:45 IST**.
 
 ---
 
@@ -93,6 +93,12 @@ Three passes have landed, all documented in `GAME-OVERVIEW.md`:
   at runtime rather than by inspection. §14.2 lists the ones that carry a
   decision you should not undo (especially: do **not** simplify the player
   model hide to `G.mode !== 'ground'`, and P2's challenge must stay win-less).
+- **§15 — Act 1: borrowed tools, inventory and audio.** The chest lends, the
+  store box receives, and every tool must go back; the bear beat is now a ruse
+  that walks you out to the plains still holding the bow. Adds `src/inventory.js`,
+  `src/ui/container.js` and `src/sound.js`. §15.2 is the do-not-undo list.
+
+**Act 1 is the current focus.** Acts 2 and 3 are deliberately untouched by §15.
 
 ## 6. Movement rules, because they are subtle
 
@@ -183,7 +189,19 @@ characters then prefer sliding sideways along an obstacle over crossing it.
   root cause wearing a different hat. `fx-pop` starts at `scale(0.7)`, so every
   `getBoundingClientRect()` on a popped-in panel reads 70% of its real size and
   a 44 px touch target looks like a 35 px one. **Trust `getComputedStyle` over
-  bounding rects for resting size.** This cost a real detour in the §14 pass.
+  bounding rects for resting size**, or `offsetWidth`/`offsetHeight`, which are
+  layout boxes and immune to transforms. This cost a real detour in §14 and
+  again in §15.
+- **A hidden pane throttles `setTimeout` to about once per second.** A driver
+  loop with forty 300 ms sleeps takes forty seconds, not twelve, and the tool
+  call dies at its 30 s limit looking exactly like a crash. **Keep driver loops
+  to a handful of awaits**, and prefer synchronous work (`mesher.flush()` in a
+  plain `for`) over polling. The script keeps running in the page after the
+  timeout, so probe the result in a second call rather than re-running it.
+- **`innerWidth` can be 0** when the pane is fully collapsed, which silently
+  makes `auto-fill` grids resolve to one column and every layout measurement
+  meaningless. Check the viewport before trusting a layout number, and
+  `resize_window` to a real size first.
 - **For colour questions, read vertex colours, not pixels.** Trees and flora
   block the shot, and the mesher's face shade, jitter, tint and AO are all
   scalar multipliers, so a block's R:G:B *ratio* is an exact fingerprint that
