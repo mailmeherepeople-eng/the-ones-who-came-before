@@ -236,7 +236,13 @@ function makeTalkable(G, characters) {
         if (!c.talk?.enabled) return;
         c.faceToward?.(G.player.pos.x, G.player.pos.z);
         c.say(c.talk.icons || S.act1.talkIcons[0], 3000);
-        G.audio?.blip?.();
+        // Their voice: one random noise from this character's folder, never
+        // words (see sound.js). Not awaited, so the bubble is not held back by
+        // a first-play decode. The elder falls back to the tribe's noises until
+        // her own are recorded, and with nothing recorded at all the synth blip
+        // is still there, which is exactly what this used to be.
+        Sound.playFromPool(c.voice ?? 'npc/tribe', { fallback: 'npc/tribe' })
+          .then((played) => { if (!played) G.audio?.blip?.(); });
         if (c.talk.note) await G.hud.narrator(c.talk.note);
       },
     });

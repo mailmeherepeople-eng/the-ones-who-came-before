@@ -462,6 +462,13 @@ export class Npc {
     this.followTarget = null;
     this.frozen = false;
     this.child = !!opts.child;
+    // Which folder of noises this character talks in (audio/sfx/<voice>/).
+    // A character's voice is a folder, not a file, so recording another line
+    // for the tribe is dropping a file in, never editing an act script. The
+    // elder gets her own by default because `elder` already means "this one
+    // reads as older" (grey hair, staff); pass `voice` to override, which is
+    // what a character who is elder-shaped but not the elder would want.
+    this.voice = opts.voice ?? (opts.elder ? 'npc/elder' : 'npc/tribe');
 
     const s = this._s = this.child ? 0.72 : 1;
     this._r = 0.3 * s;

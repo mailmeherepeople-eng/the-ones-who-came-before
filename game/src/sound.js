@@ -140,6 +140,66 @@ async function buffer(id) {
   return p;
 }
 
+// ---------- character voice pools ----------
+//
+// A character's voice is a FOLDER of sfx, not one file: everything under
+// `sfx/npc/tribe/` is a tribe vocalisation, everything under `sfx/npc/elder/`
+// is the elder's. The filename is only a variant label, so adding a line means
+// dropping a file in and re-running tools/sync-audio-manifest.mjs. No code and
+// no act script knows how many there are.
+//
+// These are noises, never words. Act 1's whole language beat is that the
+// tribe's speech was rich and is completely lost, so a voice pool can carry
+// grunts, laughter and song and stay true to it, where a recorded sentence
+// would quietly undo the lesson.
+const lastFromPool = new Map();   // prefix -> the id played last, so it repeats least
+const activeFromPool = new Map(); // prefix -> the source now sounding, so it can be cut
+
+function poolFor(prefix) {
+  if (!manifest) return [];
+  const p = prefix.endsWith('/') ? prefix : `${prefix}/`;
+  return [...manifest.sfx].filter((id) => id.startsWith(p));
+}
+
+/**
+ * Play one random clip from a voice folder.
+ * @returns {Promise<boolean>} false when the pool (and its fallback) is empty,
+ *          which is the caller's signal to make its own noise instead.
+ */
+async function playFromPool(prefix, { fallback = null, gain = 1 } = {}) {
+  let key = prefix;
+  let ids = poolFor(key);
+  if (!ids.length && fallback && fallback !== prefix) { key = fallback; ids = poolFor(key); }
+  if (!ids.length) return false;
+  // Never the same clip twice running. With one file in the folder that means
+  // it repeats, which is the only thing it can do; with two or more it always
+  // moves on, so a talkative tribe never sounds like a loop.
+  const last = lastFromPool.get(key);
+  const choices = ids.length > 1 ? ids.filter((id) => id !== last) : ids;
+  const id = choices[Math.floor(Math.random() * choices.length)];
+  lastFromPool.set(key, id);
+
+  const m = mixer();
+  const buf = await buffer(id);
+  if (!m || !buf) return false;
+  // One voice at a time per pool: an impatient tap-tap-tap on the talk prompt
+  // should interrupt, not build a chorus.
+  try { activeFromPool.get(key)?.stop(); } catch { /* already ended */ }
+  const src = m.ctx.createBufferSource();
+  src.buffer = buf;
+  if (gain === 1) { src.connect(m.sfx); } else {
+    const g = m.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(m.sfx);
+  }
+  src.addEventListener('ended', () => {
+    if (activeFromPool.get(key) === src) activeFromPool.delete(key);
+  }, { once: true });
+  activeFromPool.set(key, src);
+  src.start();
+  return true;
+}
+
 // ---------- voice ----------
 let currentVoice = null;
 
@@ -248,6 +308,7 @@ export const Sound = {
   playVoice,
   stopVoice,
   prefetchVoice,
+  playFromPool,
   playMusic,
   stopMusic,
   resume,
