@@ -1142,6 +1142,15 @@ async function sceneC(G) {
   G.player.setAim(false);
   FX.clear();
   douseFires();
+  // The fader has to come off BEFORE this card, not after the rebuild below.
+  // `#fader` is z-index 50 and takes pointer events; `.card-overlay` is 30, so
+  // a card raised under the fader is invisible AND untappable, and the only way
+  // past it is the keyboard fallback (Enter / Space / E). A phone has no
+  // keyboard, so Scene B ended on a black screen that never came back: the
+  // valley crossed to 10,000 BCE, the two thaw lines played, and the game
+  // stopped dead there. sceneD lifts the fader for exactly this reason. The
+  // card itself is near opaque, so it covers the rebuild on its own.
+  await G.hud.fadeIn(0);
   await G.hud.card([S.act1.interstitial_generations]);
   buildSceneC(G.world);
   G.mesher.remeshAll();
