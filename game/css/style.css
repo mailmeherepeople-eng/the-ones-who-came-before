@@ -1133,3 +1133,15 @@ body.no-touch #hud-actions { bottom: max(30px, calc(env(safe-area-inset-bottom) 
   opacity: 0.65;
 }
 @media (prefers-reduced-motion: reduce) { .narrator-progress { transition: none !important; } }
+
+/* --- voiced card: the same line, sized for a full-screen card ---
+   Hidden until a clip actually exists, so an unvoiced card is untouched. The
+   bar is a flex item under the Continue button rather than pinned to the
+   viewport bottom, which would put it behind the joystick on a phone. */
+.card-progress { display: none; }
+.card-progress.on {
+  display: block; width: min(320px, 62vw); height: 3px; margin-top: -12px;
+  border-radius: 2px; background: var(--parchment-line);
+  transform: scaleX(0); transform-origin: left center;
+  opacity: 0.55;
+}

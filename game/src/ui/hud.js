@@ -274,23 +274,53 @@ export class HUD {
     setTimeout(() => el.remove(), ms);
   }
 
-  // full-screen card(s); each entry: string or {text, big}
+  // full-screen card(s); each entry: string or {text, big, voice}
+  //
+  // Voiced exactly like the narrator box, and for the same reason: the game's
+  // first four spoken lines are CARDS (the two opening cards, then Scene A's
+  // two), so a card that could not narrate meant the recorded opening never
+  // played. A card with a clip reads itself and closes when the clip ends; a
+  // tap still skips at any point. With no recording the behaviour is what it
+  // always was, wait for the button.
   async card(entries, { holdMs = 0 } = {}) {
     const list = Array.isArray(entries) ? entries : [entries];
     const el = document.createElement('div');
     el.className = 'card-overlay';
     this.root.appendChild(el);
-    for (const entry of list) {
+    for (let i = 0; i < list.length; i++) {
+      const entry = list[i];
       const t = typeof entry === 'string' ? { text: entry } : entry;
       el.innerHTML = `<div class="card-text ${t.big ? 'big' : ''}"></div>` +
-        (holdMs ? '' : `<button class="btn primary">${S.ui.continue}</button>`);
+        (holdMs ? '' : `<button class="btn primary">${S.ui.continue}</button>`) +
+        `<div class="card-progress"></div>`;
       el.querySelector('.card-text').textContent = t.text;
+      const clip = holdMs ? null : Sound.playVoice(t.voice ?? voiceIdFor(t.text));
+      if (clip) {
+        // warm the next line's file while this one is still talking, so the
+        // gap between cards is not a download
+        const next = list[i + 1];
+        const nx = typeof next === 'string' ? { text: next } : next;
+        if (nx) Sound.prefetchVoice(nx.voice ?? voiceIdFor(nx.text));
+        const bar = el.querySelector('.card-progress');
+        bar.classList.add('on');
+        const tick = () => {
+          if (!bar.isConnected) return;
+          const d = clip.el.duration;
+          if (d) bar.style.transform = `scaleX(${Math.min(1, clip.el.currentTime / d)})`;
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }
       if (holdMs) {
         await wait(holdMs);
       } else {
         await new Promise((res) => {
           const btn = el.querySelector('button');
+          let closed = false;
           const finish = () => {
+            if (closed) return;
+            closed = true;
+            clip?.stop(); // tapping through cuts the narration with it
             removeEventListener('keydown', onKey);
             this.input?.clearEdges();
             res();
@@ -301,6 +331,7 @@ export class HUD {
             if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyE') finish();
           };
           addEventListener('keydown', onKey);
+          clip?.ended.then(finish); // the clip has finished reading: move on
         });
       }
     }
