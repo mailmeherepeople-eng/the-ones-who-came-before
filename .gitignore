@@ -22,6 +22,11 @@ chapter4-design-doc.md
 class6-history-knowledge-map.md
 ideas for game dev for each concept.md
 two-mode-allocation.md
+# Includes docs/superpowers/specs/ and docs/ai/ (the AI collaboration docs:
+# architecture, flow, decisions, constraints, test checklist, rollback and the
+# rest). They are developer thinking, so they live on disk and in the Obsidian
+# vault. HANDOFF.md section 11 points at them. Do NOT narrow this rule to a
+# subfolder without checking what else has landed under docs/ since.
 docs/
 *-design-doc.md
 *-knowledge-map.md

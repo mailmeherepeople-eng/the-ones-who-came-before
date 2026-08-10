@@ -282,6 +282,24 @@ Gitignored by rule 1, still in the project folder locally:
 `social science textbooks/class 6.zip` (~201 MB, also over GitHub's file
 limit).
 
+**`docs/ai/` is worth opening first.** Nine documents adapted from the AI
+Collaboration Field Guide, on disk and mirrored to the vault at
+`20 Areas/Claude Code Chats/ai-docs/`:
+
+| | |
+|---|---|
+| `ARCHITECTURE.md` | the shape of the system |
+| `FLOW.md` | how execution actually travels, boot to frame loop to audio |
+| `CONSTRAINTS.md` | what must never happen without asking |
+| `DECISIONS.md` | every do-not-undo in one index |
+| `TEST-CHECKLIST.md` | what a machine can check, and the human half that matters more |
+| `ROLLBACK.md` | the way back out |
+| `BUGS-AND-FEATURES.md` | index of the traces in §12 to §18, plus the template |
+| `HANDOVER.md` | how this continuity system fits together |
+| `COMMENTS.md` | the commenting standard |
+
+A fresh clone will not have them, which is what the vault mirror is for.
+
 Session history lives in the Obsidian vault at
 `~/Documents/GitHub/Brain/brain/20 Areas/Claude Code Chats/`, and the project
 note at `10 Projects/NCERT History Game/`.
