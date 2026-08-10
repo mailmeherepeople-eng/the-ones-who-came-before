@@ -17,7 +17,7 @@
 //      (see the fetch handler below for why cache-first was wrong here).
 //
 // BUMP CACHE ON EVERY DEPLOY.
-const CACHE = 'towcb-v3';
+const CACHE = 'towcb-v4';
 
 // Enumerated rather than globbed: no build step here, so there is nothing to
 // generate a manifest, and an explicit list is greppable and diffable. Missing
@@ -57,12 +57,24 @@ const ASSETS = [
   './src/sky/dial.js',
   './src/sky/erosion.js',
   './src/sky/interstitial.js',
+  './src/inventory.js',
+  './src/sound.js',
+  './src/ui/container.js',
   './src/ui/hud.js',
   './src/ui/minigames.js',
   './src/ui/paint.js',
   './src/ui/pot.js',
   './src/ui/report.js',
+  // Which clips exist. Tiny, and without it a first-load-then-offline session
+  // decides there is no audio at all and stays silent for good.
+  './audio/manifest.json',
 ];
+// The .m4a files themselves are deliberately NOT precached: they are optional
+// by design (a missing clip is silent, never an error) and precaching them
+// would put every recording on every phone at install time, including the ones
+// a player never reaches. The network-first handler below caches each clip the
+// first time it actually plays, which is what makes offline work from the
+// second playthrough.
 // src/dev/* and vendor/gltf/* are deliberately absent: the world editor is
 // dev-only and reached by dynamic import behind ?edit / F2, so precaching it
 // would put 246 KB on every phone that will never open it.
