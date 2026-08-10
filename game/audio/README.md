@@ -5,6 +5,15 @@ is required. **The game plays exactly as it does today with this folder empty**,
 and keeps playing as you add one clip at a time, so there is no all-or-nothing
 recording session to get through before you can test.
 
+The one command that tells you what to record and what to call it:
+
+```
+node game/tools/list-voice-lines.mjs --todo
+```
+
+It marks `[x]` recorded and listed, `[!]` on disk but missing from
+`manifest.json` (so it will not play), and `[ ]` not recorded.
+
 ## Format
 
 **AAC in an `.m4a` container.** Not Opus, deliberately: Opus is about twice as
@@ -60,12 +69,18 @@ Play them with `Sound.playSfx('bow-loose')` and
 
 ## What a voiced line does differently
 
-A narrator box with a clip **narrates and then closes itself**, with a thin
-progress line along the bottom edge so the player can see it is running. A tap
-still skips ahead at any point. A line with no clip behaves exactly as it
-always has: it waits for a tap.
+A narrator box **or a full-screen card** with a clip **narrates and then closes
+itself**, with a thin progress line under it so the player can see it is
+running. A tap still skips ahead at any point. A line with no clip behaves
+exactly as it always has: it waits for a tap.
 
 So pacing is set by how you read the line, not by how fast the player taps.
+Record one and play it before recording fifty: a voiced opening runs itself from
+the Begin button, which is a different game to tap through than an unvoiced one.
+
+Cards count. The game's first four spoken lines are cards, not narrator boxes
+(`openingCard`, `openingCard2`, then Scene A's two), so `list-voice-lines.mjs`
+lists them and they are voiced the same way.
 
 ## Notes worth knowing
 
@@ -79,3 +94,10 @@ So pacing is set by how you read the line, not by how fast the player taps.
   keeps the first load free of a multi-megabyte download.
 - **The synth ambience stays.** Wind and birds are generated, cost no bytes,
   and are always there. Music layers over them.
+- **Save `manifest.json` as plain UTF-8, with no BOM.** This is a Windows
+  project and several editors (and PowerShell's `Set-Content` / `Out-File`) add
+  one by default. The game itself does not care, because `Response.json()`
+  UTF-8-decodes and drops it, but `JSON.parse` throws on it, so the tooling
+  read a BOM'd manifest as empty and reported every recorded line as
+  unregistered. `list-voice-lines.mjs` now strips a BOM and says so loudly if
+  the file is unparseable, but the file is cleaner without one.

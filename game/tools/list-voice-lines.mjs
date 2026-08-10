@@ -70,7 +70,18 @@ for (const f of files) {
 let listed = new Set();
 const manifestPath = join(gameDir, 'audio', 'manifest.json');
 if (existsSync(manifestPath)) {
-  try { listed = new Set(JSON.parse(readFileSync(manifestPath, 'utf8')).voice ?? []); } catch { /* malformed */ }
+  // Strip a UTF-8 BOM before parsing. This is a Windows project and the usual
+  // ways of writing a file here (Set-Content, Out-File, a few editors) add one;
+  // JSON.parse throws on it, and the shipped manifest had one. Swallowing that
+  // silently made the tool report every recorded line as unregistered, which is
+  // exactly backwards from what you want a checking tool to do, so a bad
+  // manifest is now loud. The game itself is unaffected: Response.json()
+  // UTF-8-decodes, which drops a BOM.
+  try {
+    listed = new Set(JSON.parse(readFileSync(manifestPath, 'utf8').replace(/^﻿/, '')).voice ?? []);
+  } catch (e) {
+    console.error(`manifest.json could not be parsed (${e.message}) — treating every line as unrecorded.`);
+  }
 }
 const voiceDir = join(gameDir, 'audio', 'voice');
 const onDisk = existsSync(voiceDir)
@@ -105,6 +116,7 @@ for (const [id, kinds] of [...found].sort((a, b) => a[0].localeCompare(b[0]))) {
 
 let list = rows;
 if (only) list = list.filter(([id]) => id.startsWith(only + '.') || id === only);
+const scope = list; // every line in scope, recorded or not — the tally counts these
 if (todoOnly) list = list.filter(([id]) => !listed.has(id));
 
 if (csv) {
@@ -122,9 +134,12 @@ if (csv) {
     const short = text.length > 66 ? text.slice(0, 63) + '...' : text;
     console.log(`[${mark}] ${id.padEnd(w)}  ${short}`);
   }
-  const done = list.filter(([id]) => listed.has(id)).length;
-  const orphan = list.filter(([id]) => onDisk.has(id) && !listed.has(id)).length;
-  console.log(`\n${list.length} line(s) to record${only ? ` in ${only}` : ''}. ${done} done, ${list.length - done} to go.`);
+  // Tallied over the whole scope, never the printed rows: --todo prints only
+  // what is left, so counting those reported "0 done" no matter how much had
+  // actually been recorded.
+  const done = scope.filter(([id]) => listed.has(id)).length;
+  const orphan = scope.filter(([id]) => onDisk.has(id) && !listed.has(id)).length;
+  console.log(`\n${scope.length} line(s)${only ? ` in ${only}` : ''}. ${done} recorded, ${scope.length - done} to go.`);
   if (orphan) console.log(`${orphan} file(s) are on disk but NOT in manifest.json, so they will not play.`);
   console.log('[x] recorded and listed   [!] on disk, missing from manifest.json');
   if (problems.length && !todoOnly) {
