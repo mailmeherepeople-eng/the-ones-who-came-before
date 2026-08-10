@@ -16,6 +16,18 @@ export const SETTINGS = [
     note: () => S.ui.setLockCameraNote,
     def: false,
   },
+  {
+    id: 'sound',
+    label: () => S.ui.setSound,
+    note: () => S.ui.setSoundNote,
+    def: true,
+  },
+  {
+    id: 'music',
+    label: () => S.ui.setMusic,
+    note: () => S.ui.setMusicNote,
+    def: true,
+  },
 ];
 
 const DEFAULTS = Object.fromEntries(SETTINGS.map((s) => [s.id, s.def]));

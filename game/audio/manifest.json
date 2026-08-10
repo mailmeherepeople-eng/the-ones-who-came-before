@@ -1,0 +1,6 @@
+﻿{
+  "_comment": "Files that actually exist. Add an id here when you add the matching .m4a; anything not listed is treated as silent, so the game always plays with or without audio. Voice ids are strings.js key paths (act1.wake -> voice/act1.wake.m4a).",
+  "voice": [],
+  "sfx": [],
+  "music": []
+}
