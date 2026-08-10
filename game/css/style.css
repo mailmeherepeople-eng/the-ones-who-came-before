@@ -940,3 +940,196 @@ body.no-touch #hud-actions { bottom: max(30px, calc(env(safe-area-inset-bottom) 
   margin: -7px 0 0 -7px; border-radius: 50%;
   box-shadow: 0 0 0 6px rgba(0, 0, 0, 0.001);
 }
+
+/* ============================================================
+   APPENDED — container panel (community chest / store box)
+
+   Slots own their styling outright rather than borrowing
+   .satchel-card / .satchel-ghost. Those are content-height
+   rectangles with a hard `min-height: 118px` on the ghost, which
+   beat this file's `min-height: 0` on specificity (0,2,0 vs 0,1,0)
+   and burst empty slots out of their 68px grid cell. Owning the
+   two states removes the fight instead of escalating it.
+
+   A filled slot is a raised parchment tile; an empty one is a
+   recess cut into the box. Same box, two depths, so a half-empty
+   chest reads as "room for more" rather than as missing tiles.
+   ============================================================ */
+.inv-panel .inv-note {
+  font-size: 13.5px; line-height: 1.55; color: var(--ink-dim);
+  text-align: center; margin: 0 auto 18px; max-width: 46ch;
+  font-family: var(--font);
+}
+.inv-panel .inv-sub {
+  font-size: 12px; letter-spacing: 2.2px; text-transform: uppercase;
+  color: var(--accent); text-align: center; font-family: var(--font-ui);
+  font-weight: 600; margin: 22px 0 12px; position: relative;
+}
+/* hairline rule either side of the section label, drawn not typed */
+.inv-panel .inv-sub::before,
+.inv-panel .inv-sub::after {
+  content: ''; position: absolute; top: 50%; width: 18%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--panel-line));
+}
+.inv-panel .inv-sub::before { left: 0; }
+.inv-panel .inv-sub::after { right: 0; transform: scaleX(-1); }
+
+.inv-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+}
+
+/* shared geometry: both states are the SAME square, which is the
+   whole point of the fix */
+.inv-slot {
+  /* width:100% matters. A <button> sizes to its content, so with only
+     aspect-ratio set it derived its WIDTH from its content height and came out
+     smaller than the empty <div>s beside it. Filling the grid column first,
+     then letting aspect-ratio set the height, is what makes both states
+     identical squares. */
+  width: 100%; aspect-ratio: 1; min-width: 44px; min-height: 44px;
+  position: relative; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px;
+  padding: 7px; border-radius: 11px; box-sizing: border-box;
+  font: inherit; text-align: center;
+}
+
+/* empty: a recess in the box floor */
+.inv-slot--empty {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.14));
+  border: 1px solid rgba(122, 100, 64, 0.35);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 240, 210, 0.05);
+}
+
+/* filled: a parchment tile lifted out of the recess */
+.inv-slot--filled {
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  background: linear-gradient(180deg, #f7e9ca, var(--parchment) 45%, var(--parchment-2));
+  border: 1px solid var(--parchment-line); color: var(--parchment-ink);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 250, 235, 0.75);
+  transition: transform 0.14s var(--ease-out, ease-out),
+              box-shadow 0.14s var(--ease-out, ease-out),
+              filter 0.14s var(--ease-out, ease-out);
+  animation: fx-pop 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+.inv-slot--filled:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+  box-shadow: 0 5px 13px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 250, 235, 0.85);
+}
+.inv-slot--filled:active {
+  transform: translateY(1px) scale(0.97);
+  filter: brightness(0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 250, 235, 0.6);
+}
+/* ring shows instantly, never animated in */
+.inv-slot--filled:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 2px;
+}
+
+.inv-slot .inv-art {
+  font-size: clamp(24px, 6.4vw, 31px); line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(93, 67, 31, 0.35));
+}
+.inv-slot .inv-name {
+  font-family: var(--font-ui); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.2px; line-height: 1.2; color: #6d4f27;
+  overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+/* count badge, bottom-right like the reference */
+.inv-slot .inv-count {
+  position: absolute; right: 5px; bottom: 4px;
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 700;
+  color: #fff3e2; background: linear-gradient(180deg, #a5701f, #7c5a2b);
+  border: 1px solid #d9a75c; border-radius: 7px;
+  padding: 0 5px; min-width: 19px; line-height: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.inv-panel .inv-empty {
+  font-size: 12.5px; color: var(--ink-dim); text-align: center;
+  margin: 12px 0 0; font-family: var(--font);
+}
+.inv-panel .inv-hint {
+  font-size: 11.5px; color: var(--ink-dim); text-align: center;
+  margin: 18px 0 0; font-family: var(--font-ui); letter-spacing: 0.6px;
+  opacity: 0.75;
+}
+.inv-panel .inv-done { display: block; margin: 16px auto 0; min-width: 140px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-slot--filled { animation: none !important; transition: none !important; }
+  .inv-slot--filled:hover { transform: none; }
+}
+
+/* ============================================================
+   APPENDED — readability pass
+   The narrator and card boxes were sized like captions. They carry
+   the teaching, so they are sized like the thing you are meant to
+   read. The interact pill gains a verb beside its icon.
+   ============================================================ */
+
+/* narrator: was clamp(14px,2.6vw,17px) at min(620px,92vw) */
+.narrator {
+  max-width: min(760px, 94vw);
+  padding: 22px 30px;
+  font-size: clamp(17px, 3.1vw, 22px);
+  line-height: 1.62;
+  border-radius: 16px;
+}
+.narrator .tap { font-size: 13px; margin-top: 12px; }
+/* the dial already crowds the centre in SKY mode; keep the old restraint there */
+#dial-wrap ~ .narrator { font-size: clamp(15px, 2.7vw, 19px); padding: 18px 24px; }
+
+/* full-screen story cards: was clamp(19px,4vw,30px) */
+.card-overlay .card-text {
+  font-size: clamp(22px, 4.4vw, 34px);
+  line-height: 1.5;
+  max-width: 740px;
+}
+
+/* the objective line is an instruction, not a footnote */
+#hud-objective { font-size: 15px; padding: 10px 24px; }
+
+/* interact pill: icon + verb, and it must wrap rather than run off a phone */
+#hud-prompt {
+  font-size: 16px;
+  padding: 11px 20px;
+  gap: 9px;
+  max-width: min(420px, 88vw);
+  text-align: center;
+  line-height: 1.3;
+  flex-wrap: wrap;
+}
+#hud-prompt .p-icon { font-size: 20px; line-height: 1; }
+#hud-prompt .p-label { font-weight: 600; letter-spacing: 0.3px; }
+
+/* --- the actual reason those boxes felt like an afterthought ---
+   .narrator and #hud-prompt are absolutely positioned with only `left: 50%`
+   set. For an auto-width absolute box that makes the containing block the
+   space from the 50% line to the right edge, i.e. HALF the screen, and
+   shrink-to-fit clamps to it. So `max-width: min(620px, 92vw)` was never
+   reachable: on a 375px phone the narrator rendered 188px wide no matter what
+   the max-width said. An explicit width is not subject to that clamp (the
+   translate(-50%) still centres it), so this is what actually widens them. */
+.narrator { width: min(760px, 94vw); }
+#dial-wrap ~ .narrator { width: min(640px, 92vw); }
+#hud-prompt { width: max-content; }
+.card-overlay .card-text { width: min(740px, 92vw); }
+/* let the label use the pill's full width instead of collapsing to min-content
+   between flex items (default min-width:auto on a flex item wraps per word) */
+#hud-prompt .p-label { flex: 0 1 auto; min-width: 0; }
+
+/* --- voiced narrator: a thin progress line along the bottom edge ---
+   A voiced box closes itself when the clip ends, so it has to show that it is
+   running or the player reads the auto-advance as the box vanishing on them. */
+.narrator.voiced { padding-bottom: 26px; }
+.narrator-progress {
+  position: absolute; left: 14px; right: 14px; bottom: 11px; height: 3px;
+  border-radius: 2px; background: var(--parchment-line);
+  transform: scaleX(0); transform-origin: left center;
+  opacity: 0.65;
+}
+@media (prefers-reduced-motion: reduce) { .narrator-progress { transition: none !important; } }
