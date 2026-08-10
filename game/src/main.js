@@ -212,6 +212,15 @@ async function openActMenu() {
       [S.actMenu.act1, S.actMenu.act2, S.actMenu.act3, S.actMenu.cancel],
     );
     if (pick >= 0 && pick <= 2) {
+      // Second confirm, but only when there is something to lose. Until now a
+      // written warning was the only thing between a curious Tab press and a
+      // wiped save, and this ships to kids. With no progress the jump destroys
+      // nothing, so the extra tap would just be noise.
+      if (Save.hasProgress) {
+        const ok = await G.hud.choice(S.actMenu.confirmTitle,
+          [S.actMenu.confirmYes, S.actMenu.confirmNo]);
+        if (ok !== 0) return;
+      }
       Save.reset();
       const p = new URLSearchParams(location.search);
       p.delete('tp'); // stale one-shot teleports must not fire in the new act
