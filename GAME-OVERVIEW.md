@@ -728,6 +728,34 @@ recording workflow are in [`game/audio/README.md`](game/audio/README.md).
   are now present: a context suspended by a lock screen used to stay suspended
   for the rest of the session.
 
+### 15.3a Recording the narration
+
+`node game/tools/list-voice-lines.mjs` prints every line the game actually
+speaks and the filename to record it as. **111 lines: 60 in act 1, 31 in act 2,
+18 in act 3.** `--todo` subtracts what is already listed, `--csv` gives a
+spreadsheet.
+
+It reports CALL SITES rather than every string, because `S.act1` also holds
+objectives, button labels and hints that are never spoken and listing those
+would roughly triple the apparent work. It also catches two mistakes that would
+otherwise produce a file that silently never plays: a template string has no
+fixed text so it cannot be matched by value (`act2.p3_wrong` needs an explicit
+`{ voice }` at its call site), and where two keys hold identical text the
+value-to-key map gives it to the FIRST one (`act3.title` duplicates
+`actMenu.act3`, so recording `act3.title` would do nothing).
+
+### 15.3b Reaching the world editor
+
+**`?edit`, backtick, Ctrl+E, or F2.** F2 alone was not enough. Most laptops map
+the F-row to brightness and volume unless you hold Fn, and browsers and Windows
+both claim F2, so a working editor can look completely unwired. Backtick and
+Ctrl+E toggle; F2 still opens it and does not double-fire against the editor's
+own F2 handler; all four ignore keystrokes while a text field has focus.
+
+Opening the editor calls `setObserver(null)`, which turns the animal distance
+gate off. The gate measures from the camera and the editor flies that camera,
+so without this a herd could fall asleep exactly as you flew over to look at it.
+
 ### 15.4 Measured
 
 At the Act 1 spawn, same pose as the previous baseline:

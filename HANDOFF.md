@@ -41,12 +41,24 @@ Before every commit:
 node game/tools/lint-strings.mjs
 ```
 
+Which narration lines still need recording, and what to name each file:
+
+```
+node game/tools/list-voice-lines.mjs --todo
+```
+
 ## 3. Debug parameters
 
 `?dev` exposes `window.G` · `?fast` 3-second countdowns · `?act=1|2|3` jump to
 an act with seeded records (only works with no saved progress) ·
-`?q=high|low` force a quality tier · `?tp=x,z` teleport · `?edit` or **F2**
-world editor · **Tab** act menu.
+`?q=high|low` force a quality tier · `?tp=x,z` teleport · **Tab** act menu.
+
+**World editor: `?edit`, or `` ` `` (backtick), or Ctrl+E, or F2.** Four routes
+because F2 alone was not reliable enough: most laptops need Fn to send it at
+all, and browsers and Windows both claim it, which once made a perfectly
+working editor look unwired. Backtick and Ctrl+E toggle it open and shut; F2
+still works and does not double-fire. Opening it turns the animal distance gate
+off, since the editor flies the camera the gate measures from.
 
 ## 4. Rules that must not be broken
 

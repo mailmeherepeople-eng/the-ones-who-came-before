@@ -62,7 +62,12 @@ timestamp the entry in **IST** (`Asia/Kolkata`).
   exposes a `stop()` and is stopped before a scripted beat moves the same
   characters.
 - **Dev tooling stays out of the shipped graph.** `src/dev/*` is only ever
-  reached by a dynamic `import()` behind `?edit` / F2.
+  reached by a dynamic `import()` behind `?edit`, backtick, Ctrl+E or F2.
+- **Check the world editor still opens, every pass.** It is loaded lazily and
+  imported by nothing, so no lint and no act playthrough will ever tell you it
+  broke. It has four entry routes because F2 alone is unreliable (laptops need
+  Fn, browsers and Windows both claim it), which once made a working editor look
+  unwired. Verifying it is one line: open the game and press backtick.
 - **Folded meshes:** `world/merge.js` welds static part-meshes for performance.
   Anything animated must be passed in `keep`, or it loses its transform. See
   GAME-OVERVIEW §12.

@@ -42,13 +42,33 @@ async function openEditor() {
     import('./dev/editor.js'), import('./dev/host.js'),
   ]);
   G.host ??= makeHost(G); // one adapter per session — it wraps the frame loop
+  // Turn the animal distance gate off while editing. It measures from the
+  // camera, and the editor flies that camera around freely, so a herd you are
+  // trying to look at could sleep out from under you. A dev tool should never
+  // have to fight a shipping optimisation.
+  setObserver(null);
   return initEditor(G.host);
 }
 if (new URLSearchParams(location.search).has('edit')) addEventListener('load', openEditor);
+
+// THREE ways in, on purpose. F2 is the documented key and the one the editor's
+// own header button advertises, but it is genuinely unreliable: most laptops
+// map the F-row to brightness and volume unless you hold Fn, and browsers and
+// Windows both claim F2 for themselves. That made the editor look unwired when
+// it was working perfectly, so backtick and Ctrl+E open the same door.
 addEventListener('keydown', (e) => {
-  if (e.code !== 'F2' || window.__editor) return;
+  const el = document.activeElement;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  if (e.code === 'F2') {
+    if (window.__editor) return; // once loaded, the editor handles F2 itself
+    e.preventDefault();
+    openEditor();
+    return;
+  }
+  if (e.code !== 'Backquote' && !(e.ctrlKey && e.code === 'KeyE')) return;
   e.preventDefault();
-  openEditor();
+  if (window.__editor) window.__editor.toggle();
+  else openEditor();
 });
 
 G.player = new Player(G.world, G.renderer.camera, G.renderer.scene); // scene → visible TPS character
