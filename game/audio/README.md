@@ -5,7 +5,7 @@ is required. **The game plays exactly as it does today with this folder empty**,
 and keeps playing as you add one clip at a time, so there is no all-or-nothing
 recording session to get through before you can test.
 
-The one command that tells you what to record and what to call it:
+Two commands. What to record and what to call it:
 
 ```
 node game/tools/list-voice-lines.mjs --todo
@@ -13,6 +13,18 @@ node game/tools/list-voice-lines.mjs --todo
 
 It marks `[x]` recorded and listed, `[!]` on disk but missing from
 `manifest.json` (so it will not play), and `[ ]` not recorded.
+
+And, after adding or removing any file:
+
+```
+node game/tools/sync-audio-manifest.mjs
+```
+
+which rewrites `manifest.json` from what is actually on disk. **Do not edit
+that file by hand.** Anything not listed in it is treated as silent, which is
+the right runtime behaviour (the game never 404-spams for clips nobody has
+recorded) and a terrible authoring experience, because a file you dropped in
+and forgot to list is ignored without a word. The tool is how you avoid that.
 
 ## Format
 
@@ -63,9 +75,45 @@ same sentence, where the first one wins.
 
 ### `sfx/` and `music/` — you choose the id
 
-Whatever you list in `manifest.json`, e.g. `sfx/bow-loose`, `music/act1.camp`.
-Play them with `Sound.playSfx('bow-loose')` and
-`Sound.playMusic('act1.camp')`.
+The id is the path under the kind folder, so `sfx/bow-loose.m4a` is
+`Sound.playSfx('bow-loose')` and `music/act1.camp.m4a` is
+`Sound.playMusic('act1.camp')`. Subfolders are part of the id.
+
+### `sfx/npc/<voice>/` — a character's voice is a FOLDER
+
+Everything under one folder is one character's pool of noises, and the game
+picks from it at random:
+
+```
+sfx/npc/tribe/ooga.m4a              any tribe member
+sfx/npc/tribe/laughing-ooga-booga.m4a
+sfx/npc/elder/whatever-you-record.m4a   the elder (and elder-shaped characters)
+```
+
+**The filename is only a variant label.** Call the files anything you like and
+add as many as you like: nothing in the code counts them. Talking to a
+character plays one, never the same one twice running.
+
+These are noises, never words, on purpose. Act 1's language beat is that the
+tribe's speech was rich and is completely lost, so grunts, laughter and song
+all belong here and a recorded English sentence would quietly undo it.
+
+An empty folder falls back to `npc/tribe`, so a character is never silent
+while you are still recording, and switches to her own voice the moment the
+first file lands. A character created with `elder: true` uses `npc/elder`;
+pass `voice: 'npc/whatever'` to `new Npc()` to point any character anywhere.
+
+Voice-pool clips are DECODED, not streamed, because a grunt that arrives late
+reads as broken. Eight tribe clips of roughly three seconds cost about 5 MB of
+RAM once every one has been heard, and only clips actually played are decoded.
+Keep individual lines short and this stays cheap; a one-minute clip in here
+would not.
+
+## Naming rules for every file
+
+Lowercase, digits, dashes. No spaces, no brackets, no `#` or `%`. They do work
+(a URL encodes them) but they make the manifest and any shell command
+miserable, so `sync-audio-manifest.mjs` rejects them outright.
 
 ## What a voiced line does differently
 

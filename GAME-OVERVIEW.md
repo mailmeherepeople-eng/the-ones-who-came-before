@@ -1064,3 +1064,87 @@ immediately on that failure, which auto-advances the line instantly. That is the
 correct production behaviour (a refused clip must not hang the story) but it
 looks exactly like the feature being broken. **Grant user activation with a real
 keypress before testing audio.**
+
+---
+
+## 18. Character voices (2026-08-10 21:42 IST)
+
+Talking to a tribe member now plays one of their own recorded noises instead of
+a synth blip. Eight clips are in for the tribe; the elder has her own folder,
+empty for now, and borrows the tribe's until it is filled.
+
+### 18.1 The folder IS the voice
+
+```
+audio/sfx/npc/tribe/ooga.m4a                  any tribe member
+audio/sfx/npc/tribe/laughing-ooga-booga.m4a
+audio/sfx/npc/elder/<anything>.m4a            the elder
+```
+
+Everything under one folder is one character's pool and the game picks from it
+at random. **The filename is only a variant label** — nothing in the code counts
+the files or knows their names, so adding a line to a character's voice is
+dropping a file in and re-running the manifest tool. No act script changes, ever.
+
+`Sound.playFromPool(prefix, { fallback })` in `src/sound.js` does the work.
+Three rules it enforces:
+
+- **Never the same clip twice running.** With one file in the folder that means
+  it repeats, which is the only thing it can do; with two or more it always
+  moves on, so a talkative tribe never sounds like a loop.
+- **One voice at a time per pool.** An impatient tap-tap-tap on the talk prompt
+  interrupts rather than building a chorus, so the previous source is stopped.
+- **An empty pool falls back**, then goes quiet, then lets the caller decide.
+  The elder borrows `npc/tribe` until her own folder has a file, and with
+  nothing recorded at all `makeTalkable` still fires the old synth blip. Every
+  stage of a recording session sounds finished.
+
+`Npc` gains `this.voice`, defaulting to `npc/elder` when `elder: true` and
+`npc/tribe` otherwise, overridable per character with `{ voice }`. Note the
+default catches the Scene C and D **chieftain**, who is also `elder: true`
+(that flag means grey hair and a staff). If she should not sound like the Act 1
+elder, give her a folder of her own.
+
+**Noises, never words.** This is the same constraint as the pictogram speech
+bubbles: Act 1's language beat is that the tribe's speech was rich and is
+completely lost, and a recorded English sentence from a tribe member would
+quietly undo it. Grunts, laughter and song all belong.
+
+### 18.2 Decoded, not streamed
+
+Voice pools go through `playSfx`'s decoded-AudioBuffer path, not the streaming
+path that narration uses, because a grunt that arrives late reads as broken.
+The cost: eight tribe clips of roughly three seconds is about **5 MB of RAM**
+once every one has been heard, and decoding is lazy, so only clips actually
+played cost anything. That is affordable and worth the latency. It would not be
+if someone put a one-minute clip in there. See the RAM rule at the top of
+`src/sound.js`.
+
+### 18.3 manifest.json is generated now
+
+`node game/tools/sync-audio-manifest.mjs` walks `audio/{voice,sfx,music}` and
+rewrites the manifest from what is on disk. `--check` reports without writing
+and exits 1 if stale.
+
+The manifest exists so the game never 404-spams for clips nobody has recorded,
+which is the right runtime behaviour and a bad authoring experience: a file you
+dropped in and forgot to list is ignored without a word. Hand-editing it is now
+off the table. The tool also refuses filenames that would need URL-encoding
+(spaces, brackets) and writes without a BOM, which is the trap from §17.2.
+
+### 18.4 Verified
+
+Live, with a trusted keypress first so autoplay policy is satisfied:
+
+| | |
+|---|---|
+| Voice assignment | `talk-elder` → `npc/elder`, `talk-band0..3` → `npc/tribe` |
+| Six tribe interactions | five distinct clips fetched, no consecutive repeat |
+| Elder with an empty folder | plays a tribe clip, **zero requests to `npc/elder/`** (it never guesses at files that are not there) and zero 404s |
+| Elder with one file in her folder | plays only that file, three interactions, one fetch |
+| Synth-blip fallback | fired zero times across all of it, i.e. every interaction sounded a real clip |
+| Console errors | zero |
+
+The elder-folder case was proved by temporarily copying a tribe clip in,
+re-running the sync tool and reloading, then deleting it again. The folder is
+kept in git by its own README.
