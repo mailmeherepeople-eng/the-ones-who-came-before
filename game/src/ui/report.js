@@ -123,7 +123,9 @@ export function potPortrait(record) {
 // the panel's own button uses; close() is idempotent so ✕ / Escape / button /
 // backdrop can race safely. Optional dimmed backdrop closes on click.
 // Returns close() so callers can wire their own buttons through it.
-function wirePanelClose(G, el, onClose, { backdrop = false } = {}) {
+// Exported because ui/container.js needs exactly this behaviour: one close
+// path shared by ✕, Escape, the backdrop and the panel's own button.
+export function wirePanelClose(G, el, onClose, { backdrop = false } = {}) {
   let dim = null;
   if (backdrop) {
     dim = document.createElement('div');
