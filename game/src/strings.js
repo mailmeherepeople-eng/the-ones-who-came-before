@@ -50,6 +50,9 @@ export const S = {
     act2: 'Act Two: the Time Dial',
     act3: 'Act Three: DIG',
     cancel: 'Stay here',
+    confirmTitle: 'Really start that act fresh? Everything you have done so far will be gone, and it cannot be brought back.',
+    confirmYes: 'Yes, wipe it and jump',
+    confirmNo: 'No, keep my progress',
   },
 
   // ---------- ACT 1 — LIVE ----------
@@ -218,7 +221,6 @@ export const S = {
     card: 'Rise. Watch time do what time does.',
     dialHint: 'Drag the dial to move through time',
     youMarker: 'YOUR PEOPLE',
-    todayMarker: 'We are here',
 
     eras: {
       homoSapiens: 'Homo sapiens, for about 300,000 years',
@@ -254,6 +256,8 @@ export const S = {
     p3_card: 'THE GAP',
     p3_challenge: (buddha, today) =>
       `The Buddha was born around ${buddha}. How many years from then to ${today}? Count on the dial, 30 seconds. Make it, and the reward is yours.`,
+    p3_answerLabel: 'years',
+    p3_beat: 'You counted it, and you beat the clock. Now take the way that needs one breath instead of thirty seconds.',
     p3_slow: 'Counting works. Counting is slow. There is a faster way. And it is the reward.',
     p3_formula: 'Across the BCE/CE boundary: ADD both numbers, then SUBTRACT 1.',
     p3_bookExample:
@@ -282,7 +286,6 @@ export const S = {
     p6_note: 'The village sleeps under grass now. A low mound by a river bend.',
     p6_flag: 'A survey flag goes into the turf.',
 
-    deepTime_hint: 'Pull further left. See how small our whole story is',
     deepTime_card: 'THE LONG BAR',
     deepTime_note:
       'Earth: 4.54 billion years. Primates: 10 million years ago. Fire: a million years ago. Homo sapiens: 300,000 years. Writing: 6,500 years. Our chapter is a sliver.',
@@ -359,7 +362,7 @@ export const S = {
     talk_farmer_probe: 'Who told Mastanamma? …She heard it somewhere, I suppose. Everyone says it.',
     talk_teacher1: 'I read that settlements near rivers are older than kings. Grain first, thrones later.',
     talk_teacher2: 'A fort? I have seen no stone of it. But I would not swear either way.',
-    talk_third1: 'A king with a golden fort . Mastanamma told my mother herself.',
+    talk_third1: 'A king with a golden fort. Mastanamma told my mother herself.',
     claimBoard: 'CLAIM BOARD',
     claims: {
       settled: 'People settled the mound and grew grain by the river',
