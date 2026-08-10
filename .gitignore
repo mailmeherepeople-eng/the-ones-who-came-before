@@ -57,6 +57,15 @@ a3-*.png
 review-*.png
 shot-*.png
 .playwright-mcp/
+# Reference art dropped in to describe a wanted feature (UI mockups from other
+# games, interaction and inventory samples). Input to the thinking, not output
+# of it, so it belongs on disk and in the vault, never here.
+*sample*.png
+*sample*.jpg
+*sample*.jpeg
+*reference*.png
+*reference*.jpg
+mockup*.png
 
 # --- Large source material (exceeds GitHub's 100 MB per-file limit) ---
 # "social science textbooks/class 6.zip" is the ~201 MB NCERT Class 6 textbook
