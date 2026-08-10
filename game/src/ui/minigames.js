@@ -137,10 +137,27 @@ function flash(elm, cls) {
   elm.classList.add(cls);
 }
 
+// Read a typed answer forgivingly. The game prints these numbers WITH thousands
+// separators ("2,583 years"), so a child copying the format back is the normal
+// case, not an edge case. `type="number"` cannot help here: a browser blanks
+// `value` the moment the text is not a bare number, so the comma version came
+// back as an empty string and scored as wrong with nothing to explain it. The
+// fields are `type="text" inputmode="numeric"` instead, which still raises the
+// numeric keypad on a phone, and separators and stray spaces are stripped here.
+// Returns NaN when there is no digit at all.
+function readNumber(input) {
+  const cleaned = String(input.value).replace(/[\s,._]/g, '');
+  return /^-?\d+$/.test(cleaned) ? parseInt(cleaned, 10) : NaN;
+}
+
 // 30-second countdown challenge overlay (P2 find-zero, P3 count-the-gap).
-// Returns { expired:true } or { expired:false } if `checkWin` reported success
-// or the user pressed the give-up button (giveUp:true).
-export function countdownChallenge(uiRoot, { text, seconds = 30, giveUpLabel = null }) {
+// Resolves { expired:true } when the clock runs out, { expired:false, gaveUp:true }
+// on the give-up button, or { expired:false, won:true } when `answer` was passed
+// and the player typed it before time. Omit `answer` for a challenge with no win
+// condition (P2's find-zero is a trick question: running out IS the lesson).
+export function countdownChallenge(uiRoot, {
+  text, seconds = 30, giveUpLabel = null, answer = null, answerLabel = '',
+}) {
   if (new URLSearchParams(location.search).has('fast')) seconds = 3; // test rig only
   return new Promise((resolve) => {
     const el = document.createElement('div');
@@ -149,9 +166,15 @@ export function countdownChallenge(uiRoot, { text, seconds = 30, giveUpLabel = n
       <div class="cd-card fx-pop">
         <div id="cd-text" class="cd-text"></div>
         <div id="cd-t" class="ember-pill">${seconds}</div>
+        ${answer !== null ? `
+        <div id="cd-answer" style="display:flex;gap:6px;margin-top:10px">
+          <input type="text" inputmode="numeric" class="num-input" id="cd-in" style="flex:1">
+          <button class="btn small chip-btn" id="cd-ok">${S.ui.done}</button>
+        </div>` : ''}
         ${giveUpLabel ? `<button class="btn small chip-btn" id="cd-give" style="margin-top:8px">${giveUpLabel}</button>` : ''}
       </div>`;
     el.querySelector('#cd-text').textContent = text;
+    if (answerLabel) el.querySelector('#cd-in')?.setAttribute('placeholder', answerLabel);
     uiRoot.appendChild(el);
     let s = seconds;
     const iv = setInterval(() => {
@@ -160,6 +183,21 @@ export function countdownChallenge(uiRoot, { text, seconds = 30, giveUpLabel = n
       if (s <= 0) { cleanup(); resolve({ expired: true }); }
     }, 1000);
     el.querySelector('#cd-give')?.addEventListener('click', () => { cleanup(); resolve({ expired: false, gaveUp: true }); });
+    // deliberately NOT autofocused: on a phone the keyboard would cover the
+    // dial the player is supposed to be counting on. A wrong answer only
+    // flags the field, so the clock stays the only thing that ends this.
+    const input = el.querySelector('#cd-in');
+    if (input) {
+      const submit = () => {
+        const v = readNumber(input);
+        if (v === answer) { cleanup(); resolve({ expired: false, won: true }); return; }
+        input.style.borderColor = 'var(--danger)';
+        input.select?.();
+      };
+      el.querySelector('#cd-ok').addEventListener('click', submit);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+      input.addEventListener('input', () => { input.style.borderColor = ''; });
+    }
     function cleanup() { clearInterval(iv); el.remove(); }
     el.done = (result) => { cleanup(); resolve(result); };
   });
@@ -172,14 +210,14 @@ export function numberPrompt(uiRoot, { title, placeholder = '' }) {
     el.className = 'choice-box';
     el.innerHTML = `
       <h3></h3>
-      <input type="number" inputmode="numeric" placeholder="${placeholder}" class="num-input">
+      <input type="text" inputmode="numeric" placeholder="${placeholder}" class="num-input">
       <button class="btn primary mg-confirm" style="width:100%;margin-top:10px">${S.ui.done}</button>`;
     el.querySelector('h3').textContent = title;
     uiRoot.appendChild(el);
     const input = el.querySelector('input');
     setTimeout(() => input.focus(), 60);
     const submit = () => {
-      const v = parseInt(input.value, 10);
+      const v = readNumber(input); // same separator tolerance as the countdown
       if (Number.isNaN(v)) { input.style.borderColor = 'var(--danger)'; return; }
       el.remove(); resolve(v);
     };
