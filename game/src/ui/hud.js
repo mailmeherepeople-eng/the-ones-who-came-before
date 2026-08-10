@@ -166,8 +166,22 @@ export class HUD {
       el.className = 'narrator';
       el.innerHTML = `<span></span><span class="tap">▼ ${tapLabel}</span>`;
       el.querySelector('span').textContent = text;
+      // announce and activate as a button for assistive tech. Kept a div on
+      // purpose: `.narrator .tap` is styled for a span, and a real <button>
+      // would drag in a UA background/border reset for no behavioural gain.
+      el.setAttribute('role', 'button');
+      el.tabIndex = 0;
       this.root.appendChild(el);
+      let closed = false;
+      let swallowClick = false;
+      const openedAt = performance.now();
       const done = (e) => {
+        // the 350 ms guard is a TIMESTAMP, not a delayed listener attach. With
+        // the listeners going on late, a dispatched click aimed at the box
+        // landed before anything was listening and was silently swallowed, so
+        // automated runs (and some assistive tech) could not advance a beat.
+        if (closed || performance.now() - openedAt < 350) return;
+        closed = true;
         e?.preventDefault?.();
         removeEventListener('keydown', onKey);
         el.remove();
@@ -178,10 +192,22 @@ export class HUD {
         if (e.repeat) return;
         if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') done(e);
       };
-      setTimeout(() => {
-        el.addEventListener('pointerdown', done);
-        addEventListener('keydown', onKey);
-      }, 350); // guard against the tap that opened it
+      // pointerdown is the real-finger path (no 300 ms tap delay); click also
+      // covers dispatched clicks and AT activation. `closed` stops a real tap
+      // from running both.
+      el.addEventListener('pointerdown', (e) => {
+        // A press that STARTS inside the guard window must not slip through on
+        // release: click fires on pointer-up, so a hold begun at 100 ms and
+        // released at 500 ms would otherwise pass a check made at release time.
+        // Mark the gesture and swallow its click.
+        if (performance.now() - openedAt < 350) { swallowClick = true; return; }
+        done(e);
+      });
+      el.addEventListener('click', (e) => {
+        if (swallowClick) { swallowClick = false; return; }
+        done(e);
+      });
+      addEventListener('keydown', onKey);
     });
   }
 
