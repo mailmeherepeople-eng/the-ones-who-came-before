@@ -1,13 +1,22 @@
 {
-  "_comment": "Files that actually exist. Add an id here when you add the matching .m4a; anything not listed is treated as silent, so the game always plays with or without audio. Voice ids are strings.js key paths (act1.wake -> voice/act1.wake.m4a).",
+  "_comment": "GENERATED — run `node game/tools/sync-audio-manifest.mjs` after adding or removing a file rather than editing this by hand. Anything not listed is treated as silent, so the game always plays with or without audio. A voice id is a strings.js key path (act1.wake -> voice/act1.wake.m4a). An sfx id is its path under audio/sfx/, and for characters the FOLDER is the voice: everything under npc/tribe/ is one pool the game picks from at random. Save as plain UTF-8, no BOM.",
   "voice": [
-    "openingCard",
-    "openingCard2",
     "act1.sceneA_card",
     "act1.sceneA_card2",
+    "act1.tribeNote",
     "act1.wake",
-    "act1.tribeNote"
+    "openingCard",
+    "openingCard2"
   ],
-  "sfx": [],
+  "sfx": [
+    "npc/tribe/laughing-ooga-booga",
+    "npc/tribe/ooga-booga-1",
+    "npc/tribe/ooga-booga-2",
+    "npc/tribe/ooga",
+    "npc/tribe/oogabayo",
+    "npc/tribe/serious-ooga",
+    "npc/tribe/singing-ooga-booga",
+    "npc/tribe/talking-ooga-booga"
+  ],
   "music": []
 }
