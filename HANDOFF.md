@@ -3,7 +3,7 @@
 Written for a session starting cold with no memory of this project. Read this
 top to bottom (five minutes), then open the two files in §7.
 
-Last updated **2026-08-09 23:10 IST**.
+Last updated **2026-08-10 14:10 IST**.
 
 ---
 
@@ -73,21 +73,26 @@ Inherited conventions that will bite if ignored:
 - `world/merge.js` folds static part-meshes for performance. **Anything
   animated must be passed in `keep`** or it loses its transform.
 
-## 5. Current state (2026-08-09)
+## 5. Current state (2026-08-10)
 
 All three acts play. Content lint green (35 files). Zero console errors across
-Acts 1 and 3 and the world editor.
+Acts 1, 2 and 3 and the world editor, on desktop and at a 375×812 touch
+viewport.
 
-Two passes landed today, both fully documented in `GAME-OVERVIEW.md`:
+Three passes have landed, all documented in `GAME-OVERVIEW.md`:
 
 - **§12 — mobile performance.** Draw calls 1014 → 647 over four fixed camera
   poses (−36%). Act 2 dial stall: worst frame 59.9 → 24.9 ms (−58%). Real
   offline via service worker. A `QUALITY` tier picked per device, forced with
-  `?q=`.
+  `?q=`. **Since confirmed on a real phone.**
 - **§13 — ten requested changes.** Both standing rules above, plus: tribe
   wording, three-deer hunt, Take Aim/Fire first-person bow, the store box
   deposit loop, talkable tribe members, the bear, NPC jumping, and the camera
   lock setting.
+- **§14 — the known-bugs pass.** Every open item in §10 closed, each verified
+  at runtime rather than by inspection. §14.2 lists the ones that carry a
+  decision you should not undo (especially: do **not** simplify the player
+  model hide to `G.mode !== 'ground'`, and P2's challenge must stay win-less).
 
 ## 6. Movement rules, because they are subtle
 
@@ -119,17 +124,18 @@ characters then prefer sliding sideways along an obstacle over crossing it.
 
 ## 8. Open work
 
-- **Real-device testing.** Every performance number so far is emulated work
-  counts on a desktop GPU, not phone frames, and the tier's biggest lever
-  (pixel ratio at DPR 3) is invisible on a DPR-1 desktop. This is the one that
-  still matters.
-- **`game-baseline/` is temporary.** It is a frozen copy of the pre-performance
-  build so the two can be compared side by side on a phone. Delete it in one
-  commit once the comparison has served its purpose.
-- Remaining items from the original known-bugs list are in `GAME-OVERVIEW.md`
-  §10 (player model visible during the Act 2 diorama, intro-sequence input
-  race, Act 2 P3 reward is unconditional, a few dead strings).
-- Hindi string swap. All text is already isolated in `strings.js`.
+- **`game-baseline/` and `compare.html` stay, deliberately.** The frozen copy of
+  the pre-performance build was originally meant to be deleted once the
+  side-by-side comparison had served its purpose. That comparison was run on a
+  real phone on 2026-08-10 and the current build won, and the pair is being kept
+  anyway: it is the only standing reminder of what the performance work actually
+  bought, and it costs nothing to leave in place. Do not "tidy" it away.
+- **Hindi string swap.** All text is already isolated in `strings.js`, and the
+  two dead strings are gone, so the file is now exactly what needs translating.
+  The lint rules (no em/en dash, the protected NCERT phrasings) would need
+  extending to cover a second language.
+- **Nothing else is outstanding.** `GAME-OVERVIEW.md` §10 is fully closed as of
+  §14; the entries are kept there for the decisions they record.
 
 ## 9. Undoing things
 
@@ -149,11 +155,27 @@ characters then prefer sliding sideways along an obstacle over crossing it.
   a hard reload anyway.
 - **Fixed camera poses for any performance measurement.** A wandering player
   makes readings incomparable; a whole first round of numbers was junk.
+- **The `high` quality tier is not "desktop".** `pickTier()` returns `high` for
+  any coarse-pointer device with more than 4 cores or more than 4 GB, i.e. most
+  midrange Androids, and they run at DPR 3. Gating an expensive visual on the
+  tier and calling it a desktop-only treat puts the cost straight onto the
+  phones this game is built for. It nearly shipped that way in the §14 pass.
+  **Test pointer coarseness if you mean form factor.**
 - **Hide everything but the object under test when diffing pixels.** A pulsing
   objective beacon masqueraded as a geometry regression.
 - **The browser pane starves compositing when hidden**, so screenshots time
   out. Read `renderer.gl.info` and the scene graph via JS instead, which is
   more reliable anyway.
+- **A hidden pane also freezes CSS animations at frame 0**, which is the same
+  root cause wearing a different hat. `fx-pop` starts at `scale(0.7)`, so every
+  `getBoundingClientRect()` on a popped-in panel reads 70% of its real size and
+  a 44 px touch target looks like a 35 px one. **Trust `getComputedStyle` over
+  bounding rects for resting size.** This cost a real detour in the §14 pass.
+- **For colour questions, read vertex colours, not pixels.** Trees and flora
+  block the shot, and the mesher's face shade, jitter, tint and AO are all
+  scalar multipliers, so a block's R:G:B *ratio* is an exact fingerprint that
+  survives all of them. Scanning the scene's colour attributes proved the trunk
+  fix in one call after two failed attempts at aiming a camera at a trunk.
 - **`javascript_exec` calls share one scope**, so a repeated `const G` throws.
   Wrap probes in an IIFE. Timed-out calls also keep running in the page: guard
   drivers with a `window.__drvOn` flag or two will fight.

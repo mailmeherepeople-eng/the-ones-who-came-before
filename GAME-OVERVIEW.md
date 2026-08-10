@@ -435,20 +435,26 @@ Debug jumps (`?act=2/3`, or the Tab menu) seed stand-in records so every act wor
 
 ## 10. Known bugs and to-fix list
 
-Current state: zero console errors across all three acts and in the editor; strings lint green; all three acts passed a screenshot-based visual review ("ship" verdict). Remaining items, roughly by priority:
+Current state: zero console errors across all three acts and in the editor;
+strings lint green; all three acts passed a screenshot-based visual review
+("ship" verdict).
 
-1. **Player model is not hidden during the Act 2 sky diorama and interstitial flights** — the third-person character keeps standing wherever Act 1 ended while era rebuilds change the terrain under it; it can float or poke through the mound in the overhead shot. Fix: hide the model whenever `G.mode !== 'ground'`.
-2. **Intro-sequence input race** — during Act 1's opening card/narrator chain the player can already walk (synthetic input proved it; fast tappers could too), and the script later teleports them back, which reads as a glitch. Fix: hold input disabled until the wake narration completes.
-3. **Dig-stroke FX visibility not re-verified up close** — dig particles were moved to pit-rim height and biased toward the camera after review found them invisible; code-verified but the final visual pass hasn't confirmed at real play distance in third person.
-4. **Touch/mobile pass for the third-person camera** — drag-look orbit and pinch-for-camera-distance are wired but untested on a real device; the pinch previously did nothing, so muscle memory is unaffected, but feel needs checking.
-5. ~~**Performance re-check on low-end Android**~~ — **measured and largely addressed 2026-08-10 (see §12).** Draw calls are down ~36% and the Act 2 dial stall is down 58%. What remains open is genuinely on-device testing: every number so far is emulated work counts, not phone frames.
-6. **Clouds read sparse/subtle** — correct shape now (no more duplicate-sun blobs) but reviewers note they're barely there; could use one more density/size pass.
-7. **Birch/snag trunks can read concrete-grey in shade** — palette was warmed and spacing enforced, but side faces in shadow still drift grey (seen at the Act 3 spawn vista).
-8. **Act 2's P3 "beat the clock" reward is unconditional** — the 30-second counting challenge has no win detection wired (`countdownChallenge` supports it; callers don't use it), so the "make it and the reward is yours" framing is a bluff. Harmless (the formula is the reward) but worth honoring or rewording.
-9. **Narrator boxes ignore synthetic/dispatched clicks** — real clicks and Enter work, but automated tests and possibly some assistive tech can't advance `.tap` narrators; the entrance animation also makes automated clickers flaky. Consider a real `<button>` and a keydown handler.
-10. **Tab act-menu wipes the save with only a written warning** — the menu text says progress is replaced, but there's no second confirm. Fine for a dev tool; add a confirm if it ships to kids.
-11. **Minor dead code** — a few defined-but-unused strings (`S.act2.deepTime_hint`, `S.act2.todayMarker`); NPC `dispose()` intentionally leaks shared cached geometries (by design, but worth a comment audit).
-12. **Modern village ambient NPCs vanish at the interviews beat** — by design (they're replaced by the four interviewees), but the swap is a visible pop if you're watching.
+**All twelve items below are now closed** (§14, 2026-08-10 14:10 IST). They are
+kept here with their outcomes because several record a decision, not just a
+fix.
+
+1. ~~**Player model is not hidden during the Act 2 sky diorama and interstitial flights**~~ — **fixed.** `player.setModelHidden()`, set by `skyGlimpse` and for the whole of Act 2. Note the fix is NOT the obvious `G.mode !== 'ground'`: Act 1's closing shot deliberately sits in `'ui'` mode with the character in frame, and that blanket rule would have emptied it.
+2. ~~**Intro-sequence input race**~~ — **fixed.** `sceneA` disables input at `G.mode='ground'` and restores it after the wake line. On touch this also hides the joystick and jump button, so the opening reads as a cutscene rather than a game with dead controls.
+3. ~~**Dig-stroke FX visibility not re-verified up close**~~ — **verified, no change needed.** Measured at a real standing third-person pose: pit floor y=9, rim y=12, all 37 stroke particles at y 12.60 to 12.79, 37/37 inside the camera frustum and on the camera side of the pit.
+4. ~~**Touch/mobile pass for the third-person camera**~~ — **closed by on-device testing, 2026-08-10.**
+5. ~~**Performance re-check on low-end Android**~~ — **measured and addressed (§12), then confirmed on a real phone 2026-08-10.**
+6. ~~**Clouds read sparse/subtle**~~ — **fixed.** Sprite opacity 0.42-0.52 to 0.58-0.70 and a denser cloud texture, both free (identical pixel count and blend). Sprite *size* is deliberately unchanged on every tier: see §14.2, the first attempt grew it on the "high" tier believing that meant desktop, which is false.
+7. ~~**Birch/snag trunks can read concrete-grey in shade**~~ — **fixed.** Trunk side faces get a warm bias in the mesher. The cause was lighting, not palette: side faces are lit almost entirely by the cool hemisphere and fill lights.
+8. ~~**Act 2's P3 "beat the clock" reward is unconditional**~~ — **honoured rather than reworded.** `countdownChallenge` takes an optional `answer` and renders a numeric box; a correct answer before the clock earns confetti and its own line. The formula is still taught either way, because beating the clock proves you can count, not that you know the shortcut.
+9. ~~**Narrator boxes ignore synthetic/dispatched clicks**~~ — **fixed.** Listeners attach immediately and the 350 ms guard became a timestamp; the old delayed-attach swallowed any click aimed at the box. Kept a div with `role="button"` and `tabIndex=0` rather than a real `<button>`, which would have dragged in a UA style reset for no behavioural gain.
+10. ~~**Tab act-menu wipes the save with only a written warning**~~ — **fixed.** A second confirm, shown only when `Save.hasProgress`, since with nothing to lose the extra tap is noise.
+11. ~~**Minor dead code**~~ — **fixed.** `S.act2.deepTime_hint` and `S.act2.todayMarker` removed. The `dispose()` comment audit found the existing comments already accurate (shared module caches, detach only, never `disposeGroup`), so nothing changed there.
+12. ~~**Modern village ambient NPCs vanish at the interviews beat**~~ — **improved, with a known residual.** `retireAmbients()` sends them outward and disposes them once they are out of the camera frustum (or past 26 units), capped at 14 s. In the normal case, where the player is still walking to the village, they are gone within 700 ms and the pop is unobservable. A player who stands in the village and watches them for the full 14 s still sees them go. Fading is not available: character materials are shared module caches, so changing opacity would affect every character. `disposeAmbients()` remains the hard sweep for teardown and resumed sessions.
 
 ---
 
@@ -640,3 +646,92 @@ Both rules live in `CLAUDE.md` at the repo root.
   "start over" and `?act=N` never lose them.
 - **The service worker is off on localhost.** It was serving stale modules
   during development, which is the staleness footgun called out in §12.
+
+---
+
+## 14. The known-bugs pass (2026-08-10 14:10 IST)
+
+Every open item in §10 closed. Two of the twelve needed no code (§10.3 and
+§10.4/§10.5, verified rather than changed); the rest are one commit each.
+
+### 14.1 What changed
+
+| Area | Change | Files |
+|---|---|---|
+| Player rig | `setModelHidden()` hard override, honoured by `_cameraUnclip` and applied immediately (a glimpse can end in a mode that never runs one) | `player/player.js`, `sky/interstitial.js`, `acts/act2.js` |
+| Act 1 opening | Input held from `G.mode='ground'` until the wake line lands; the controls hint moved to sit with the controls | `acts/act1.js` |
+| Narrator | Listeners attach immediately, 350 ms guard is now a timestamp, `pointerdown` **and** `click`, `role="button"`, `tabIndex=0`, single-fire flag | `ui/hud.js` |
+| Act menu | Second confirm before `Save.reset()`, only when there is progress to lose | `main.js`, `strings.js` |
+| P3 challenge | `countdownChallenge` gained `answer`/`answerLabel`; a correct answer resolves `{won:true}`. Both numeric fields tolerate thousands separators | `ui/minigames.js`, `acts/act2.js`, `strings.js` |
+| Sky | Cloud opacity and texture density up on every tier. Sprite size unchanged | `engine/renderer.js` |
+| Trunks | Warm bias on wood side faces | `world/mesher.js` |
+| Act 3 | `retireAmbients()` sends the villagers outward and disposes them once out of frustum, capped at 14 s | `acts/act3.js` |
+| Content | Removed two dead strings **and a stray NUL byte** that was sitting inside `act3.talk_third1` | `strings.js` |
+
+### 14.2 Things worth knowing before touching these
+
+- **Do not "simplify" the model hide to `G.mode !== 'ground'`.** It is the
+  obvious rule and it is wrong: Act 1's closing lingering shot sets `'ui'` mode
+  on purpose with the character standing at the hut, and the blanket rule
+  empties that shot. The hide is scripted per camera move instead.
+- **The P2 find-zero challenge must stay win-less.** Running out of time IS the
+  lesson (there is no year zero), so it deliberately passes no `answer`. Only
+  P3 has a win condition.
+- **The P3 answer box is deliberately not autofocused.** On a phone the
+  keyboard would cover the dial the player is supposed to be counting on.
+- **The "high" quality tier is NOT desktop, and cloud size stays put.** This
+  one nearly shipped backwards. Opacity and texture density are free (same
+  pixels, same blend), so they rose everywhere; sprite *area* is pure fill rate,
+  so it was going to rise on the high tier only. But read `pickTier()`
+  (`constants.js`): it returns `'high'` for **any** coarse-pointer device with
+  more than 4 cores or more than 4 GB, which is most midrange Androids, and
+  those run at `maxPixelRatio: 1.5` on DPR-3 panels. The tier is a capability
+  guess, not a form factor, and it is the wrong axis for "can this device
+  afford more overdraw". Size is now unchanged on every tier. **If you ever
+  want a desktop-only visual, test pointer coarseness, not the tier.**
+- **Both numeric answer fields tolerate thousands separators.** The game prints
+  "2,583 years" and then asks the child for that number, so typing it back with
+  the comma is the normal case. `type="number"` cannot support this: the
+  browser blanks `value` the moment the text is not a bare number, so "2,583"
+  arrived as an empty string and scored as wrong with nothing to explain it.
+  The fields are `type="text" inputmode="numeric"`, which still raises the
+  numeric keypad on a phone, and `readNumber()` strips separators.
+- **The trunk warm bias is a lighting correction, not a palette one.** The
+  hemisphere sky light is `0xaecdea` and the fill is `0xbdd2ec`; a trunk side
+  face barely sees the warm sun, so pale bark multiplied by cool light lands
+  grey. The bias widens R over B so the cool light lands on cream. It is sized
+  to stay under the clipping point.
+- **`retireAmbients` claims `ctx.ambients` immediately** (sets it to `null`
+  before the walk), so the teardown sweep cannot double-free them.
+- **`retireAmbients` moves `home` as well as calling `goTo`.** Idle wander pulls
+  toward `home`, and a blocked `goTo` gives up after three failed detours
+  (`navTick` in `npc/npc.js`), at which point the old home walked them straight
+  back into the beat they were leaving. This is the "systems yield to scripts"
+  rule applied to the wander system. Even so, the modern village is dense
+  enough that the walk-off covers little ground: **the frustum check is what
+  actually removes the pop, not the walk.**
+
+### 14.3 How each fix was verified
+
+Runtime, in the live game, not by inspection:
+
+| Fix | Evidence |
+|---|---|
+| Model hide | Mid-flight sample of a real `skyGlimpse`: `mode=ui, modelHidden=true, visible=false` at cam y=45.8 and y=68.0, restored to `visible=true` on landing. Act 2 boot: `mode=sky, modelHidden=true`. |
+| Input race | At the opening card: `inputEnabled=false`, `poll()` all zeros, player parked at the shelter spawn. Enabled only after the wake line. On mobile the joystick and jump button go `none` then `block`/`flex`. |
+| Narrator | A dispatched `.click()` dismissed it (the old code swallowed that). Guard re-tested on a *freshly opened* box: click at t+80 ms and pointerdown at t+140 ms both ignored, click at t+440 ms accepted, promise resolved exactly once. A press *begun* inside the guard and released after it does not slip through (click fires on pointer-up, so the guard alone would have passed it). |
+| Act menu | Two-step flow driven end to end; "No, keep my progress" left `hasProgress=true` and `beat=a1.sceneA` intact, no reload. |
+| P3 | Expected answer 2583, matching the protected 4.15 example. Wrong answer flags the field and leaves the clock running; right answer resolves `{expired:false, won:true}`. P2's shape still renders no box and still expires. Give-up and timeout paths both still clean up. Separator tolerance: `2,583`, ` 2583 `, `2.583` and `25 83` all accepted, `abc` rejected. |
+| Trunks | Scanned all 240,028 vertex colours in the live scene: **948** match the biased birch-side fingerprint (R/B 1.664, G/B 1.454) and **0** match the unbiased one (1.264/1.192). Ratios hold across brightness, confirming shade, jitter and AO scale uniformly. |
+| Dig FX | See §10.3. |
+| Ambients | Both branches. Player far (the normal case): retired on the first 700 ms poll, never observed alive and on screen. Player parked in the village staring at them: 20 consecutive polls alive and in frustum, released only at the 14 s cap. Both end with exactly the four interviewees. |
+
+### 14.4 A verification trap this pass found
+
+**A hidden browser pane freezes CSS animations at frame 0.** `.cd-card` carries
+`fx-pop`, whose keyframe `0%` is `scale(0.7)`, so every
+`getBoundingClientRect()` came back at 70% and the new answer box looked like a
+35 px touch target. It is not: `getComputedStyle` reports the resting 50 px with
+`min-height: 44px`, and `.chip-btn` is honoured. **Trust computed style over
+bounding rects for resting size while the pane is hidden.** This is the same
+root cause as the screenshot timeouts in §9.
