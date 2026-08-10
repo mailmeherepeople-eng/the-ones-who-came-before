@@ -27,6 +27,11 @@ const FRESH = () => ({
   claims: {},
   labUsed: [],
   beatTimes: {},
+  // What is in the player's hands, the community chest and the store box
+  // (src/inventory.js). Plain `{ itemId: count }` per container. load()'s
+  // `{...FRESH(), ...parsed}` merge backfills this into saves written before
+  // it existed, so no version bump was needed.
+  inventory: { player: {}, chest: {}, store: {} },
 });
 
 class SaveSystem {
