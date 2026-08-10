@@ -1114,9 +1114,9 @@ quietly undo it. Grunts, laughter and song all belong.
 
 Voice pools go through `playSfx`'s decoded-AudioBuffer path, not the streaming
 path that narration uses, because a grunt that arrives late reads as broken.
-The cost: eight tribe clips of roughly three seconds is about **5 MB of RAM**
-once every one has been heard, and decoding is lazy, so only clips actually
-played cost anything. That is affordable and worth the latency. It would not be
+The cost, measured rather than estimated: the eight tribe clips are 24.1 seconds
+of mono audio and decode to **4.42 MB** once every one has been heard. Decoding
+is lazy, so only clips actually played cost anything. That is affordable and worth the latency. It would not be
 if someone put a one-minute clip in there. See the RAM rule at the top of
 `src/sound.js`.
 
@@ -1139,7 +1139,8 @@ Live, with a trusted keypress first so autoplay policy is satisfied:
 | | |
 |---|---|
 | Voice assignment | `talk-elder` → `npc/elder`, `talk-band0..3` → `npc/tribe` |
-| Six tribe interactions | five distinct clips fetched, no consecutive repeat |
+| All eight tribe clips reachable | 40 interactions, 40 clips sounded, **8 of 8 distinct**, spread 3 to 7 plays each |
+| Never twice running | **0** back-to-back repeats across those 40 |
 | Elder with an empty folder | plays a tribe clip, **zero requests to `npc/elder/`** (it never guesses at files that are not there) and zero 404s |
 | Elder with one file in her folder | plays only that file, three interactions, one fetch |
 | Synth-blip fallback | fired zero times across all of it, i.e. every interaction sounded a real clip |
@@ -1148,3 +1149,13 @@ Live, with a trusted keypress first so autoplay policy is satisfied:
 The elder-folder case was proved by temporarily copying a tribe clip in,
 re-running the sync tool and reloading, then deleting it again. The folder is
 kept in git by its own README.
+
+Every play above was fingerprinted by `AudioBuffer.length`, which is unique per
+file, rather than by counting network requests. That distinction matters, and it
+caught a bad number here. **A clip is fetched exactly once and decoded into a
+cache, so after its first play it never touches the network again.** An early
+six-interaction sample reported "five distinct clips", which was a statement
+about the sample and not about the pool: six interactions cannot surface more
+than six of eight clips, and one of those six reused an already-cached clip so
+no request appeared for it. The 40-interaction run is what actually establishes
+that all eight are reachable. Count what sounds, not what downloads.

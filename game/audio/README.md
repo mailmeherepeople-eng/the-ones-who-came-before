@@ -104,10 +104,10 @@ first file lands. A character created with `elder: true` uses `npc/elder`;
 pass `voice: 'npc/whatever'` to `new Npc()` to point any character anywhere.
 
 Voice-pool clips are DECODED, not streamed, because a grunt that arrives late
-reads as broken. Eight tribe clips of roughly three seconds cost about 5 MB of
-RAM once every one has been heard, and only clips actually played are decoded.
-Keep individual lines short and this stays cheap; a one-minute clip in here
-would not.
+reads as broken. The eight tribe clips are 24.1 seconds of mono audio and cost
+4.42 MB of RAM once every one has been heard, and only clips actually played are
+decoded. Roughly 190 KB per second of audio, so keep individual lines short and
+this stays cheap; a one-minute clip in here would not.
 
 ## Naming rules for every file
 
