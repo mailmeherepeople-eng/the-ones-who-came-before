@@ -85,6 +85,70 @@ export function voiceIdFor(text) {
   return voiceIndex.get(text) ?? null;
 }
 
+// ---------- iOS: hold the audio session in the playback category ----------
+//
+// On iOS the hardware Ring/Silent switch silences Web Audio but NOT media
+// element playback. This game uses both: narration streams through an <audio>
+// element, every character noise is a decoded AudioBuffer. So a silenced phone
+// gets the story and not the tribe, which was never a design decision, it is
+// two code paths meeting the platform differently.
+//
+// In practice the split is usually invisible, because the opening narration
+// plays a media element early and leaves the session in playback mode for
+// everything after it. That is luck, not a guarantee: a player who taps past
+// the narration fast, or a session that lapses, loses the character noises with
+// no way to know why. A silent looping element makes it deliberate.
+//
+// Deliberately Apple-touch only. Nowhere else silences Web Audio by hardware
+// switch, so anywhere else this is a permanently playing element that buys
+// nothing.
+//
+// The trade, stated plainly: a playback session interrupts whatever the player
+// had going in another app, and a phone on silent still makes noise. The
+// in-game Sound setting is the real control, and this stops with it.
+function isAppleTouch() {
+  const p = navigator.platform || '';
+  if (/iP(hone|ad|od)/.test(p)) return true;
+  // iPadOS reports itself as a Mac; the touch points are the tell
+  return /Mac/.test(p) && (navigator.maxTouchPoints ?? 0) > 1;
+}
+
+// 0.4 s of 8 kHz 8-bit mono silence, built here rather than shipped as a file:
+// it is 3 KB of nothing, and an asset that must exist for audio to work would
+// be one more thing to forget. Unsigned 8-bit PCM, so silence is 0x80.
+function silentLoopUrl() {
+  const rate = 8000, samples = rate * 0.4;
+  const buf = new ArrayBuffer(44 + samples);
+  const v = new DataView(buf);
+  const tag = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  tag(0, 'RIFF'); v.setUint32(4, 36 + samples, true); tag(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate, true);
+  v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+  tag(36, 'data'); v.setUint32(40, samples, true);
+  new Uint8Array(buf, 44).fill(128);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+
+let sessionEl = null;
+function holdAudioSession() {
+  if (!isAppleTouch() || sessionEl || Settings.get('sound') === false) return;
+  const el = new Audio(silentLoopUrl());
+  el.loop = true;
+  el.setAttribute('playsinline', ''); // never let it claim the screen
+  // NOT routed through the Web Audio graph on purpose: it is plain media
+  // element playback that sets the session category, and piping it into the
+  // context would put it back on the wrong side of the switch.
+  sessionEl = el;
+  el.play().catch(() => { sessionEl = null; }); // no gesture yet, the next one retries
+}
+
+function releaseAudioSession() {
+  if (!sessionEl) return;
+  try { sessionEl.pause(); } catch { /* already gone */ }
+  sessionEl = null;
+}
+
 // ---------- the mixer ----------
 // Three gains under audio.js's existing master, so one mute covers synth and
 // files alike and each category can be turned down on its own.
@@ -100,6 +164,10 @@ function mixer() {
 }
 
 function applySettings() {
+  // The in-game Sound switch is the real control, so it owns the iOS session
+  // too: muting the game must not leave a silent element holding the phone's
+  // audio route hostage. This runs even before the mixer exists.
+  if (Settings.get('sound') === false) releaseAudioSession(); else holdAudioSession();
   if (!buses) return;
   const on = Settings.get('sound') !== false;
   const music = on && Settings.get('music') !== false;
@@ -323,9 +391,13 @@ function resume() {
   const ctx = SFX.ctx;
   if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
 }
-addEventListener('visibilitychange', () => { if (!document.hidden) resume(); });
-addEventListener('pointerdown', resume, { passive: true });
-addEventListener('keydown', resume);
+// Both run on the same gesture: the context needs unlocking and iOS needs its
+// session category set, and the first real tap is the only moment that grants
+// either of them.
+function onGesture() { resume(); holdAudioSession(); }
+addEventListener('visibilitychange', () => { if (!document.hidden) onGesture(); });
+addEventListener('pointerdown', onGesture, { passive: true });
+addEventListener('keydown', onGesture);
 
 export const Sound = {
   loadManifest,
