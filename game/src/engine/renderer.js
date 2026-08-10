@@ -151,13 +151,24 @@ export class Renderer {
       const spr = new THREE.Sprite(new THREE.SpriteMaterial({
         map: i % 2 ? cloudTexB : cloudTexA,
         transparent: true,
-        opacity: 0.42 + (i % 3) * 0.05, // 0.42–0.52 — clearly a cloud, still soft
+        // reviewers kept reporting the sky read as empty. Opacity is the one
+        // lever here that is genuinely free: identical pixel count, identical
+        // blend, the sprite is just less see-through. Raised on every tier.
+        opacity: 0.58 + (i % 3) * 0.06, // 0.58–0.70 — reads as weather, still soft
         fog: false,
         depthWrite: false,
       }));
       const a = (i / QUALITY.clouds) * Math.PI * 2 + (i * 0.7) % 1;
       const r = R * (0.5 + ((i * 37) % 10) / 40); // 0.5R..0.72R
       const h = R * (0.26 + ((i * 53) % 10) / 45); // 0.26R..0.46R
+      // Size is deliberately NOT touched. A bigger sprite is more fill rate,
+      // and fill rate is the one thing a weak mobile GPU has least of (§12).
+      // A first attempt grew these on the "high" tier only, on the assumption
+      // that high meant desktop. It does not: pickTier() returns 'high' for
+      // ANY coarse-pointer device with more than 4 cores or more than 4 GB,
+      // which is most midrange Androids. The tier is a capability guess, not a
+      // form factor. Presence comes from opacity and texture density instead,
+      // both of which are free.
       const w = R * (0.26 + ((i * 29) % 10) / 40);
       spr.scale.set(w, w * 0.26, 1); // flat and wide: cloud bank, not a ball
       spr.renderOrder = -10;
@@ -217,8 +228,12 @@ export class Renderer {
       const r = 20 + rnd() * 30;                               // big enough to merge
       const y = 88 - r * 0.45 - rnd() * 14;                    // bumpy top, flatter base
       const g = c.createRadialGradient(x, y, r * 0.2, x, y, r);
-      g.addColorStop(0, 'rgba(238,241,245,0.9)');
-      g.addColorStop(0.55, 'rgba(230,235,241,0.5)');
+      // denser core, fade held back to the outer fifth: the old stops spent
+      // half the radius already half transparent, which is what made the banks
+      // read as haze. Costs nothing, the canvas is built once per seed.
+      g.addColorStop(0, 'rgba(240,243,247,1)');
+      g.addColorStop(0.5, 'rgba(232,237,243,0.82)');
+      g.addColorStop(0.82, 'rgba(228,233,240,0.3)');
       g.addColorStop(1, 'rgba(226,231,238,0)');
       c.fillStyle = g;
       c.beginPath();
