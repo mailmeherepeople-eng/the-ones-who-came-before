@@ -289,7 +289,7 @@ limit).
 
 **`docs/ai/` is worth opening first.** Nine documents adapted from the AI
 Collaboration Field Guide, on disk and mirrored to the vault at
-`20 Areas/Claude Code Chats/ai-docs/`:
+`10 Projects/NCERT History Game/ai-docs/`:
 
 | | |
 |---|---|

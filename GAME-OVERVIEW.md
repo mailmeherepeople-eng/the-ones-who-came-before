@@ -1214,9 +1214,12 @@ regression after the change: narration plays, 12 talk interactions produce 12
 clips across all 8 distinct files, zero fallbacks to the synth blip, zero
 console errors.
 
-**What could not be verified here:** that iOS actually keeps the session in the
-playback category. That needs an iPhone with the ringer switched OFF and a talk
-interaction. If the noises play with the phone silenced, it works.
+**Confirmed on device (2026-08-11 01:29 IST): a real iPhone with the ringer
+switched to silent plays the character noises.** That is the half this machine
+could not prove, and it is the half that mattered: everything above was a
+correct-looking argument about an audio session on a platform not present in
+the room. It now behaves the way narration always did, by design rather than by
+the accident of narration having run first.
 
 One trap this nearly shipped with: `applySettings()` runs at module load via
 `Settings.subscribe`, and the session helpers were written 250 lines below it,
