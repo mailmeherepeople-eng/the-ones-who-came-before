@@ -876,3 +876,191 @@ Runtime, in the live game, not by inspection:
 `min-height: 44px`, and `.chip-btn` is honoured. **Trust computed style over
 bounding rects for resting size while the pane is hidden.** This is the same
 root cause as the screenshot timeouts in §9.
+
+---
+
+## 16. The Scene B black screen (2026-08-10 20:39 IST)
+
+Reported as "after the elder dies and the game crosses time the game is not
+loading, it is a black screen, when it shows 10,000 BCE". It was not a crash and
+nothing was loading: **Scene C raised its first card underneath the fader, and
+on a phone there is no way to dismiss it.**
+
+### What actually happened
+
+`sceneC` opened like this:
+
+```js
+await G.hud.fadeOut(400);   // #fader on: opaque black, z-index 50, pointer-events auto
+resetStage(G); ... douseFires();
+await G.hud.card([S.act1.interstitial_generations]);   // .card-overlay, z-index 30
+buildSceneC(G.world); ...
+await G.hud.fadeIn(400);    // 70 lines later
+```
+
+`.card-overlay` is z-index 30 and `#fader.on` is z-index 50 with
+`pointer-events: auto`, so the card sat behind a black sheet that also ate every
+tap aimed at its Continue button. `HUD.card()` has a keyboard fallback
+(Enter / Space / E) bound to `window`, which z-index cannot block, so **a desktop
+player pressed Space and never saw a bug**. A phone has no keyboard, and the act
+stopped there permanently. Mobile is the primary target, which is why this shipped
+looking fine.
+
+From the player's seat the last thing on screen is Scene B: the glimpse counts up
+to 10,000 BCE, the valley thaws, two narrator lines play, and then black. Hence
+"when it shows 10,000 BCE" — Scene B is the 10,000 BCE scene, and it dies on the
+way out of it.
+
+### The fix
+
+One line, matching what `sceneD` already does (its `G.hud.fadeIn(400)` before the
+glimpse carries the comment "was hidden by the fader" — the same bug, found and
+fixed there, never swept for elsewhere):
+
+```js
+await G.hud.fadeIn(0);      // lift the fader BEFORE the card
+await G.hud.card([S.act1.interstitial_generations]);
+```
+
+The card overlay is itself a near-opaque black wash
+(`rgba(4, 2, 1, 0.94)`), so it covers the world rebuild on its own; the fader was
+never the thing hiding it. `fadeIn(0)` removes the class immediately, which
+restores `pointer-events: none` at once, and the 0.7 s CSS opacity transition
+dissolves behind the card where nobody can see it. The `fadeIn(400)` further down
+is left in place: it is now the 400 ms beat before the Scene C card, and a
+defensive guarantee that the fader is off before the scene starts.
+
+### Swept, not just fixed
+
+Every other fade window in the game was checked for the same shape, "wait for
+player input while `#fader` is on". All clean:
+
+| Where | Between fadeOut and fadeIn | Verdict |
+|---|---|---|
+| `sceneA` | setup only, no input | fine |
+| `sceneC` | **a card, awaiting a tap** | **was the bug** |
+| `sceneD` open | already lifts the fader first | fine |
+| `sceneD` kiln firing | `wait(600)`, no input | fine |
+| Act 1 end into Act 2 | Act 2 calls `fadeIn(600)` before its card | fine |
+| Act 2 end into Act 3 | Act 3 calls `fadeIn(600)` before its card | fine |
+| Act 3 end screen | `.screen` built dark, revealed by `fadeIn(600)` before the button matters | fine |
+
+### Verified
+
+Reproduced and then re-run at a 375x812 touch viewport, driven with taps only:
+every dismissal goes through `document.elementFromPoint` at the button's centre
+and dispatches to whatever a real finger would actually hit. No `.click()` on a
+covered element, no keyboard.
+
+| | Before | After |
+|---|---|---|
+| Element under the Continue button | `#fader` | the card's own `button.btn.primary` |
+| Card after a real tap | still open | dismissed |
+| Reachable without a keyboard | no | yes |
+| Where the run ends | black screen, Scene C never starts | Scene C playable, objective "Plant the wild grain by the river (0/4)" |
+
+Zero console errors through the crossing, 8 NPCs and 10 props in Scene C, and the
+world editor still opens on backtick (`window.__editor` live, `#wed` at 396x812).
+
+### Worth keeping
+
+- **The keyboard fallback hid this bug for months.** Any UI that waits for input
+  needs to be checked on the path that has no keyboard, because a desktop test
+  passes straight through a screen a phone cannot leave.
+- **Two full-screen overlays are a stacking contract, not a coincidence.** If a
+  beat has to hold the screen while it waits for a tap, exactly one cover may be
+  up, and it has to be the one carrying the tap target.
+- `#fader.on` takes pointer events on purpose (a tap during a fade must not reach
+  the world), so raising the card's z-index would have been the wrong lever: it
+  would have broken Act 3's end screen, which is deliberately built dark under the
+  fader and revealed by it.
+
+---
+
+## 17. The first six narration lines (2026-08-10 21:15 IST)
+
+The opening is voiced. Pressing Begin now runs the game's first six lines by
+itself and hands over at "Take a basket from the Community Chest", which is
+exactly where the recordings stop.
+
+| # | Line | File |
+|---|---|---|
+| 1 | "History is the study of the human past." | `voice/openingCard.m4a` |
+| 2 | "This is the story of how we know it." | `voice/openingCard2.m4a` |
+| 3 | "A valley, about 38,000 years ago." | `voice/act1.sceneA_card.m4a` |
+| 4 | "You are one of the ones who came before." | `voice/act1.sceneA_card2.m4a` |
+| 5 | "You wake in a rock shelter. Your tribe is stirring." | `voice/act1.wake.m4a` |
+| 6 | "Your tribe. Six of you, together..." | `voice/act1.tribeNote.m4a` |
+
+**The filename is the `strings.js` key path.** `S.act1.wake` is
+`voice/act1.wake.m4a`, and the id also has to be listed in
+`audio/manifest.json` or it is treated as absent. `src/sound.js` resolves a
+line by looking its own text back up in `S`, so no act script changes when a
+recording appears. Full rules in `game/audio/README.md`; the authoritative list
+of what is left is `node game/tools/list-voice-lines.mjs --todo` (105 to go).
+
+### 17.1 Cards can narrate now
+
+The reason this was not simply a drop-the-files job: **four of the six are
+CARDS, and `HUD.card()` had no voice path at all.** Only `HUD.narrator()` did.
+So the recorded opening would have played line 5 and line 6 and silently skipped
+the four before them.
+
+`HUD.card()` now mirrors the narrator exactly:
+
+- id per entry, `entry.voice ?? voiceIdFor(entry.text)`, so `card()` still takes
+  plain strings and `{ text, big }` objects unchanged;
+- a clip means the card reads itself and closes on `ended`, with a
+  `.card-progress` bar under the Continue button so the auto-advance does not
+  read as the card vanishing;
+- a tap or Enter / Space / E still skips at any point, and cuts the clip with it;
+- `Sound.prefetchVoice()` warms the NEXT entry's file while the current one is
+  talking, so the gap between cards is not a download. This is what that
+  function was written for and it had no caller until now;
+- **no clip means the old behaviour, byte for byte**: no bar (it is
+  `display: none` until `.on`), wait for the button.
+
+The bar sits under the button as a flex item rather than pinned to the viewport
+bottom, which on a phone would put it behind the joystick.
+
+`holdMs` cards stay silent. Nothing in the game uses that branch today, and a
+timed card that also carries a clip needs a rule for which of the two wins;
+there is no content to design that against yet.
+
+### 17.2 A BOM in manifest.json was silently hiding every recording
+
+`manifest.json` shipped with a UTF-8 BOM. The game never cared, because
+`Response.json()` UTF-8-decodes and drops it. `JSON.parse` throws on it, so
+`list-voice-lines.mjs` fell into its `catch` and reported all six freshly
+recorded lines as `[!] on disk, missing from manifest.json` while the game was
+happily playing them.
+
+Fixed at both ends: the BOM is gone from the file, and the tool now strips one
+and **prints an error instead of swallowing it**, because a checking tool that
+answers "nothing is recorded" when it cannot read its input is worse than one
+that crashes. Worth knowing on this machine specifically: PowerShell's
+`Set-Content` and `Out-File` add a BOM by default.
+
+The same pass fixed the tool's tally, which counted `done` against the rows it
+had just filtered with `--todo` and so always printed "0 done".
+
+### 17.3 Verified
+
+Real browser, one trusted keypress to satisfy autoplay policy, then one click on
+Begin and nothing else:
+
+| | |
+|---|---|
+| Files requested, in order | `openingCard`, `openingCard2`, `act1.sceneA_card`, `act1.sceneA_card2`, `act1.wake`, `act1.tribeNote` — all 206, i.e. streaming |
+| Prefetch | `act1.sceneA_card2.m4a` already fetched while card 3 was still talking |
+| Where it stops | objective "Take a basket from the Community Chest", input enabled, 17 npcs, 22 props |
+| Unrecorded card | still open after 1200 ms, progress bar `display: none`, closes on tap |
+| Console errors | zero |
+| World editor | opens on backtick, `#wed` at 396x800 |
+
+Note for testing: a *synthetic* click never satisfies autoplay policy, so a
+driver-only run makes every clip fail to start, and `playVoice` resolves `ended`
+immediately on that failure, which auto-advances the line instantly. That is the
+correct production behaviour (a refused clip must not hang the story) but it
+looks exactly like the feature being broken. **Grant user activation with a real
+keypress before testing audio.**

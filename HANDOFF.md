@@ -3,7 +3,7 @@
 Written for a session starting cold with no memory of this project. Read this
 top to bottom (five minutes), then open the two files in §7.
 
-Last updated **2026-08-10 16:45 IST**.
+Last updated **2026-08-10 21:15 IST**.
 
 ---
 
@@ -47,6 +47,11 @@ Which narration lines still need recording, and what to name each file:
 node game/tools/list-voice-lines.mjs --todo
 ```
 
+**6 of 111 lines are recorded** (the opening, through to "take a basket from the
+Community Chest"). The filename IS the `strings.js` key path, and the id must
+also be listed in `game/audio/manifest.json` or the clip is treated as absent.
+See `game/audio/README.md` and §17.
+
 ## 3. Debug parameters
 
 `?dev` exposes `window.G` · `?fast` 3-second countdowns · `?act=1|2|3` jump to
@@ -87,11 +92,11 @@ Inherited conventions that will bite if ignored:
 
 ## 5. Current state (2026-08-10)
 
-All three acts play. Content lint green (35 files). Zero console errors across
+All three acts play. Content lint green (38 files). Zero console errors across
 Acts 1, 2 and 3 and the world editor, on desktop and at a 375×812 touch
 viewport.
 
-Three passes have landed, all documented in `GAME-OVERVIEW.md`:
+Six passes have landed, all documented in `GAME-OVERVIEW.md`:
 
 - **§12 — mobile performance.** Draw calls 1014 → 647 over four fixed camera
   poses (−36%). Act 2 dial stall: worst frame 59.9 → 24.9 ms (−58%). Real
@@ -109,6 +114,17 @@ Three passes have landed, all documented in `GAME-OVERVIEW.md`:
   store box receives, and every tool must go back; the bear beat is now a ruse
   that walks you out to the plains still holding the bow. Adds `src/inventory.js`,
   `src/ui/container.js` and `src/sound.js`. §15.2 is the do-not-undo list.
+- **§16 — the Scene B black screen.** Act 1 stopped dead on a phone at the
+  10,000 BCE crossing: Scene C raised its first card *underneath* `#fader`
+  (z-index 50, `pointer-events: auto`, card at 30), so the card was invisible
+  and its Continue button ate no taps. Only the keyboard fallback could clear
+  it, which is why desktop never saw it. One line: lift the fader before the
+  card, as `sceneD` already does. Every other fade window swept and clean.
+- **§17 — the opening is voiced.** Six recordings in, and `HUD.card()` learned
+  to narrate: four of the six are cards, and only `narrator()` had a voice path,
+  so the opening would have skipped them. A voiced card reads itself and closes
+  on `ended`; an unvoiced one is untouched. Also: a UTF-8 BOM in
+  `manifest.json` made the tooling report every recorded line as unregistered.
 
 **Act 1 is the current focus.** Acts 2 and 3 are deliberately untouched by §15.
 
@@ -194,6 +210,22 @@ characters then prefer sliding sideways along an obstacle over crossing it.
   **Test pointer coarseness if you mean form factor.**
 - **Hide everything but the object under test when diffing pixels.** A pulsing
   objective beacon masqueraded as a geometry regression.
+- **A synthetic click never satisfies autoplay policy, so audio tests lie.**
+  With no user activation every clip fails to start, `playVoice` resolves
+  `ended` on that failure (correct: a refused clip must not hang the story), and
+  the line auto-advances instantly, which looks exactly like the feature being
+  broken. Grant activation with a real keypress first (`computer` → `key`), then
+  drive the rest however you like. `navigator.userActivation.hasBeenActive` and
+  `SFX.ctx.state === 'running'` confirm it took.
+- **A keyboard fallback will hide a phone-fatal bug from every desktop test.**
+  `HUD.card()` and `HUD.narrator()` also resolve on Enter / Space / E, bound to
+  `window`, where no z-index can block them. Act 1 shipped with a card raised
+  under `#fader` (opaque, z-index 50, `pointer-events: auto`) and desktop walked
+  straight through it on the spacebar while every phone stopped dead on a black
+  screen (§16). **Test any input-gated beat the way a finger meets it**: read
+  `document.elementFromPoint` at the button's centre and dispatch to *that*, not
+  to the element you meant to press. A `.click()` on a covered node proves
+  nothing, because it ignores `pointer-events` entirely.
 - **The browser pane starves compositing when hidden**, so screenshots time
   out. Read `renderer.gl.info` and the scene graph via JS instead, which is
   more reliable anyway.
