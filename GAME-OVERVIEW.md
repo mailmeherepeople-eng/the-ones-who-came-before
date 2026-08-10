@@ -1159,3 +1159,69 @@ about the sample and not about the pool: six interactions cannot surface more
 than six of eight clips, and one of those six reused an already-cached clip so
 no request appeared for it. The 40-interaction run is what actually establishes
 that all eight are reachable. Count what sounds, not what downloads.
+
+### 18.5 The iOS silent switch (2026-08-11 01:20 IST)
+
+On iOS the hardware Ring/Silent switch **silences Web Audio but not media
+element playback**. This game uses both: narration streams through an
+`<audio>` element, every character noise is a decoded `AudioBuffer`. So a
+silenced phone gets the story and not the tribe.
+
+Nobody chose that. It fell out of two code paths meeting the platform
+differently, which is the worst kind of behaviour: consistent enough to look
+intended and impossible to reason about.
+
+In practice it is usually invisible, and that is the real trap. The opening
+narration plays a media element within seconds of the Begin button, and that
+leaves the session in the playback category for everything after it. So the
+character noises work **because the narration happened to run first**. A player
+who taps past the opening quickly, or a session that lapses, loses them with no
+way to know why. This was reported once as "the tribe sfx is not audible" and
+turned out on that device to be a stale bundle, not the switch: the split was
+real either way, just not what bit that time.
+
+**The fix:** a silent looping media element, started on the first gesture,
+holds the session in the playback category so the whole mixer behaves the way
+narration already did. Apple-touch only (`iP(hone|ad|od)`, plus the
+iPadOS-reports-as-Mac case caught by `maxTouchPoints > 1`), because nowhere
+else silences Web Audio by hardware switch and anywhere else this is a
+permanently playing element that buys nothing.
+
+Details worth knowing:
+
+- The silence is **generated, not shipped**. 0.4 s of 8 kHz 8-bit mono PCM,
+  built in `silentLoopUrl()` as a blob. An asset that must exist for audio to
+  work would be one more thing to forget, and it is 3,244 bytes of nothing.
+- It is deliberately **NOT routed through the Web Audio graph**. Plain media
+  element playback is what sets the session category; piping it into the
+  context would put it back on the wrong side of the switch.
+- **The in-game Sound setting owns it.** `applySettings()` releases the
+  session when sound is off and takes it again when sound is on, so muting the
+  game never leaves a silent element holding the phone's audio route.
+
+**Accepted trade, stated so nobody has to rediscover it:** a playback session
+interrupts whatever the player had going in another app, and a phone on silent
+still makes noise. The alternative was making narration obey the switch too,
+which means a child who silenced their phone silently loses the voice-over.
+Between a game that is unexpectedly loud and a game that is unexplainably
+quiet, loud is the one a player can act on.
+
+**Verified** on desktop, which is as far as this can be proved without the
+hardware: the generated WAV loads as playable media, decodes to 0.4 s, and has
+a **peak amplitude of exactly 0** (every sample checked, not sampled). The gate
+evaluates false on `Win32`, so nothing changes off Apple hardware. Full audio
+regression after the change: narration plays, 12 talk interactions produce 12
+clips across all 8 distinct files, zero fallbacks to the synth blip, zero
+console errors.
+
+**What could not be verified here:** that iOS actually keeps the session in the
+playback category. That needs an iPhone with the ringer switched OFF and a talk
+interaction. If the noises play with the phone silenced, it works.
+
+One trap this nearly shipped with: `applySettings()` runs at module load via
+`Settings.subscribe`, and the session helpers were written 250 lines below it,
+so `let sessionEl` was still in the temporal dead zone. Function declarations
+hoist and `let` does not, so the whole module would have thrown on load and
+taken the game with it. The block was moved above the mixer. **A boot-time
+ReferenceError is the one class of bug that no amount of gameplay testing
+finds, because there is no game.**
