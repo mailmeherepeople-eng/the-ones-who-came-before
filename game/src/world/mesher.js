@@ -179,6 +179,21 @@ export class ChunkMesher {
                 const vg = 0.72 + 0.28 * Math.min(1, Math.max(0, (y - 4) / 12));
                 tr *= vg; tg *= vg; tb *= vg;
               }
+              // Wood SIDES barely see the warm sun: what lands on them is the
+              // cool hemisphere sky (0xaecdea) and the cool fill (0xbdd2ec),
+              // and pale birch bark has too little saturation to survive being
+              // multiplied by that — it came out concrete grey at the act 3
+              // vista even after the palette itself was warmed. Widening the
+              // R over B spread here means the cool light lands on cream
+              // rather than on white. Deliberately kept under the point where
+              // base × shade × jitter × tint would clip, so nothing blows out.
+              // Note B.WOOD is not only trunks: pen fences, granary stilts and
+              // box walls, well posts, the log crossing and stumps all use it.
+              // That is intended — it is all wood, and it all wants to read
+              // warm under the same cold sky.
+              if (f.part === 'side' && (id === B.WOOD_BIRCH || id === B.WOOD)) {
+                tr *= 1.08; tb *= 0.82;
+              }
             }
             // painted faces let the texture carry the hue: the vertex colour
             // is pure light (face shade × jitter × AO), so the same tile reads
