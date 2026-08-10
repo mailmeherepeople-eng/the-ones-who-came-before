@@ -305,6 +305,14 @@ async function sceneA(G) {
   // columns reads the cliff ABOVE the shelter and would drop us on the roof.
   G.player.teleport(SITES.shelter.x, SITES.shelter.z - 2, Math.PI, CAVE_FLOOR_Y + 0.02);
   G.mode = 'ground';
+  // ground mode means the frame loop is driving the player again, and the
+  // opening card/narration chain below is several seconds long: without this
+  // a held key (or a fast tapper on touch) walks out of the shelter mid-card
+  // and the scene's own teleport later yanks them back, which reads as a
+  // glitch. Control is handed over at the wake line, once there is something
+  // to walk toward. setEnabled(false) also hides the touch joystick, so the
+  // opening reads as a cutscene on a phone instead of a paused game.
+  G.input.setEnabled(false);
 
   // band of 6 (player + 5 NPCs) + elder
   const camp = SITES.campA;
@@ -419,8 +427,10 @@ async function sceneA(G) {
 
   await G.hud.fadeIn(500);
   await G.hud.card([S.act1.sceneA_card, S.act1.sceneA_card2]);
-  G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
   await G.hud.narrator(S.act1.wake);
+  G.input.setEnabled(true); // you wake, you get to move
+  // the hint names the controls, so it belongs with the controls, not before
+  G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
   await G.hud.narrator(S.act1.tribeNote); // 4.32 groups help each other
 
   // --- gather berries (4.33) — but first, a basket from the band's store ---
