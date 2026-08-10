@@ -127,15 +127,40 @@ function route(el, bus) {
 }
 
 // ---------- short sfx: decoded, pooled ----------
+
+// decodeAudioData has two shapes. Modern engines return a Promise; older WebKit
+// only takes callbacks and returns undefined, which silently turns the `.then`
+// chain below into `undefined` and makes every sfx a no-op. iOS is the platform
+// this file exists to keep working, so handle both. Passing callbacks AND
+// reading the return value is safe: whichever arrives first wins, and settling
+// a promise twice is a no-op.
+function decode(ctx, bytes) {
+  return new Promise((resolve, reject) => {
+    const maybe = ctx.decodeAudioData(bytes, resolve, reject);
+    if (maybe && typeof maybe.then === 'function') maybe.then(resolve, reject);
+  });
+}
+
+// A swallowed decode error is how a whole category of audio goes missing
+// without a word: the clip never plays, the caller falls back, and nothing
+// anywhere says why. Say it once per id so the device that cannot read a file
+// names the file.
+const warnedAbout = new Set();
+function warnOnce(id, e) {
+  if (warnedAbout.has(id)) return;
+  warnedAbout.add(id);
+  console.warn(`sound: could not decode sfx/${id}${EXT}:`, e?.message ?? e);
+}
+
 const buffers = new Map();
 async function buffer(id) {
   if (buffers.has(id)) return buffers.get(id);
   const m = mixer();
   if (!m || !has('sfx', id)) return null;
   const p = fetch(url('sfx', id))
-    .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('404'))))
-    .then((b) => m.ctx.decodeAudioData(b))
-    .catch(() => null);
+    .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((b) => decode(m.ctx, b))
+    .catch((e) => { warnOnce(id, e); return null; });
   buffers.set(id, p);
   return p;
 }
