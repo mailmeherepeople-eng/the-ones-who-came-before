@@ -18,6 +18,9 @@ import { runBeats } from './beats.js';
 import { skyGlimpse } from '../sky/interstitial.js';
 import { wait } from '../ui/hud.js';
 import { SFX } from '../audio.js';
+import { Sound } from '../sound.js';
+import { Inv, ITEMS } from '../inventory.js';
+import { openContainer } from '../ui/container.js';
 
 export async function runAct1(G, resumeScene = null) {
   const scenes = [
@@ -122,17 +125,91 @@ function objectiveCue(G, text, at = null, color = 0xffe9a8) {
 let STORE_BOX = null;
 let STORE_BOX_AT = null;
 
-async function depositAtStore(G, objectiveText, doneText) {
-  if (!STORE_BOX_AT) return; // scene jumped straight past the camp setup
-  objectiveCue(G, objectiveText, STORE_BOX_AT);
-  await interactOnce(G, {
-    id: 'store-box', x: STORE_BOX_AT.x, z: STORE_BOX_AT.z, r: 2.6, prompt: '📦',
+let STORE_A = null;
+
+// The player model has one visual slot but the inventory has many, so this
+// decides what the hands show: the borrowed tool if there is one, otherwise
+// whatever is being carried. Call it after every transfer.
+function syncEquip(G) {
+  const tool = Inv.heldTool();
+  const show = tool ?? Inv.contents('player')[0]?.id ?? null;
+  G.player.equip(show ? (ITEMS[show]?.equip ?? null) : null);
+  G.hud.setSatchel(Inv.totalOfKind('player', 'harvest'), Inv.total('player') > 0);
+}
+
+// The crate visibly fills as the band's food piles up. Twelve is "full" and it
+// clamps, so a generous gatherer cannot overflow the mesh.
+function refreshStoreFill() {
+  STORE_BOX?.setFill(Math.min(1, Inv.total('store') / 12));
+}
+
+// Poll until a condition on the inventory holds. Beats wait on THIS rather than
+// on one scripted tap, which is what lets the player open a box, look through
+// it, change their mind and come back, with the beat advancing the moment the
+// condition is actually true.
+function until(test, ms = 200) {
+  return new Promise((resolve) => {
+    if (test()) { resolve(); return; }
+    const iv = setInterval(() => { if (test()) { clearInterval(iv); resolve(); } }, ms);
   });
-  STORE_BOX?.setFill(Math.min(1, (STORE_BOX.level || 0) + 0.34));
-  G.player.equip(null); // it is in the box now, not in your hands
+}
+
+// Register the two stations once for the whole scene. Before this, taking a
+// tool was a one-shot scripted tap that handed you an item you never saw; now
+// both are real containers you can open whenever you like.
+function addStations(G, chest) {
+  G.interactables.push({
+    id: 'chest', x: STORE_A.x, z: STORE_A.z, r: 2.8, enabled: true,
+    prompt: '🧰', label: S.act1.openChest,
+    async onInteract() {
+      chest.hold(); // lid stays up while you are looking inside
+      await openContainer(G, 'chest');
+      chest.releaseHold();
+      syncEquip(G);
+    },
+  });
+  G.interactables.push({
+    id: 'store', x: STORE_BOX_AT.x, z: STORE_BOX_AT.z, r: 2.6, enabled: true,
+    prompt: '📦', label: S.act1.openStore,
+    async onInteract() {
+      await openContainer(G, 'store');
+      syncEquip(G);
+      refreshStoreFill();
+    },
+  });
+}
+
+// Beat helpers. Each sets an objective, points the beacon at the right station
+// and waits for the inventory to say the job is done.
+async function takeFromChest(G, itemId, objectiveText) {
+  objectiveCue(G, objectiveText, STORE_A);
+  await until(() => Inv.has('player', itemId));
+  setBeacon(G, null);
+  FX.flash(fxAt(G, STORE_A.x, STORE_A.z, 0.6), { size: 0.6, life: 0.13 });
+  G.audio?.blip?.();
+}
+
+async function putInStore(G, itemId, objectiveText, doneText) {
+  if (!STORE_BOX_AT) return;
+  objectiveCue(G, objectiveText, STORE_BOX_AT);
+  await until(() => !Inv.has('player', itemId));
+  refreshStoreFill();
   const at = fxAt(G, STORE_BOX_AT.x, STORE_BOX_AT.z, 0.7);
   FX.puff(at, { count: 10, size: 0.22, life: 0.5, color: 0xd8c9a4 });
   FX.ring(at, { color: 0xffd28a, radius: 1.5, life: 0.6 });
+  G.audio?.success?.();
+  setBeacon(G, null);
+  if (doneText) await G.hud.narrator(doneText);
+}
+
+// The other half of borrowing, and the reason the whole system exists: the tool
+// is not yours, so the beat does not end until it is back in the chest.
+async function returnToChest(G, itemId, objectiveText, doneText) {
+  objectiveCue(G, objectiveText, STORE_A);
+  await until(() => !Inv.has('player', itemId));
+  const at = fxAt(G, STORE_A.x, STORE_A.z, 0.7);
+  FX.puff(at, { count: 8, size: 0.2, life: 0.45, color: 0xd8c9a4 });
+  FX.ring(at, { color: 0xffd28a, radius: 1.4, life: 0.55 });
   G.audio?.success?.();
   setBeacon(G, null);
   if (doneText) await G.hud.narrator(doneText);
@@ -204,6 +281,89 @@ function dressSceneACold(world) {
       placeTree(world, tx, h + 1, tz, 3);
     }
   }
+}
+
+// ---------- wild berries, everywhere ----------
+//
+// The scripted gather uses six hand-placed bush PROPS at SITES.berries. Those
+// stay. This is the rest of the valley: berries you can wander into and pick
+// on your own terms, so foraging is a thing you do rather than a checklist at
+// one location.
+//
+// They are B.SHRUB_BERRY blocks, not props, and that is the whole trick.
+// SHRUB_BERRY is cross flora, and every cross-flora block in a chunk merges
+// into ONE mesh, so a hundred of these cost nothing. A hundred prop bushes
+// would have cost ~200 draw calls, about +70% on Act 1.
+//
+// Scene A needs the explicit scatter because terrain's bush-blob pass (the only
+// generator of SHRUB_BERRY) is skipped entirely when the world is iced, so the
+// cold valley ships with none at all.
+const WILD_BERRY_CLEAR = 5; // blocks kept free around any named site
+
+function scatterWildBerries(world, target = 110) {
+  const sites = Object.values(SITES).flatMap((s) => (Array.isArray(s) ? s : [s]));
+  let placed = 0;
+  // deterministic walk so a reload puts the same bushes in the same places
+  for (let i = 0; i < 6000 && placed < target; i++) {
+    let h = Math.imul(i ^ 0x9e3779b9, 2654435761);
+    h = (h ^ (h >>> 15)) >>> 0;
+    const x = h % 128;
+    const z = (h >>> 7) % 128;
+    if (z < 14) continue;                       // behind the shelter cliff
+    if (Math.abs(x - riverX(z)) < 7) continue;  // leave the banks to the reeds
+    if (sites.some((s) => Math.abs(x - s.x) <= WILD_BERRY_CLEAR && Math.abs(z - s.z) <= WILD_BERRY_CLEAR)) continue;
+    const gy = world.topAt(x, z);
+    const top = world.get(x, gy, z);
+    if (top !== B.GRASS && top !== B.SNOWGRASS) continue;
+    if (world.get(x, gy + 1, z) !== B.AIR) continue;
+    world.setRaw(x, gy + 1, z, B.SHRUB_BERRY);  // setRaw: pre-mesh, no dirty flag
+    placed++;
+  }
+  return placed;
+}
+
+// Register one interactable per wild bush. These are plain distance checks in
+// nearestInteract, so ~110 of them is a rounding error next to a frame.
+function addWildBerryPicks(G) {
+  let found = 0;
+  for (let x = 0; x < 128; x++) {
+    for (let z = 14; z < 128; z++) {
+      const gy = G.world.topAt(x, z) + 1;
+      if (G.world.get(x, gy, z) !== B.SHRUB_BERRY) continue;
+      found++;
+      G.interactables.push({
+        id: `wild-${x}-${z}`, x, z, r: 2.0, prompt: '🫐', label: S.act1.pickBerry, enabled: true,
+        onInteract(self) {
+          self.enabled = false;
+          G.interactables = G.interactables.filter((o) => o !== self);
+          G.world.set(x, gy, z, B.AIR); // marks the chunk dirty; mesher flushes it
+          const bp = { x: x + 0.5, y: gy + 0.4, z: z + 0.5 };
+          FX.puff(bp, { count: 4, size: 0.24, life: 0.5 });
+          FX.floaties(bp, { color: 0xd8503c, count: 5, size: 0.09, life: 1.1, rise: 0.9 });
+          Inv.add('player', 'berry', 2);
+          syncEquip(G);
+          G.audio?.blip?.();
+        },
+      });
+    }
+  }
+  return found;
+}
+
+// Fishing spots ON the bank, derived from the river's own centre line rather
+// than hand-placed. SITES.fishSpot sits ~11 blocks inland, which is why the
+// splash used to land on dry grass; it is kept as the first, signposted spot
+// for continuity with the saved record, but nudged to the water like the rest.
+function FISH_SPOTS(G) {
+  const out = [];
+  for (const z of [40, 46, 53, 60]) {
+    // stand on the west bank, two blocks back from the centre line
+    let x = Math.round(riverX(z)) - 3;
+    // walk inland until the ground is actually above the waterline
+    for (let k = 0; k < 6 && G.world.topAt(x, z) <= 5; k++) x -= 1;
+    out.push({ x, z });
+  }
+  return out;
 }
 
 // wait until the player interacts with a named point
@@ -298,6 +458,7 @@ async function sceneA(G) {
   douseFires();
   buildSceneA(G.world);
   dressSceneACold(G.world);
+  scatterWildBerries(G.world); // before remeshAll, so setRaw is enough
   G.mesher.remeshAll();
   G.renderer.setSky(0xbcd3e6, 0xd4e2ec); // colder light
   // wake INSIDE the rock shelter, facing the mouth. The cave floor is y=9 so
@@ -347,12 +508,27 @@ async function sceneA(G) {
   // the band's shared store: one lidded chest of tools by the camp. Front face
   // is +z, so it looks toward the camp; the spot is clear of the fire/knap/tent
   // footprints and the walk lines to the beat sites.
-  const STORE_A = { x: 44, z: 22 };
+  STORE_A = { x: 44, z: 22 };
   const chest = addProp(G, P.makeCommunityChest(STORE_A.x, groundY(G, STORE_A.x, STORE_A.z), STORE_A.z));
   // the open store box, two blocks along the same line so both read as one
   // station: take tools out of the chest, put food into the box
   STORE_BOX_AT = { x: STORE_A.x + 2, z: STORE_A.z };
   STORE_BOX = addProp(G, P.makeStoreBox(STORE_BOX_AT.x, groundY(G, STORE_BOX_AT.x, STORE_BOX_AT.z), STORE_BOX_AT.z));
+
+  // The band's stock. Stocked (not added) so re-entering the scene cannot
+  // breed duplicate bows. More than one of each on purpose: the chest has to
+  // read as the band's supply, not as a puzzle box holding exactly your quest
+  // item. Anything already sitting in the player's hands from a previous run
+  // is dropped back, so a resumed scene never starts you holding the tribe's
+  // only bow.
+  Inv.stock('chest', { basket: 4, bow: 2, rod: 2, spear: 2, waterskin: 1 });
+  Inv.clear('player');
+  if (!Save.getRecord('gathered')) Inv.clear('store');
+  addStations(G, chest);
+  addWildBerryPicks(G); // the whole valley is forageable, not just the six bushes
+  refreshStoreFill();
+  syncEquip(G);
+  G.hud.onSatchel = () => openContainer(G, 'player');
 
   // REAL berry bushes: swap the BUSH blocks at the gather sites for leafy
   // props with pickable berries (world.set marks the chunks dirty; the mesher
@@ -386,10 +562,17 @@ async function sceneA(G) {
   // Six, for a hunt that asks for three. Spooked deer scatter and drift back
   // to their own home, so the margin is what stops a bad volley from leaving
   // the player with nothing left to stalk.
+  // Ten now, spread wider, so the plains read as a herd worth crossing the
+  // valley for rather than a firing line. Animals beyond ~46 blocks of the
+  // camera skip their AI and hide (see Animal.update), and the plains sit 57
+  // blocks from camp, so the extra six are free for most of the act.
   const deer = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 10; i++) {
     deer.push(new Animal(G.renderer.scene, {
-      kind: 'deer', x: SITES.plains.x - 6 + i * 2.6, z: SITES.plains.z + (i % 3) * 4, world: G.world, wander: 6,
+      kind: 'deer',
+      x: SITES.plains.x - 10 + (i % 5) * 5,
+      z: SITES.plains.z - 4 + Math.floor(i / 5) * 7 + (i % 3) * 2,
+      world: G.world, wander: 7,
     }));
   }
   G.npcs.push(...deer);
@@ -425,6 +608,9 @@ async function sceneA(G) {
   ambient.assign(band[3], ['gather2', 'wood'], 'outbound');
   G.props.push(ambient); // ticks with the props; clearStage drops it
 
+  // Scene music, layered over the synth wind bed (which never stops).
+  // A missing file is silent, so this is safe before anything is recorded.
+  Sound.playMusic('act1.camp');
   await G.hud.fadeIn(500);
   await G.hud.card([S.act1.sceneA_card, S.act1.sceneA_card2]);
   await G.hud.narrator(S.act1.wake);
@@ -435,15 +621,15 @@ async function sceneA(G) {
 
   // --- gather berries (4.33) — but first, a basket from the band's store ---
   if (!Save.getRecord('gathered')) {
-    objectiveCue(G, S.act1.obj_store_basket, STORE_A);
-    await interactOnce(G, { id: 'store-basket', x: STORE_A.x, z: STORE_A.z, r: 2.8, prompt: '🧺' });
-    chest.openFor(2000); // the lid comes up for you exactly as it does for them
-    G.player.equip('basket');
-    FX.flash(fxAt(G, STORE_A.x, STORE_A.z, 0.6), { size: 0.6, life: 0.13 });
+    await takeFromChest(G, 'basket', S.act1.obj_store_basket);
+    chest.openFor(1200); // the lid drops again behind you
     FX.floaties(fxAt(G, STORE_A.x, STORE_A.z, 0.6), { color: 0xffd9a0, count: 8, size: 0.1, life: 1.4 });
     await G.hud.narrator(S.act1.storeLesson); // shared tools — the one teaching line
 
-    let got = 0;
+    // The basket STAYS in your hands through the gather. It used to be
+    // replaced the moment you picked anything up, which quietly undid the
+    // lesson: you cannot be taught that the tool is borrowed if it vanishes
+    // before you can give it back.
     const berrySites = SITES.berries.slice(0, 5);
     const remaining = new Set(berrySites);
     objectiveCue(G, S.act1.obj_gather);
@@ -451,7 +637,7 @@ async function sceneA(G) {
     await new Promise((resolve) => {
       for (const b of berrySites) {
         G.interactables.push({
-          id: `berry-${b.x}`, x: b.x, z: b.z, r: 2.4, prompt: '🫐', enabled: true,
+          id: `berry-${b.x}`, x: b.x, z: b.z, r: 2.4, prompt: '🫐', label: S.act1.pickBerry, enabled: true,
           onInteract(self) {
             self.enabled = false;
             remaining.delete(b);
@@ -460,10 +646,11 @@ async function sceneA(G) {
             FX.puff(bp, { count: 5, size: 0.28, life: 0.55 });
             FX.floaties(bp, { color: 0xaef0c8, count: 7, size: 0.1, life: 1.3 });
             FX.floaties(bp, { color: 0xd8503c, count: 4, size: 0.09, life: 1.1, rise: 0.9 });
-            got++;
+            Inv.add('player', 'berry', 3); // a handful per bush, not a single fruit
+            syncEquip(G);
+            const got = Inv.count('player', 'berry');
             G.hud.setObjective(S.act1.obj_gather_n(got));
-            if (got >= 4) {
-              // basket full!
+            if (remaining.size === 0 || got >= 12) {
               setBeacon(G, null);
               FX.confetti({ x: G.player.pos.x, y: G.player.pos.y + 1.2, z: G.player.pos.z }, { count: 24 });
               resolve();
@@ -476,18 +663,16 @@ async function sceneA(G) {
     });
     G.interactables = G.interactables.filter((o) => !String(o.id).startsWith('berry-'));
     await G.hud.narrator(S.act1.gatherDone);
-    await depositAtStore(G, S.act1.obj_depositBerries, S.act1.depositBerriesDone);
+    await putInStore(G, 'berry', S.act1.obj_depositBerries, S.act1.depositBerriesDone);
+    await returnToChest(G, 'basket', S.act1.obj_returnBasket, S.act1.returnBasketDone);
     await G.hud.narrator(S.act1.huntersGatherers);
     Save.addRecord({ id: 'gathered', type: 'camp', pos: { ...camp }, made: YEARS.SCENE_A_YEAR, data: { label: 'gather' } });
   }
 
   // --- hunt (real bow: fetch the bow, stalk the plains, loose arrows) ---
   if (!Save.getRecord('hunted')) {
-    objectiveCue(G, S.act1.obj_store_bow, STORE_A);
-    await interactOnce(G, { id: 'store-bow', x: STORE_A.x, z: STORE_A.z, r: 2.8, prompt: '🏹' });
-    chest.openFor(2000);
-    G.player.equip('bow'); // swap: the basket goes back for the next hands
-    FX.flash(fxAt(G, STORE_A.x, STORE_A.z, 0.6), { size: 0.6, life: 0.13 });
+    await takeFromChest(G, 'bow', S.act1.obj_store_bow);
+    chest.openFor(1200);
 
     objectiveCue(G, S.act1.obj_hunt, SITES.plains);
     await reach(G, SITES.plains.x, SITES.plains.z, 8);
@@ -524,7 +709,7 @@ async function sceneA(G) {
         // E / Enter still fires while aiming, for players on a keyboard
         const wantShot = fireRequested || (aiming && inp.interact && !interactableNear(G));
         fireRequested = false;
-        if (bag.length < HUNT_TARGET && wantShot) spawnArrow(G, arrows);
+        if (bag.length < HUNT_TARGET && wantShot) { Sound.playSfx('bow-loose'); spawnArrow(G, arrows); }
         for (let i = arrows.length - 1; i >= 0; i--) {
           const a = arrows[i];
           if (a.stuck > 0) {
@@ -596,61 +781,100 @@ async function sceneA(G) {
     for (let i = 0; i < meats.length; i++) {
       const m = meats[i];
       objectiveCue(G, S.act1.obj_meatN(i + 1, meats.length), m.at);
-      await interactOnce(G, { id: `meat${i}`, x: m.at.x, z: m.at.z, r: 2.6, prompt: '🍖' });
+      await interactOnce(G, { id: `meat${i}`, x: m.at.x, z: m.at.z, r: 2.6, prompt: '🍖', label: S.act1.takeMeat });
       P.disposeGroup(G.renderer.scene, m.prop.group);
       G.props = G.props.filter((pp) => pp !== m.prop);
+      Inv.add('player', 'meat', 1);
+      syncEquip(G); // the bow is still the tool, so the bow is still what shows
       FX.floaties({ x: m.at.x, y: m.at.y + 0.5, z: m.at.z }, { color: 0xffd9a0, count: 12, size: 0.11, life: 1.6, rise: 1.0 });
     }
-    G.player.equip('meat');
     await G.hud.narrator(S.act1.huntSuccess);
-    await depositAtStore(G, S.act1.obj_depositMeat, S.act1.depositMeatDone);
+    // The meat goes in the box. The BOW DOES NOT go back yet, and that is the
+    // hinge the next beat turns on.
+    await putInStore(G, 'meat', S.act1.obj_depositMeat, S.act1.depositMeatDone);
     FX.confetti({ x: G.player.pos.x, y: G.player.pos.y + 1.2, z: G.player.pos.z }, { count: 18 });
     Save.addRecord({ id: 'hunted', type: 'camp', pos: { ...SITES.plains }, made: YEARS.SCENE_A_YEAR, data: { label: 'hunt', count: HUNT_TARGET } });
   }
 
-  // --- predator tension → run to fire ---
-  await G.hud.narrator(S.act1.predatorNear);
-  // A bear, and it takes its time. Spawned further out than the old prowler
-  // (14 blocks rather than 10) so the player gets a good look at the size
-  // before it starts closing, and slow enough that walking away always works.
-  const predator = new Animal(G.renderer.scene, {
-    kind: 'predator', x: G.player.pos.x + 11, z: G.player.pos.z + 9, world: G.world, wander: 2, speed: 1.7,
-  });
-  G.npcs.push(predator);
-  // fast red-tinted danger flash where it appears + dust as it breaks cover
-  FX.flash(fxAt(G, predator.pos.x, predator.pos.z, 1.0), { color: 0xff5a4a, size: 1.7, life: 0.2 });
-  FX.puff(predator.pos, { count: 10, size: 0.32, life: 0.6, color: 0xb0a184 });
-  predator.followTarget = G.player.pos;
-  objectiveCue(G, S.act1.predatorChase, SITES.fire, 0xff8a6a); // safety marker: the fire
-  await reach(G, SITES.fire.x, SITES.fire.z, 5);
-  setBeacon(G, null); // safe — the fire beacon has done its job
-  predator.followTarget = null;
-  predator.fleeFrom(SITES.fire.x, SITES.fire.z);
-  FX.puff(predator.pos, { count: 12, size: 0.34, life: 0.7, color: 0xb0a184 });
-  FX.ring(fxAt(G, SITES.fire.x, SITES.fire.z), { color: 0xffc98a, radius: 3.2, life: 0.8 });
-  await G.hud.narrator(S.act1.predatorSafe);
+  // --- the second hunt, which is a ruse ---
+  //
+  // The band asks for more meat, so you walk back out to the plains still
+  // carrying the bow. There is no second hunt: reaching the plains is what
+  // spawns the bear, far from camp, which is the only way the run home is a
+  // run at all. The old version spawned it beside the store box and "flee to
+  // camp" was a seven block stroll.
+  //
+  // Guarded, unlike before. This beat used to replay on every resume into the
+  // scene while every neighbour was guarded.
+  if (!Save.getRecord('bear')) {
+    if (!Inv.has('player', 'bow')) await takeFromChest(G, 'bow', S.act1.obj_store_bow);
+    await G.hud.narrator(S.act1.moreMeat);
+    objectiveCue(G, S.act1.obj_huntMore, SITES.plains);
+    await reach(G, SITES.plains.x, SITES.plains.z, 9);
+
+    // it takes its time: slow enough that walking away always works, spawned
+    // far enough out that you get a good look at the size before it closes
+    await G.hud.narrator(S.act1.predatorNear);
+    const predator = new Animal(G.renderer.scene, {
+      kind: 'predator', x: G.player.pos.x + 11, z: G.player.pos.z + 9, world: G.world, wander: 2, speed: 1.7,
+    });
+    G.npcs.push(predator);
+    Sound.playSfx('bear-roar');
+    Sound.playMusic('act1.chase', { fade: 0.4 });
+    FX.flash(fxAt(G, predator.pos.x, predator.pos.z, 1.0), { color: 0xff5a4a, size: 1.7, life: 0.2 });
+    FX.puff(predator.pos, { count: 10, size: 0.32, life: 0.6, color: 0xb0a184 });
+    predator.followTarget = G.player.pos;
+    // the hunt objective is dropped outright; there is only one thing to do now
+    objectiveCue(G, S.act1.predatorChase, SITES.fire, 0xff8a6a); // safety marker: the fire
+    await reach(G, SITES.fire.x, SITES.fire.z, 5);
+    setBeacon(G, null); // safe — the fire beacon has done its job
+    predator.followTarget = null;
+    predator.fleeFrom(SITES.fire.x, SITES.fire.z);
+    Sound.playMusic('act1.camp', { fade: 2.0 }); // back to safety
+    FX.puff(predator.pos, { count: 12, size: 0.34, life: 0.7, color: 0xb0a184 });
+    FX.ring(fxAt(G, SITES.fire.x, SITES.fire.z), { color: 0xffc98a, radius: 3.2, life: 0.8 });
+    await G.hud.narrator(S.act1.predatorSafe);
+
+    // and only now, out of breath, are you reminded it was never yours
+    await returnToChest(G, 'bow', S.act1.obj_returnBow, S.act1.returnBowDone);
+    Save.addRecord({ id: 'bear', type: 'camp', pos: { ...SITES.fire }, made: YEARS.SCENE_A_YEAR, data: { label: 'bear' } });
+  }
 
   // --- fish the river (rod from the store first; the float minigame stays) ---
   if (!Save.getRecord('fished')) {
-    objectiveCue(G, S.act1.obj_store_rod, STORE_A);
-    await interactOnce(G, { id: 'store-rod', x: STORE_A.x, z: STORE_A.z, r: 2.8, prompt: '🎣' });
-    chest.openFor(2000);
-    G.player.equip('rod'); // swap: the bow goes back into the chest
-    FX.flash(fxAt(G, STORE_A.x, STORE_A.z, 0.6), { size: 0.6, life: 0.13 });
-    objectiveCue(G, S.act1.obj_fish, SITES.fishSpot);
-    await interactOnce(G, { id: 'fish', x: SITES.fishSpot.x, z: SITES.fishSpot.z, r: 3.4, prompt: '🎣' });
+    await takeFromChest(G, 'rod', S.act1.obj_store_rod);
+    chest.openFor(1200);
+    // Four spots along the bank, not one, and derived from riverX() so they are
+    // actually ON the water. SITES.fishSpot is 11 blocks inland from the river
+    // centre, which is why the old splash FX fired over dry grass.
+    const spots = FISH_SPOTS(G);
+    objectiveCue(G, S.act1.obj_fish, spots[0]);
+    const picked = await new Promise((resolve) => {
+      for (const s of spots) {
+        G.interactables.push({
+          id: `fish-${s.x}-${s.z}`, x: s.x, z: s.z, r: 3.0, prompt: '🎣', label: S.act1.castLine, enabled: true,
+          onInteract() {
+            G.interactables = G.interactables.filter((o) => !String(o.id).startsWith('fish-'));
+            resolve(s);
+          },
+        });
+      }
+    });
+    setBeacon(G, null);
     await timingGame(G.hud.root, {
       title: S.act1.obj_fish, rounds: 1, speed: 1.5, zone: 0.65,
       failText: S.act1.fishMissed, mode: 'react',
     });
     // the catch breaks the surface: matte droplets + a couple of glints
-    const splash = { x: SITES.fishSpot.x, y: G.player.pos.y + 0.25, z: SITES.fishSpot.z };
+    const splash = { x: picked.x, y: G.player.pos.y + 0.25, z: picked.z };
     FX.burst(splash, { color: 0xbfe4f5, count: 26, size: 0.13, speed: 3.4, life: 0.6, gravity: 9, additive: false });
     FX.burst(splash, { color: 0x9fd8ff, count: 8, size: 0.1, speed: 2.4, life: 0.45 });
+    Inv.add('player', 'fish', 2);
+    syncEquip(G);
     await G.hud.narrator(S.act1.fishCaught);
-    await depositAtStore(G, S.act1.obj_depositFish, S.act1.depositFishDone);
+    await putInStore(G, 'fish', S.act1.obj_depositFish, S.act1.depositFishDone);
+    await returnToChest(G, 'rod', S.act1.obj_returnRod, S.act1.returnRodDone);
     Save.addRecord({ id: 'fished', type: 'camp', pos: { ...SITES.fishSpot }, made: YEARS.SCENE_A_YEAR, data: { label: 'fish' } });
-    G.player.equip(null); // the rod's task chain is done, back to the tribe
   }
 
   // --- fire circle: lost language (4.35) ---
@@ -670,7 +894,7 @@ async function sceneA(G) {
   // --- knapping: fire + improved tools (4.36) ---
   if (!Save.getRecord('arrowheads')) {
     objectiveCue(G, S.act1.obj_knap, SITES.knap);
-    await interactOnce(G, { id: 'knap', x: SITES.knap.x, z: SITES.knap.z, prompt: '🪨' });
+    await interactOnce(G, { id: 'knap', x: SITES.knap.x, z: SITES.knap.z, prompt: '🪨', label: S.act1.lbl_knap });
     await timingGame(G.hud.root, {
       title: S.act1.knapIntro, rounds: 3, speed: 1.35, zone: 0.62,
       stepText: (n) => {
@@ -691,7 +915,7 @@ async function sceneA(G) {
   if (!Save.getRecord('painting')) {
     // explicit y: the wall is inside the shelter — topAt would read the cliff
     objectiveCue(G, S.act1.obj_paint, { x: SITES.shelterWall.x, y: 10, z: SITES.shelterWall.z + 2 });
-    await interactOnce(G, { id: 'paint', x: SITES.shelterWall.x, z: SITES.shelterWall.z + 2, r: 3, prompt: '🎨' });
+    await interactOnce(G, { id: 'paint', x: SITES.shelterWall.x, z: SITES.shelterWall.z + 2, r: 3, prompt: '🎨', label: S.act1.lbl_paint });
     setBeacon(G, null); // at the wall — the painting UI takes over
     const { png } = await paintingGame(G.hud.root);
     Save.addRecord({
@@ -724,7 +948,7 @@ async function sceneA(G) {
       for (const s of SITES.shells) {
         const prop = addProp(G, P.makeShellPickup(s.x, groundY(G, s.x, s.z), s.z));
         G.interactables.push({
-          id: `shell-${s.x}`, x: s.x, z: s.z, r: 2.4, prompt: '🐚', enabled: true,
+          id: `shell-${s.x}`, x: s.x, z: s.z, r: 2.4, prompt: '🐚', label: S.act1.lbl_shell, enabled: true,
           onInteract(self) {
             self.enabled = false;
             shellsLeft.delete(s);
@@ -741,7 +965,7 @@ async function sceneA(G) {
       }
     });
     objectiveCue(G, S.act1.obj_drill, SITES.knap);
-    await interactOnce(G, { id: 'drill', x: SITES.knap.x, z: SITES.knap.z, prompt: '📿' });
+    await interactOnce(G, { id: 'drill', x: SITES.knap.x, z: SITES.knap.z, prompt: '📿', label: S.act1.lbl_drill });
     await timingGame(G.hud.root, {
       title: S.act1.drillIntro, rounds: 2, speed: 1.1, zone: 0.7,
       stepText: () => {
@@ -769,7 +993,7 @@ async function sceneA(G) {
     }
     G.npcs.push(...visitors);
     visitors[0].goTo(camp.x + 4, camp.z + 3);
-    await interactOnce(G, { id: 'trade', x: camp.x + 4, z: camp.z + 3, r: 3.2, prompt: '🤝' });
+    await interactOnce(G, { id: 'trade', x: camp.x + 4, z: camp.z + 3, r: 3.2, prompt: '🤝', label: S.act1.lbl_trade });
     setBeacon(G, null); // met them — the exchange dialogue takes over
     visitors[0].say('▲? ◉◉', 2600);
     await G.hud.narrator(S.act1.tradeIntro);
@@ -831,12 +1055,12 @@ async function sceneA(G) {
 
   // muted cue: the beacon still guides, but in the burial's quiet palette
   objectiveCue(G, S.act1.obj_burial_beads, SITES.grave, 0xb9c4cc);
-  await interactOnce(G, { id: 'grave1', x: SITES.grave.x, z: SITES.grave.z, r: 3, prompt: '📿' });
+  await interactOnce(G, { id: 'grave1', x: SITES.grave.x, z: SITES.grave.z, r: 3, prompt: '📿', label: S.act1.lbl_graveBeads });
   const beadsProp = addProp(G, P.makeBeads(0.8), SITES.grave.x - 0.3, gy - 0.45, SITES.grave.z + 0.2);
   void beadsProp;
   FX.floaties({ x: SITES.grave.x, y: gy + 0.2, z: SITES.grave.z }, { color: 0xd9d2c0, count: 5, size: 0.09, life: 2.2, rise: 0.5 });
   objectiveCue(G, S.act1.obj_burial_tool, SITES.grave, 0xb9c4cc);
-  await interactOnce(G, { id: 'grave2', x: SITES.grave.x, z: SITES.grave.z, r: 3, prompt: '🔪' });
+  await interactOnce(G, { id: 'grave2', x: SITES.grave.x, z: SITES.grave.z, r: 3, prompt: '🔪', label: S.act1.lbl_graveBlade });
   setBeacon(G, null); // grave goods placed — stillness for the farewell
   addProp(G, P.makeStoneTool('blade'), SITES.grave.x + 0.4, gy - 0.5, SITES.grave.z - 0.2);
   Save.addRecord({
@@ -1002,7 +1226,7 @@ async function sceneC(G) {
     await new Promise((resolve) => {
       for (const s of spots) {
         G.interactables.push({
-          id: `plant-${s.x}-${s.z}`, x: s.x, z: s.z, r: 2.2, prompt: '🌾', enabled: true,
+          id: `plant-${s.x}-${s.z}`, x: s.x, z: s.z, r: 2.2, prompt: '🌾', label: S.act1.lbl_plant, enabled: true,
           onInteract(self) {
             self.enabled = false;
             const h = G.world.topAt(s.x, s.z);
@@ -1073,12 +1297,12 @@ async function sceneC(G) {
   chief.say('💧🌾?', 2600);
   await G.hud.narrator(S.act1.chiefIntro);
   objectiveCue(G, S.act1.obj_chief_task, { x: SITES.granary.x, z: SITES.granary.z + 2 });
-  await interactOnce(G, { id: 'waterskin', x: SITES.granary.x, z: SITES.granary.z + 2, prompt: '💧' });
+  await interactOnce(G, { id: 'waterskin', x: SITES.granary.x, z: SITES.granary.z + 2, prompt: '💧', label: S.act1.lbl_waterskin });
   chestC.openFor(2000);
   G.player.equip('waterskin'); // taken from the shared store at the granary
   FX.burst(fxAt(G, SITES.granary.x, SITES.granary.z + 2, 0.5), { color: 0xbfe4f5, count: 12, size: 0.1, speed: 2.2, life: 0.5, gravity: 8, additive: false });
   setBeacon(G, SITES.farField); // second leg: carry it out to the far field
-  await interactOnce(G, { id: 'farfield', x: SITES.farField.x, z: SITES.farField.z, r: 3.4, prompt: '🌾' });
+  await interactOnce(G, { id: 'farfield', x: SITES.farField.x, z: SITES.farField.z, r: 3.4, prompt: '🌾', label: S.act1.lbl_farfield });
   G.player.equip(null); // delivered — the skin goes back with the next runner
   setBeacon(G, null);
   FX.floaties(fxAt(G, SITES.farField.x, SITES.farField.z, 0.4), { color: 0xaef0c8, count: 10, size: 0.1, life: 1.5 });
@@ -1187,7 +1411,7 @@ async function sceneD(G) {
   let pot = Save.getRecord('pot');
   if (!pot) {
     objectiveCue(G, S.act1.obj_pot, SITES.kiln);
-    await interactOnce(G, { id: 'kiln', x: SITES.kiln.x, z: SITES.kiln.z, r: 3, prompt: '🏺' });
+    await interactOnce(G, { id: 'kiln', x: SITES.kiln.x, z: SITES.kiln.z, r: 3, prompt: '🏺', label: S.act1.lbl_kiln });
     const made = await potGame(G.hud.root);
     // the kiln fires: flame licks off the charcoal cap + a smoke column
     // (fxAt lands on the kiln's top block — topAt sees the mudbrick stack)
@@ -1215,7 +1439,7 @@ async function sceneD(G) {
   if (!Save.getRecord('basket')) {
     const reeds = { x: SITES.fields.x - 4, z: SITES.fields.z + 3 };
     objectiveCue(G, S.act1.obj_basket, reeds);
-    await interactOnce(G, { id: 'reeds', x: reeds.x, z: reeds.z, prompt: '🧺' });
+    await interactOnce(G, { id: 'reeds', x: reeds.x, z: reeds.z, prompt: '🧺', label: S.act1.lbl_reeds });
     Save.addRecord({ id: 'basket', type: 'basket', pos: { ...SITES.playerHut }, made: YEARS.SCENE_D_YEAR, data: {} });
     recordTell(fxAt(G, reeds.x, reeds.z, 0.6));
     await G.hud.narrator(S.act1.basketDone);
@@ -1226,7 +1450,7 @@ async function sceneD(G) {
   objectiveCue(G, S.act1.obj_shelf, hut);
   const hy = groundY(G, hut.x, hut.z);
   addProp(G, P.makeShelf(hut.x, hy - 1, hut.z - 1));
-  await interactOnce(G, { id: 'shelf', x: hut.x, z: hut.z, r: 2.8, prompt: '🏺🧺' });
+  await interactOnce(G, { id: 'shelf', x: hut.x, z: hut.z, r: 2.8, prompt: '🏺🧺', label: S.act1.lbl_shelf });
   setBeacon(G, null); // home — the keepsake moment plays without a marker
   const potProp = P.makePot(pot, 0.5);
   addProp(G, potProp, hut.x - 0.4, hy - 0.37, hut.z - 1);
@@ -1253,7 +1477,7 @@ async function sceneD(G) {
   // --- delivery run (4.47 exchange: food, clothing, tools) ---
   objectiveCue(G, S.act1.obj_delivery, SITES.granary);
   addProp(G, P.makeCart(SITES.village.x + 4, groundY(G, SITES.village.x + 4, SITES.village.z + 5) - 1, SITES.village.z + 5, 0.4));
-  await interactOnce(G, { id: 'sack', x: SITES.granary.x, z: SITES.granary.z, r: 3, prompt: '🌾' });
+  await interactOnce(G, { id: 'sack', x: SITES.granary.x, z: SITES.granary.z, r: 3, prompt: '🌾', label: S.act1.lbl_sack });
   chestD.openFor(2000);
   FX.puff(fxAt(G, SITES.granary.x, SITES.granary.z, 0.5), { count: 8, size: 0.3, life: 0.6, color: 0xd2a95f });
   const sack = P.makeSack();
@@ -1261,7 +1485,7 @@ async function sceneD(G) {
   sack.update();
   addProp(G, sack);
   setBeacon(G, SITES.neighbour); // outbound leg: the neighbour village
-  await interactOnce(G, { id: 'neigh', x: SITES.neighbour.x, z: SITES.neighbour.z, r: 4, prompt: '🤝' });
+  await interactOnce(G, { id: 'neigh', x: SITES.neighbour.x, z: SITES.neighbour.z, r: 4, prompt: '🤝', label: S.act1.lbl_neigh });
   G.renderer.scene.remove(sack.group);
   G.props = G.props.filter((p) => p !== sack);
   // the handoff lands — a little celebration at the neighbour village
@@ -1269,7 +1493,7 @@ async function sceneD(G) {
   FX.confetti({ x: G.player.pos.x, y: G.player.pos.y + 1.2, z: G.player.pos.z }, { count: 20 });
   await G.hud.narrator(S.act1.deliveryThere);
   setBeacon(G, SITES.granary); // return leg: home with the cloth
-  await interactOnce(G, { id: 'home', x: SITES.granary.x, z: SITES.granary.z, r: 4, prompt: '🏠' });
+  await interactOnce(G, { id: 'home', x: SITES.granary.x, z: SITES.granary.z, r: 4, prompt: '🏠', label: S.act1.lbl_home });
   setBeacon(G, null); // round trip complete
   FX.ring(fxAt(G, SITES.granary.x, SITES.granary.z), { color: 0xffe9a8, radius: 2.4, life: 0.7 });
   await G.hud.narrator(S.act1.deliveryDone);
