@@ -71,9 +71,15 @@ G.player.onSplash = (p) => FX.burst(p, { count: 24, size: 0.13, speed: 3, life: 
 
 // character collision: NPCs/animals treat the player as a solid body (npc.js),
 // and the player is pushed out of them each frame (see the ground loop below)
-import { setPlayerBody } from './npc/npc.js';
+import { setPlayerBody, setObserver } from './npc/npc.js';
+import { Sound } from './sound.js';
 import { PLAYER, QUALITY, QUALITY_TIER } from './constants.js';
 setPlayerBody({ pos: G.player.pos, r: PLAYER.RADIUS });
+// distance gate for animals: herds far from here sleep instead of ticking
+setObserver(G.renderer.camera);
+// Which audio files exist. One small fetch, and a miss (nothing recorded yet)
+// simply leaves every clip silent. Nothing is downloaded at boot beyond this.
+Sound.loadManifest();
 
 // ---------- stage clearing (interactables, NPCs, props) ----------
 import { disposeGroup, foldIfStatic } from './world/props.js';
@@ -133,7 +139,10 @@ G.renderer.onFrame = (dt) => {
     G.player.resolveCharacters(G.npcs); // people and animals are solid bodies
     const target = nearestInteract();
     if (target && !interactBusy) {
-      G.hud.showPrompt(target.prompt ?? (G.input.isTouch ? S.ui.interact : S.ui.interactKey));
+      // icon + verb. An interactable with no label falls back to the generic
+      // "tap/press E to interact", which is what every one of them used to say.
+      G.hud.showPrompt(target.prompt, target.label
+        ?? (target.prompt ? null : (G.input.isTouch ? S.ui.interact : S.ui.interactKey)));
       if (inp.interact) {
         interactBusy = true;
         Promise.resolve()
