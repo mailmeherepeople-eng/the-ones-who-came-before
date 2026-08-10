@@ -42,6 +42,11 @@ export class Player {
     this._modelYaw = this.yaw + Math.PI;
     this._animPhase = 0;
     this.model = null;
+    // hard hide, independent of the boom-length rule below. Scripted camera
+    // work (sky glimpses, act 2's overhead dial) leaves the body standing on
+    // ground the script is about to rebuild under it, and nothing drives the
+    // rig while G.mode is not 'ground' — so the script says so explicitly.
+    this.modelHidden = false;
     this.equipped = null;   // 'basket' | 'bow' | 'rod' | 'spear' | 'waterskin' | null
     this._equipCache = {};  // built item groups, one per kind (session-lived)
     this._equipCur = null;  // currently attached item group
@@ -346,7 +351,20 @@ export class Player {
     this.camera.rotateX(-this.pitch);
     // collapsed boom = camera inside the body: hide the model so we don't
     // stare at the inside of the character's head
-    if (this.model) this.model.visible = d > CAM.HIDE_BELOW;
+    if (this.model) this.model.visible = !this.modelHidden && d > CAM.HIDE_BELOW;
+  }
+
+  // Scripted hide/show for camera work that leaves the rig unattended (sky
+  // glimpses, act 2's overhead dial). Applies immediately, because outside
+  // ground mode _cameraUnclip is not running to pick the flag up. Clearing it
+  // hands visibility straight back to the boom-length rule.
+  setModelHidden(v) {
+    this.modelHidden = !!v;
+    // apply now rather than waiting for the next _cameraUnclip: a glimpse can
+    // end in a mode that never runs one, which would strand the body hidden
+    if (this.model) {
+      this.model.visible = !this.modelHidden && this._camDistSmooth > CAM.HIDE_BELOW;
+    }
   }
 
   update(dt, inp) {

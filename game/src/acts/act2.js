@@ -33,6 +33,9 @@ export async function runAct2(G) {
   FX.clear(); // hard cut from act 1 — no lingering ground fx under the sky camera
 
   G.mode = 'sky';
+  // the whole act is an overhead diorama: the act 1 body would otherwise stand
+  // in shot for all of it, on terrain every era swap rebuilds beneath it
+  G.player.setModelHidden(true);
   G.input.setEnabled(false);
   G.hud.setObjective(null);
   G.hud.fadeIn(600); // act 1 ends faded out — the sky must be visible
@@ -192,6 +195,7 @@ export async function runAct2(G) {
   dial.dispose();
   disposeSkirt(ctx);
   G.tick = null;
+  G.player.setModelHidden(false); // act 3 walks the ground again
 }
 
 // ---------- year bands (visible time-morph between era stages) ----------
@@ -487,13 +491,24 @@ async function p3_gap(ctx) {
   beatRing(G);
   dial.setZoom(6);
   await dial.animateTo(YEARS.BUDDHA_BCE, 900);
-  const challenge = countdownChallenge(G.hud.root, {
+  // "Make it, and the reward is yours" used to be a bluff: there was no way to
+  // answer and the formula came out regardless. There is a box now, so the
+  // promise is real.
+  const res = await countdownChallenge(G.hud.root, {
     text: S.act2.p3_challenge(fmtYear(YEARS.BUDDHA_BCE), fmtYear(YEARS.BOOK_EXAMPLE_CE)),
     seconds: 30,
     giveUpLabel: S.ui.skip,
+    answer: gapYears(YEARS.BUDDHA_BCE, YEARS.BOOK_EXAMPLE_CE),
+    answerLabel: S.act2.p3_answerLabel,
   });
-  await challenge;
-  await G.hud.narrator(S.act2.p3_slow);
+  if (res.won) {
+    FX.confetti(villageTop(G, 6), { count: 30, size: 0.5, life: 1.5, speed: 3 });
+    await G.hud.narrator(S.act2.p3_beat);
+  } else {
+    await G.hud.narrator(S.act2.p3_slow);
+  }
+  // taught either way: beating the clock proves you can count, not that you
+  // know the shortcut, and 4.15 is the point of the whole phase
   await G.hud.card([S.act2.p3_formula, S.act2.p3_bookExample]); // verbatim 4.15
   // instantly-rewarding practice reps
   const pairs = [

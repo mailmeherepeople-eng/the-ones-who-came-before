@@ -19,6 +19,10 @@ export async function skyGlimpse(G, {
   G.mode = 'ui';
   G.input.setEnabled(false);
   G.hud.hidePrompt();
+  // the body stays where act 1 left it while the camera flies overhead and
+  // `rebuild` moves the ground out from under it — from up here that reads as
+  // a figure floating over, or half sunk into, the new terrain
+  G.player.setModelHidden(true);
 
   const centre = overXZ ?? { x: G.player.pos.x, z: G.player.pos.z };
   const startPos = cam.position.clone();
@@ -77,6 +81,7 @@ export async function skyGlimpse(G, {
   boxEl.remove();
   G.player.pitch = 0;
   G.player.syncCamera();
+  G.player.setModelHidden(false); // back on the ground, back in the boom's hands
   G.input.setEnabled(true);
   G.mode = prevMode;
 }
