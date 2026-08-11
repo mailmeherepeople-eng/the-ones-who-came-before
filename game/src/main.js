@@ -268,11 +268,42 @@ window.addEventListener('keydown', (e) => {
   openActMenu();
 });
 
+// ---------- the codex button ----------
+// Wired once here rather than per act, because the whole point of the codex is
+// that it outlives the act that taught you something. Lazily imported: it is a
+// panel nobody has opened yet at boot, and act 3's report.js rides in with it.
+let codexOpen = null;
+G.hud.onCodex = async () => {
+  if (codexOpen) { codexOpen.close(); return; } // second tap closes it
+  const { codexPanel } = await import('./ui/codexPanel.js');
+  codexOpen = codexPanel(G);
+  await codexOpen;
+  codexOpen = null;
+};
+
 // ---------- boot ----------
 async function boot() {
+  const q = new URLSearchParams(location.search);
+
+  // Teacher route. Shows what this device has recorded and stops there: no
+  // game boots behind it, and a student never has a reason to find it.
+  if (q.has('data')) {
+    const { resultsPanel } = await import('./results.js');
+    await resultsPanel(G);
+    return;
+  }
+
+  // Classroom mode. Off by default, and there is deliberately no path to it
+  // from the title screen: a child playing at home must never be asked to
+  // identify themselves before they are allowed to start a game.
+  if (q.has('pilot')) {
+    const { askIdentity } = await import('./results.js');
+    await askIdentity(G);
+  }
+
   // act jump (Tab menu / ?act=N); never allowed to clobber a real player's
   // save position — with progress present the normal title flow runs instead
-  const dbgAct = Number(new URLSearchParams(location.search).get('act') || 0);
+  const dbgAct = Number(q.get('act') || 0);
   if (dbgAct >= 1 && !Save.hasProgress) {
     if (dbgAct >= 2) seedDebugRecords();
     await playFrom(dbgAct, null);
@@ -313,6 +344,11 @@ async function boot() {
   title.remove();
 
   if (mode === 'new') {
+    // How to study with this, said once and said plainly. The game is meant to
+    // replace an evening with the textbook, and a student who is not told that
+    // will treat it as a cartoon and revise from the book anyway. It runs
+    // before the promise cards, and only on a genuinely new game.
+    await G.hud.card([S.howTo.card1, S.howTo.card2, S.howTo.card3]);
     await G.hud.card([{ text: S.openingCard }, S.openingCard2]);
     await playFrom(1, null);
   } else {

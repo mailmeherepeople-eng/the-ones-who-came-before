@@ -17,7 +17,7 @@
 //      (see the fetch handler below for why cache-first was wrong here).
 //
 // BUMP CACHE ON EVERY DEPLOY.
-const CACHE = 'towcb-v4';
+const CACHE = 'towcb-v5';
 
 // Enumerated rather than globbed: no build step here, so there is nothing to
 // generate a manifest, and an explicit list is greppable and diffable. Missing
@@ -36,6 +36,10 @@ const ASSETS = [
   './src/save.js',
   './src/settings.js',
   './src/audio.js',
+  './src/syllabus.js',
+  './src/codex.js',
+  './src/recall.js',
+  './src/results.js',
   './src/engine/renderer.js',
   './src/engine/input.js',
   './src/world/voxel.js',
@@ -60,8 +64,10 @@ const ASSETS = [
   './src/inventory.js',
   './src/sound.js',
   './src/ui/container.js',
+  './src/ui/codexPanel.js',
   './src/ui/hud.js',
   './src/ui/minigames.js',
+  './src/ui/objective.js',
   './src/ui/paint.js',
   './src/ui/pot.js',
   './src/ui/report.js',

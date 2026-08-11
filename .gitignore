@@ -35,6 +35,14 @@ docs/
 *-notes.md
 *-brainstorm.md
 *-draft.md
+# Scoped rework proposals (opening-rebuild.md and whatever follows it). These
+# read like implementation notes rather than "plans", so none of the patterns
+# above caught them, and one sat untracked at the repo root one commit away
+# from being public forever.
+*-rebuild.md
+*-rework.md
+*-proposal.md
+*-audit.md
 ideas*.md
 notes*.md
 plan*.md

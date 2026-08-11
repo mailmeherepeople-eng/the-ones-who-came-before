@@ -197,17 +197,29 @@ body { font-family: var(--font-ui); color: var(--ink); -webkit-user-select: none
 .fade-out { opacity: 0 !important; pointer-events: none !important; }
 
 /* evidence satchel button */
+/* Two pills stacked at the top right, mirroring #hud-zoom / #hud-settings on
+   the left. 📖 codex (all three acts) takes the top slot; 🧺 evidence (act 3
+   only) sits below it, so the codex never moves when act 3 reveals the
+   satchel. */
+#hud-codex,
 #hud-satchel {
-  position: absolute; top: max(10px, env(safe-area-inset-top)); right: 10px; z-index: 21;
+  position: absolute; right: 10px; z-index: 21;
   background: linear-gradient(180deg, rgba(43, 32, 18, 0.95), rgba(24, 17, 10, 0.92));
   border: 1px solid #7a6440; border-radius: 999px;
   padding: 8px 14px; font-size: 13px; cursor: pointer; color: var(--ink);
   box-shadow: var(--hilite), var(--shadow-soft);
   transition: opacity 0.3s, transform 0.3s, border-color 0.2s;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
+#hud-codex { top: max(10px, env(safe-area-inset-top)); }
+#hud-satchel { top: max(58px, calc(env(safe-area-inset-top) + 48px)); }
+#hud-codex:hover,
 #hud-satchel:hover { border-color: var(--accent); }
+#hud-codex:active,
 #hud-satchel:active { transform: scale(0.94); }
+#hud-codex.fade-out,
 #hud-satchel.fade-out { transform: scale(0.85); }
+#hud-codex .count,
 #hud-satchel .count { color: var(--accent); font-weight: bold; }
 
 /* zoom buttons */
@@ -1145,3 +1157,91 @@ body.no-touch #hud-actions { bottom: max(30px, calc(env(safe-area-inset-bottom) 
   transform: scaleX(0); transform-origin: left center;
   opacity: 0.55;
 }
+
+/* ===================== appended: codex panel =====================
+   The 📖 review surface (src/ui/codexPanel.js). Three states on one
+   tile geometry, so a half-learned codex reads as one grid with
+   varying depth rather than as three different components:
+
+     .known    raised parchment, full colour  — retrieved from memory
+     .pending  flat, desaturated, dashed      — told, not yet shown back
+     .blank    a recess with a '?'            — not met yet
+
+   Deliberately the same parchment vocabulary as .satchel-card, since
+   both are "things the player has accumulated" and a student should
+   not have to learn two visual languages for that. */
+.codex-grid {
+  display: grid; gap: 10px; margin-top: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.codex-card {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 11px; border-radius: 10px; min-height: 118px;
+  text-align: left; box-sizing: border-box;
+  animation: fx-pop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+.codex-card.known {
+  background: linear-gradient(180deg, #f7e9ca, var(--parchment) 45%, var(--parchment-2));
+  border: 1px solid var(--parchment-line); color: var(--parchment-ink);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 250, 235, 0.7);
+}
+
+/* Readable, but visibly unfinished. It must never look like a wrong
+   answer: nothing has been failed here, the game simply has not asked
+   yet. Hence dashed-and-faded rather than red-and-marked. */
+.codex-card.pending {
+  background: rgba(247, 233, 202, 0.10);
+  border: 1px dashed var(--parchment-line, #b89a6a);
+  color: #e8dcc0; box-shadow: none;
+}
+
+.codex-card.codex-blank {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.14));
+  border: 2px dashed var(--parchment-line, #b89a6a);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+  align-items: center; justify-content: center; opacity: 0.5;
+}
+.codex-card.codex-blank::after {
+  content: '?'; font-size: 34px; font-weight: 700;
+  color: var(--parchment-line, #b89a6a); opacity: 0.7;
+}
+
+.cx-icon { font-size: 26px; line-height: 1.1; }
+.cx-term { font-size: 13px; font-weight: 700; }
+.codex-card.known .cx-term { color: #7c5a2b; }
+.cx-tells { font-size: 11.5px; line-height: 1.45; flex: 1; }
+.codex-card.known .cx-tells { color: #6d5a3a; }
+.cx-state { font-size: 10.5px; letter-spacing: 0.02em; opacity: 0.85; margin-top: 4px; }
+.codex-card.known .cx-state { color: #4f7a43; font-weight: 600; }
+.codex-card.pending .cx-state { color: #c9ab74; }
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-card { animation: none !important; }
+}
+/* ===================== end codex panel ===================== */
+
+/* ===================== appended: results table + panel body =====================
+   Teacher-facing only (?data). Styled for the DARK .bigpanel ground: the
+   parchment look belongs to #report, which is an id owned by siteReport, so a
+   panel that borrows only the class gets light ink, not dark.
+
+   Six columns on a phone is the case that actually happens when a teacher
+   checks a tablet mid-lesson, so the table scrolls inside its own container
+   rather than widening the panel. */
+.results-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.results-table th,
+.results-table td { padding: 7px 10px; text-align: left; white-space: nowrap; }
+.results-table thead th {
+  color: var(--accent); font-family: var(--font); font-weight: 700;
+  letter-spacing: 0.03em; border-bottom: 2px solid var(--panel-line);
+}
+.results-table tbody td { color: var(--ink); border-bottom: 1px solid rgba(109, 90, 58, 0.45); }
+.results-table tbody tr:nth-child(even) td { background: rgba(109, 90, 58, 0.16); }
+
+/* .rep-body is scoped to #report in the original sheet, so the codex and
+   results panels (which are .bigpanel, not #report) had no body typography at
+   all. This gives it to them without touching the report's own rules. */
+.bigpanel .rep-body { font-size: 13.5px; line-height: 1.55; color: var(--ink-dim); }
+/* ===================== end results table ===================== */

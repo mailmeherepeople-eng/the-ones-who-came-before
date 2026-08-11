@@ -12,6 +12,7 @@ export class HUD {
       <div id="hud-objective" class="fade-out"></div>
       <div id="hud-prompt" class="fade-out"></div>
       <div id="hud-hint" class="fade-out"></div>
+      <button id="hud-codex" class="fade-out">📖 <span class="count">0/0</span></button>
       <button id="hud-satchel" class="fade-out">🧺 <span class="count">0</span></button>
       <div id="hud-zoom" class="fade-out">
         <button class="btn" id="zoom-out-btn" title="${S.ui.zoomOutHint}">🔍−</button>
@@ -24,10 +25,12 @@ export class HUD {
     this.promptEl = this.root.querySelector('#hud-prompt');
     this.hintEl = this.root.querySelector('#hud-hint');
     this.satchelEl = this.root.querySelector('#hud-satchel');
+    this.codexEl = this.root.querySelector('#hud-codex');
     this.zoomEl = this.root.querySelector('#hud-zoom');
     this.faderEl = this.root.querySelector('#fader');
     this._hintTimer = null;
     this.onSatchel = null;
+    this.onCodex = null;
     this.onZoomOut = null;
     // the interact prompt pill is itself a click/tap target (desktop mouse
     // users have no tap-to-interact): clicking it injects the same one-frame
@@ -39,6 +42,7 @@ export class HUD {
       this.input?.injectInteract?.();
     });
     this.satchelEl.addEventListener('click', () => this.onSatchel && this.onSatchel());
+    this.codexEl.addEventListener('click', () => this.onCodex && this.onCodex());
     this.root.querySelector('#zoom-out-btn').addEventListener('click', () => this.onZoomOut && this.onZoomOut());
     this.settingsBtn = this.root.querySelector('#hud-settings');
     this.settingsBtn.addEventListener('click', () => this.openSettings());
@@ -175,16 +179,31 @@ export class HUD {
     this.satchelEl.classList.toggle('fade-out', !visible);
   }
 
+  // The codex counter reads mastered/taught, not collected/total: a number that
+  // only moves when the player has SHOWN a term back. See src/codex.js.
+  setCodex(mastered, taught, visible = true) {
+    this.codexEl.querySelector('.count').textContent = `${mastered}/${taught}`;
+    this.codexEl.classList.toggle('fade-out', !visible);
+  }
+
   showZoom(visible) { this.zoomEl.classList.toggle('fade-out', !visible); }
 
-  async fadeOut(ms = 700) {
-    this.faderEl.classList.add('on');
-    await wait(ms);
+  // The ms argument used to be a WAIT only: the fade itself was pinned to the
+  // 0.7s transition in style.css, so fadeIn(1800) faded in 700 ms and then sat
+  // on a finished fade for another 1100. Driving transitionDuration from the
+  // same argument makes every existing call site behave the way it already
+  // reads. The forced reflow between the two writes is what stops the browser
+  // batching them into one recalc, which would run the fade at the OLD
+  // duration; it costs one layout per scene boundary, roughly twenty a game.
+  _fade(on, ms) {
+    this.faderEl.style.transitionDuration = `${ms}ms`;
+    void this.faderEl.offsetHeight;
+    this.faderEl.classList.toggle('on', on);
+    return wait(ms);
   }
-  async fadeIn(ms = 700) {
-    this.faderEl.classList.remove('on');
-    await wait(ms);
-  }
+
+  async fadeOut(ms = 700) { await this._fade(true, ms); }
+  async fadeIn(ms = 700) { await this._fade(false, ms); }
 
   // Narrator box. Resolves on tap/click/E, and ALSO when its voice clip ends.
   //

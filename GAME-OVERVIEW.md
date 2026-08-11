@@ -1228,3 +1228,233 @@ hoist and `let` does not, so the whole module would have thrown on load and
 taken the game with it. The block was moved above the mixer. **A boot-time
 ReferenceError is the one class of bug that no amount of gameplay testing
 finds, because there is no game.**
+
+---
+
+## 19. Act 1 polish and the retrieval spine (2026-08-11 15:27 IST)
+
+The pitch for this game is that a student can play it instead of reading the
+chapter and still pass. Before this pass that was half true. The game was very
+good at making things HAPPEN to a player and had almost no way for a player to
+produce anything back: 50 syllabus items were covered, roughly three were ever
+asked about, and the ~33 `Note` lines each fired once into a narrator box and
+were then unrecoverable for the rest of the playthrough. There was no journal,
+no review screen, and no score anywhere. That is a museum, not a study tool.
+
+Three things changed. The opening became a game, the terms became reviewable,
+and the session became measurable.
+
+### 19.1 The opening: hunger before basket
+
+`storeLesson` ("the tribe's tools belong to everyone") used to fire before the
+player had touched a single berry, which made it the first thing the game
+TEACHES. It is now the first thing the game ANSWERS.
+
+The new order is wake, hunger, bare-hand picking, spill, want, chest. A bush
+sits inside the camp bowl at (37,19), its own prop rather than one of the six
+`SITES.berries` (stripping one of those would leave a bare bush in the gather
+beat that follows). Two fistfuls succeed; the third spills and drops what you
+were holding. **The failure is the tutorial.** No line of text explains why a
+basket is worth walking for.
+
+The spill uses `FX.burst(..., { gravity: 9, additive: false })`, the fishing
+splash shape. It cannot use `FX.puff`: puff pins gravity to 0 and always gives
+its particles a positive vy, so berries dropped with it would rise.
+
+### 19.2 The wake
+
+`wakeSequence()` in act1.js is `skyGlimpse`'s contract inverted. Instead of
+ascending off the rig and returning to it, it starts off-rig (lying on the
+shelter floor, camera at feet + 0.4 looking at the ceiling) and tweens ONTO it,
+and the player decides when to get up. Takeover and handback are the same
+handshake skyGlimpse uses; while `G.mode !== 'ground'` main.js skips
+`player.update`, so nothing fights the scripted camera.
+
+**The landing is asked for, not guessed at.** `CAM` is module-private in
+player.js, so rather than hardcode `CAM.PIVOT` the sequence collapses the boom
+to 0.5, lets `syncCamera()` compute the transform, reads it, puts the camera
+back and tweens to exactly that. Measured on a real run: the tween landed at
+`[42.00, 11.52, 11.50]` against the rig's own `[42.00, 11.50, 11.50]`. Then
+`_camDistSmooth` is left at 0.5 with `_snapCam` false, so the ground loop
+relaxes the boom out at 12% a frame (0.50 to 0.91 to 1.28 over the first
+second) and the body fades into being under the existing `CAM.HIDE_BELOW` rule
+as the shot widens. That easing out of your own eyes is a free "coming to your
+senses" shot.
+
+Guarded by a `woke` marker record, using the same idiom as every other beat in
+the scene. A resumed save must never sit through a ninety-second cutscene, and
+the resume path was verified to land on `mode=ground`, input enabled, no
+stranded `ui`.
+
+### 19.3 fadeIn/fadeOut lied about their argument
+
+`hud.fadeIn(ms)` and `fadeOut(ms)` only ever `await wait(ms)`. The fade itself
+was pinned to the `0.7s` transition in style.css, so `fadeIn(1800)` faded in
+700 ms and then sat on a finished fade for another 1100. They now drive
+`transitionDuration` from the same argument, so **every existing call site
+behaves the way it already reads**. The default is still 700, but ~30 call
+sites pass other values and their timing genuinely changed (`fadeOut(400)` is
+now a completed 400 ms fade rather than a truncated 700 ms one).
+
+There is a forced reflow between setting the duration and toggling the class.
+Without it the browser batches both into one style recalc and runs the fade at
+the OLD duration. It costs one layout per scene boundary.
+
+### 19.4 The codex: taught vs mastered
+
+New `src/codex.js` plus `src/ui/codexPanel.js`, on a new codex pill in the top
+right. The evidence satchel moved down one slot and is untouched: Source Cards
+are things you FOUND, codex entries are things you KNOW, and they stay separate
+systems so the act 3 rework cannot disturb either.
+
+Two states, and the difference is the entire design:
+
+- **taught** the line fired. A ghost slot, dashed and faded.
+- **mastered** the player RETRIEVED it later, unprompted. The slot fills in.
+
+So the counter reads mastered/taught, not collected/total. Reading a definition
+is not knowing it; producing it from memory is. A ghost slot says "you have
+seen this, you have not shown it back yet", which is also exactly what a
+teacher wants to read at a glance. The wording is deliberately never
+failure-shaped: nothing has been got wrong, the game simply has not asked yet.
+
+18 entries wired across act 1, one per `Note` line, verified by cross-check to
+be taught exactly once each. `CODEX_ACT2` and `CODEX_ACT3` are empty on
+purpose, to be filled by those reworks.
+
+### 19.5 Recall: retrieval dressed as conversation
+
+New `src/recall.js`. Four rules, all load-bearing:
+
+1. **Spaced.** `recallBeat()` drains a miss from an EARLIER slot before asking
+   the current one, so the spacing happens whether or not a caller thinks about
+   it. A question asked right after its own narrator box tests the last
+   sentence read, not anything known.
+2. **No penalty.** Nothing is scored against the player and nothing is locked.
+3. **Corrective feedback always**, in the codex's own words, so the phrasing a
+   student meets twice is the same phrasing.
+4. **In fiction.** Nobody in this game says "quiz". The elder asks you to
+   explain something to a child; the visitors ask how your people eat.
+
+Options are shuffled, which matters most on the re-ask: otherwise a student who
+missed it recovers the answer from where the button sat last time.
+
+Four slots in act 1: `band` at the fire circle (taught ~9 minutes earlier at
+the chest), `huntGather` at the trade, `lostTongues` in scene C (across a scene
+boundary and a generation), `farming` in scene D. `flushRecall()` at the end of
+the act gives anything still missed its second chance, so `asked` and `correct`
+in the export describe a fair test. There is deliberately **no recall slot at
+the burial**: a knowledge question at a funeral is the wrong instrument.
+
+`lostTongues` sits after the granary question rather than before it, so the
+player never meets two option boxes back to back and starts reading them as a
+test.
+
+### 19.6 Measurement, and a seam for a backend
+
+`src/syllabus.js` holds the 50 COVERAGE items as data (4.20 flagged
+`untaught`, so totals read 49 and can never quietly become 50). Labels are
+user-visible and therefore live in strings.js under `S.syllabus`, which also
+keeps date literals out of a src file the lint restricts them from.
+
+`Save.data` gained `codex`, `mastery` and `session`. **No version bump was
+needed**: `load()`'s `{...FRESH(), ...parsed}` merge backfills new top-level
+keys into old saves, the same precedent used for `inventory`.
+
+`src/results.js` builds a payload per save, renders an on-screen summary at
+`?data`, and downloads CSV or JSON. One row per syllabus item with the student
+repeated on every row, so thirty separate downloads concatenate into one sheet
+with no reshaping. `beatTimes` had been recorded since the save system was
+written and read by nothing; it is time-on-task, free.
+
+**The sink seam is the point.** `submit(payloads, sink)` has exactly one sink
+today, `localDownload`. A hosted backend later is a new entry in `SINKS` plus a
+config value, with no call-site changes and nothing in the game learning about
+a network.
+
+`?pilot` adds an optional identity step that namespaces the save key, for
+shared-tablet classrooms where the second child to sit down would otherwise
+resume the first child's game. It is off by default with no path to it from the
+title screen: a child playing at home must never be asked to identify
+themselves to start a game. The slot is remembered in its own key so a
+mid-lesson reload returns the same child to their own save.
+
+### 19.7 How to study with this, said out loud
+
+Three cards on first boot only, before the promise cards: this is your chapter,
+answer from memory and being wrong costs nothing, your book fills in as you go.
+A student who is not told the method plays it as a cartoon and revises from the
+textbook anyway.
+
+The opening card is no longer the NCERT definition of history. That was the
+least game-like first line available and also a spoiler, because the same
+sentence lands with earned weight at `act3.reportClosing2` after seventy
+minutes of becoming true. The opening is now the promise; the definition
+appears once, at the end.
+
+`act3.epiReveal` is the other half of the same move. One line at the
+epigraphist beat tells the player they have been listening to a person all
+along, and every `Note` box back to act 1 retroactively stops being textbook
+voice and becomes her field notes. Nothing else had to be rewritten for it.
+
+### 19.8 Wayfinding moved out of act 1
+
+`objectiveCue` / `setBeacon` / `nearestSite` were module-private to act1.js, so
+acts 2 and 3 had no way to point a player at anything and simply went without.
+They are now `src/ui/objective.js`, a pure move with no behaviour change, done
+NOW so the act 2 and 3 reworks can call them without editing act1.js later.
+
+**This is the isolation rule the whole pass was built to:** shared modules live
+in `src/`, they may import strings/save/constants/ui, and they must never
+import from `src/acts/`. Acts import them and call in. Per-act content sits in
+its own array. Acts 2 and 3 can be gutted without any of it reaching act 1.
+
+### 19.9 Verified
+
+Machine: `node game/tools/check.mjs` green (lint 44 files, manifest in sync, 48
+precache entries, no control characters). A cross-check confirms 18 codex
+entries all taught exactly once, 4 recall slots correctly paired to their
+strings, and 49 of 50 syllabus items labelled.
+
+In the browser: the intro and promise cards; the wake landing with no pop
+(numbers above); the bare-hand beat (picks 1 and 2 add a berry, pick 3 spills to
+zero and retires the interactable); `teach` writing both `codex` and `mastery`
+to the save; the codex panel showing 1 pending and 17 blank; the wrong path
+(`asked:1 correct:0`, queued) then the retry path (`asked:2 correct:1`,
+mastered, badge 1/1); `buildResults` totals and a 49-row CSV; `?data` listing
+both an unsloted and a sloted save; `?pilot` creating a genuinely fresh save;
+`?act=2` booting clean to `mode=sky`; and the world editor still opening on
+backtick (`#wed` mounts, no errors).
+
+**One trap this pass hit.** A `teach()` call was inserted between an `if`
+statement and its `else` at the granary, which `node --check` accepted and the
+browser did not. The whole module failed to parse and took main.js with it.
+Single-statement `if`/`else` without braces is invisible to line-based editing,
+and a syntax error in an act module is a black screen, not a bug report.
+
+**Not verified visually.** The browser pane was not displayed during this pass,
+so nothing was confirmed by eye: the fade timings, the lying camera pose, the
+spill particles and the two new panels were all checked through the DOM and
+computed styles instead. Everything above is a measurement, not a look. Somebody
+should play the opening once on a real screen, and once on a phone, before this
+goes near a classroom.
+
+### 19.10 Still open
+
+- **Four audio files would do more for "this feels like a game" than any of the
+  above.** `Sound.playMusic('act1.camp')`, `('act1.chase')`,
+  `playSfx('bow-loose')` and `('bear-roar')` are wired and playing nothing. The
+  black hold at the top of the wake is deliberately short (900 ms) because a
+  long hold on a silent black screen reads as a game that failed to load;
+  lengthen it once `act1.camp` exists.
+- **Act 2 is the biggest remaining liability.** Ten minutes, 21 narrator boxes
+  and 11 card sequences, no ground input, one slider, and it carries 16 of the
+  50 syllabus items. It is where "play, don't read" is most obviously false.
+- Act 3 rework, including character selection in place of the specialist
+  toolbar.
+- 105 of 111 narration lines are still unrecorded. Note that a voiced narrator
+  box closes itself when the clip ends, so much of the pacing complaint solves
+  itself once recordings land.
+- `S.act3.eraLabels` has a key named `tribe`, but `ui/report.js` reads
+  `E.band`, so the first row of the site report's timeline strip renders the
+  word "undefined". Pre-existing, one word to fix, left for the act 3 pass.

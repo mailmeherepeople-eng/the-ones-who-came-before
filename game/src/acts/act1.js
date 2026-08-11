@@ -15,12 +15,15 @@ import { timingGame } from '../ui/minigames.js';
 import { paintingGame } from '../ui/paint.js';
 import { potGame } from '../ui/pot.js';
 import { runBeats } from './beats.js';
-import { skyGlimpse } from '../sky/interstitial.js';
+import { skyGlimpse, tween } from '../sky/interstitial.js';
 import { wait } from '../ui/hud.js';
 import { SFX } from '../audio.js';
 import { Sound } from '../sound.js';
 import { Inv, ITEMS } from '../inventory.js';
 import { openContainer } from '../ui/container.js';
+import { groundAnchor, objectiveCue, setBeacon, nearestSite } from '../ui/objective.js';
+import { teach, refreshCodexBadge } from '../codex.js';
+import { recallBeat, flushRecall } from '../recall.js';
 
 export async function runAct1(G, resumeScene = null) {
   const scenes = [
@@ -52,7 +55,7 @@ const CAVE_FLOOR_Y = 10;
 
 // ground-level fx anchor at a world column (outdoor columns only; the cave
 // interior must pass explicit y — topAt sees the cliff above it)
-function fxAt(G, x, z, dy = 0) { return { x, y: groundY(G, x, z) + dy, z }; }
+const fxAt = groundAnchor;
 
 // lit fires: every campfire/hearth gets a live FX flame + smoke column so it
 // reads as burning from across the camp. Handles are stored here and retired
@@ -72,47 +75,9 @@ function douseFires() {
   fireFx = [];
 }
 
-// ---------- wayfinding beacon ----------
-// ONE persistent pulsing pillar marks the current objective site (the FX
-// pillar pool has 6 slots — this module owns AT MOST one at a time). Planting
-// a new beacon retires the old; objectiveCue with no site (or no text) sweeps
-// it, and every scene sweeps on setup/teardown so a beacon can never outlive
-// its beat. `at` may carry an explicit y for cave interiors (topAt would read
-// the cliff above the shelter). Always sweep via setBeacon BEFORE FX.clear()
-// so this handle never goes stale against a recycled pillar slot.
-let beaconH = null;
-function setBeacon(G, at, color = 0xffd28a) {
-  if (beaconH) { FX.removeHandle(beaconH); beaconH = null; }
-  if (!at) return;
-  const p = at.y !== undefined ? { x: at.x, y: at.y, z: at.z } : fxAt(G, at.x, at.z);
-  // 0.22: at 0.45 the additive column saturates to a blinding white wall when
-  // the player stands near it — distant visibility is still fine
-  beaconH = FX.pillar(p, { color, height: 10, life: 0, opacity: 0.22, pulse: true });
-}
-
-// nearest of several candidate sites — multi-target beats (berries, shells)
-// keep the single beacon on the closest remaining target
-function nearestSite(G, sites) {
-  let best = null, bd = Infinity;
-  for (const s of sites) {
-    const d = Math.hypot(G.player.pos.x - s.x, G.player.pos.z - s.z);
-    if (d < bd) { bd = d; best = s; }
-  }
-  return best;
-}
-
-// objective handoff cue: objective text, a subtle ring at the marker (when
-// the target site is known) or under the player, plus the persistent beacon
-// pillar at the site. Passing no site (or no text) retires the beacon.
-function objectiveCue(G, text, at = null, color = 0xffe9a8) {
-  G.hud.setObjective(text);
-  setBeacon(G, text ? at : null, color === 0xffe9a8 ? 0xffd28a : color);
-  if (!text) return;
-  const p = at
-    ? (at.y !== undefined ? { x: at.x, y: at.y, z: at.z } : fxAt(G, at.x, at.z))
-    : { x: G.player.pos.x, y: G.player.pos.y, z: G.player.pos.z };
-  FX.ring(p, { color, radius: 2.0, life: 0.55 });
-}
+// Wayfinding (objectiveCue / setBeacon / nearestSite) now lives in
+// ui/objective.js so acts 2 and 3 can point a player at something too. Same
+// behaviour, same numbers; see that file for the pillar-pool contract.
 
 // The store box, set beside the Community Chest. Everything the player brings
 // home is PLACED in it: walking back to camp is not enough, the deposit is the
@@ -401,6 +366,175 @@ function bandIcons() {
   return ['🔥🍖', '🦌➡️', '🌿✋', '☀️🌙', '💧🐟', '🏔️👣'][Math.floor(Math.random() * 6)];
 }
 
+// ---------- the wake ----------
+//
+// The game used to open by fading in on a standing body and telling it, in a
+// narrator box, that it had woken up. Then it asked for a basket. That is a
+// menu, not an opening: nothing happened TO the player and nothing was asked
+// OF them for the first three minutes.
+//
+// This is skyGlimpse's contract inverted. Instead of ascending off the rig and
+// returning to it, we start off-rig (lying on the shelter floor) and tween ONTO
+// it, and the player is the one who decides when to get up.
+//
+// Deliberately NOT hud.narrator for the rise prompt: narrator paints a box, and
+// this moment has no box. Window-bound listeners, so nothing's z-index can
+// swallow the tap. Only ever called with the fader OFF, because #fader is
+// z-index 50 with pointer-events auto and would eat every tap underneath it.
+function tapToRise(G) {
+  return new Promise((resolve) => {
+    const done = (e) => {
+      if (e?.repeat) return; // a held key must not fire twice
+      removeEventListener('pointerdown', done);
+      removeEventListener('keydown', done);
+      G.input?.clearEdges?.(); // the rising press must not also interact
+      resolve();
+    };
+    addEventListener('pointerdown', done);
+    addEventListener('keydown', done);
+  });
+}
+
+// ease-in-out, inlined: interstitial.js keeps its own `ease` module-private.
+const rise0 = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+async function wakeSequence(G) {
+  const cam = G.renderer.camera;
+  const feet = G.player.pos.clone(); // teleport has already placed us
+  const yaw = G.player.yaw;          // Math.PI, facing the shelter mouth
+
+  // 1. Scripted camera owns the view. Same handshake skyGlimpse uses, and while
+  //    mode is not 'ground' main.js skips player.update entirely, so nothing
+  //    fights us for the camera.
+  G.mode = 'ui';
+  G.input.setEnabled(false);   // also hides the touch joystick
+  G.player.setModelHidden(true);
+
+  // 2. LYING. Camera at pillow height looking at the ceiling, yawed a little
+  //    off-axis so the firelight has a direction, and rolled a little so it
+  //    reads as a head on the ground rather than a tripod.
+  cam.position.set(feet.x, feet.y + 0.4, feet.z);
+  cam.quaternion.setFromEuler(new THREE.Euler(Math.PI / 2 - 0.12, -yaw + 0.25, 0.06, 'YXZ'));
+
+  // 3. SOUND BEFORE SIGHT. The fader is still opaque from the scene setup.
+  //    Hold for the length of the line if it has been recorded; otherwise hold
+  //    only briefly, because a long hold on a silent black screen does not read
+  //    as atmosphere, it reads as a game that failed to load. Lengthen this
+  //    once game/audio has a camp bed and a recording of wake_dark.
+  const darkClip = Sound.playVoice('act1.wake_dark');
+  await (darkClip ? Promise.race([darkClip.ended, wait(6000)]) : wait(900));
+
+  // 4. Eyes open. A genuinely slow fade (hud.fadeIn drives the CSS duration
+  //    now), then the era card over firelit stone, then breathing.
+  await G.hud.fadeIn(2000);
+  await G.hud.card([S.act1.sceneA_card, S.act1.sceneA_card2]);
+  const restY = cam.position.y;
+  await tween(2600, (t) => {
+    cam.position.y = restY + Math.sin(t * Math.PI * 2) * 0.035; // two slow breaths
+  });
+  G.hud.toast(S.act1.wake_ceiling, 3600); // ambient: costs no tap
+
+  // 5. The player wakes the character. The game does not wake it for them.
+  G.hud.hint(G.input.isTouch ? S.act1.wake_riseTap : S.act1.wake_riseKey, 0);
+  await tapToRise(G);
+  G.hud.hideHint();
+
+  // 6a. Lying to sitting: up, and the view swings from ceiling to horizon.
+  const sitPos = new THREE.Vector3(feet.x, feet.y + 1.1, feet.z);
+  const sitQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -yaw, 0, 'YXZ'));
+  const p0 = cam.position.clone(), q0 = cam.quaternion.clone();
+  await tween(900, (t) => {
+    const k = rise0(t);
+    cam.position.lerpVectors(p0, sitPos, k);
+    cam.quaternion.slerpQuaternions(q0, sitQuat, k);
+  });
+  await wait(250);
+
+  // 6b. Sitting to standing, landing EXACTLY where the rig wants the camera.
+  //     Rather than guess at CAM.PIVOT (module-private in player.js), ask the
+  //     rig: collapse the boom to the head, let syncCamera compute the
+  //     transform, read it, then put the camera back and tween to it. Zero pop,
+  //     and it stays correct if the camera constants are ever retuned.
+  const p1 = cam.position.clone(), q1 = cam.quaternion.clone();
+  const prevDist = G.player.camDist;
+  G.player.pitch = 0;
+  G.player.camDist = 0.5;
+  G.player._snapCam = true;
+  G.player.syncCamera();
+  const handPos = cam.position.clone(), handQuat = cam.quaternion.clone();
+  G.player.camDist = prevDist;      // the boom the player actually wants back
+  G.player._camDistSmooth = 0.5;    // ...but starting from the head
+  G.player._snapCam = false;        // so the ground loop RELAXES it out, 12%/frame
+  cam.position.copy(p1);
+  cam.quaternion.copy(q1);
+  await tween(700, (t) => {
+    const k = rise0(t);
+    cam.position.lerpVectors(p1, handPos, k);
+    cam.quaternion.slerpQuaternions(q1, handQuat, k);
+  });
+
+  // 7. Handover. The model is unhidden but stays invisible under the boom's own
+  //    CAM.HIDE_BELOW rule until the camera has pulled back far enough, so the
+  //    body fades into being in front of you as the shot widens. That easing
+  //    out from your own eyes is the free "coming to your senses" move.
+  G.player.setModelHidden(false);
+  G.mode = 'ground';
+  G.input.setEnabled(true);
+  G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
+  await G.hud.narrator(S.act1.wake_stand);
+}
+
+// ---------- hunger before basket ----------
+//
+// A bush inside the camp bowl, between the shelter mouth (42,14) and the fire
+// (40,26), off the walking line so it reads as "right there" rather than as an
+// errand. Its own prop, not one of the six SITES.berries: those belong to the
+// gather beat and stripping one here would leave a bare bush in it.
+const HUNGER_BUSH = { x: 37, z: 19 };
+
+async function bareHandBeat(G) {
+  await G.hud.narrator(S.act1.hunger);
+  const bush = addProp(G, P.makeBerryBush(
+    HUNGER_BUSH.x + 0.5, groundY(G, HUNGER_BUSH.x, HUNGER_BUSH.z), HUNGER_BUSH.z + 0.5));
+  objectiveCue(G, S.act1.obj_bare, HUNGER_BUSH);
+  G.hud.toast(S.act1.berryBare1, 4200);
+
+  // Two fistfuls succeed and the third spills. The failure IS the tutorial: no
+  // line of text explains why a basket is worth walking for, the empty hands do.
+  let picked = 0;
+  await new Promise((resolve) => {
+    G.interactables.push({
+      id: 'barehand', x: HUNGER_BUSH.x, z: HUNGER_BUSH.z, r: 2.6, enabled: true,
+      prompt: '🫐', label: S.act1.pickBare,
+      onInteract(self) {
+        picked++;
+        const bp = fxAt(G, HUNGER_BUSH.x, HUNGER_BUSH.z, 0.7);
+        if (picked <= 2) {
+          Inv.add('player', 'berry', 1);
+          syncEquip(G);
+          FX.floaties(bp, { color: 0xd8503c, count: 4, size: 0.09, life: 1.1 });
+          SFX.blip?.();
+          return;
+        }
+        // The spill. FX.burst with gravity, NOT FX.puff: puff pins gravity to 0
+        // and always gives its particles a positive vy, so berries dropped with
+        // it would rise. Same shape as the fishing splash further down.
+        FX.burst(bp, { color: 0xd8503c, count: 16, size: 0.13, speed: 2.6, life: 0.7, gravity: 9, additive: false });
+        Inv.take('player', 'berry', Inv.count('player', 'berry')); // back into the thorns
+        syncEquip(G);
+        bush.setBerries(false);
+        SFX.trick?.();
+        self.enabled = false;
+        resolve();
+      },
+    });
+  });
+  G.interactables = G.interactables.filter((o) => o.id !== 'barehand');
+  setBeacon(G, null);
+  G.hud.toast(S.act1.berrySpill, 4200);   // ambient, costs no tap
+  await G.hud.narrator(S.act1.berryWant); // the want the Community Chest answers
+}
+
 // ---------- bow hunting (real arrows — replaces the old timing minigame) ----------
 const ARROW_SPEED = 22;   // blocks/s along the camera ray
 const ARROW_UPBIAS = 1.5; // blocks/s added to vy at launch
@@ -617,20 +751,39 @@ async function sceneA(G) {
   // Scene music, layered over the synth wind bed (which never stops).
   // A missing file is silent, so this is safe before anything is recorded.
   Sound.playMusic('act1.camp');
-  await G.hud.fadeIn(500);
-  await G.hud.card([S.act1.sceneA_card, S.act1.sceneA_card2]);
-  await G.hud.narrator(S.act1.wake);
-  G.input.setEnabled(true); // you wake, you get to move
-  // the hint names the controls, so it belongs with the controls, not before
-  G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
-  await G.hud.narrator(S.act1.tribeNote); // 4.32 groups help each other
 
-  // --- gather berries (4.33) — but first, a basket from the band's store ---
+  // The wake is a one-time cutscene of roughly ninety seconds. A resumed save
+  // must never sit through it again, so it is guarded by a marker record like
+  // every other beat in this scene. The resume path still shows the era card,
+  // because "where and when am I" is exactly what a returning player has lost.
+  if (!Save.getRecord('woke')) {
+    await wakeSequence(G);
+    Save.addRecord({
+      id: 'woke', type: 'camp', pos: { x: SITES.shelter.x, z: SITES.shelter.z },
+      made: YEARS.SCENE_A_YEAR, data: { label: 'wake' },
+    });
+  } else {
+    await G.hud.fadeIn(500);
+    await G.hud.card([S.act1.sceneA_card, S.act1.sceneA_card2]);
+    G.mode = 'ground';
+    G.input.setEnabled(true);
+    G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
+  }
+  refreshCodexBadge(G); // the 📖 pill reappears with whatever is already in it
+
+  // --- hunger, then the basket, then berries (4.33) ---
+  //
+  // The order used to be backwards. storeLesson ("the tribe's tools belong to
+  // everyone") fired before the player had touched a single berry, which made
+  // it the first thing the game TEACHES. Now the hands fail first and it is the
+  // first thing the game ANSWERS.
   if (!Save.getRecord('gathered')) {
+    await bareHandBeat(G);
     await takeFromChest(G, 'basket', S.act1.obj_store_basket);
     chest.openFor(1200); // the lid drops again behind you
     FX.floaties(fxAt(G, STORE_A.x, STORE_A.z, 0.6), { color: 0xffd9a0, count: 8, size: 0.1, life: 1.4 });
-    await G.hud.narrator(S.act1.storeLesson); // shared tools — the one teaching line
+    await G.hud.narrator(S.act1.storeLesson); // shared tools — now an answer, not a lecture
+    teach(G, 'band'); // 4.32 groups help each other, learned by borrowing
 
     // The basket STAYS in your hands through the gather. It used to be
     // replaced the moment you picked anything up, which quietly undid the
@@ -672,6 +825,7 @@ async function sceneA(G) {
     await putInStore(G, 'berry', S.act1.obj_depositBerries, S.act1.depositBerriesDone);
     await returnToChest(G, 'basket', S.act1.obj_returnBasket, S.act1.returnBasketDone);
     await G.hud.narrator(S.act1.huntersGatherers);
+    teach(G, 'huntGather'); // 4.33
     Save.addRecord({ id: 'gathered', type: 'camp', pos: { ...camp }, made: YEARS.SCENE_A_YEAR, data: { label: 'gather' } });
   }
 
@@ -895,7 +1049,18 @@ async function sceneA(G) {
     elder.say(icons, 1900);
     await wait(1400);
   }
+  // tribeNote MOVED here from the wake. It used to describe a tribe over an
+  // empty shelter before the player had met anybody; now all six of them are
+  // sitting around this fire while it plays.
+  await G.hud.narrator(S.act1.tribeNote);
   await G.hud.narrator(S.act1.languageNote);
+  teach(G, 'lostTongues'); // 4.35
+
+  // RECALL 1. `band` was taught at the Community Chest about nine minutes ago,
+  // and this is the first time the game asks the player to produce anything.
+  // The gap is the point: asked any sooner it would test the last sentence
+  // they read rather than anything they know.
+  await recallBeat(G, { id: 'band', ...S.recall.q.band });
 
   // --- knapping: fire + improved tools (4.36) ---
   if (!Save.getRecord('arrowheads')) {
@@ -913,6 +1078,7 @@ async function sceneA(G) {
     });
     recordTell(fxAt(G, SITES.knap.x, SITES.knap.z, 0.8));
     await G.hud.narrator(S.act1.knapDone);
+    teach(G, 'toolmaking'); // 4.36
     Save.addRecord({ id: 'arrowheads', type: 'arrowheads', pos: { x: SITES.knap.x, z: SITES.knap.z }, made: YEARS.SCENE_A_YEAR, data: {} });
     Save.addRecord({ id: 'hearthA', type: 'hearth', pos: { ...SITES.fire }, made: YEARS.SCENE_A_YEAR, data: {} });
   }
@@ -938,6 +1104,7 @@ async function sceneA(G) {
     FX.ring({ x: w.x, y: 10, z: w.z + 2 }, { color: 0xffc98a, radius: 2.6, life: 0.9 });
     await G.hud.narrator(S.act1.paintDone);
     await G.hud.narrator(S.act1.paintNote);
+    teach(G, 'rockArt'); // 4.38
   } else {
     placePaintingMesh(G, Save.getRecord('painting').data.png, 1);
   }
@@ -984,6 +1151,7 @@ async function sceneA(G) {
     setBeacon(G, null); // beads drilled — the objective is met
     recordTell(fxAt(G, SITES.knap.x, SITES.knap.z, 0.8));
     await G.hud.narrator(S.act1.drillDone);
+    teach(G, 'exchange'); // 4.39, ornaments half; the trade below is the other
     Save.addRecord({ id: 'beads', type: 'beads', pos: { ...SITES.grave }, made: YEARS.SCENE_A_YEAR, data: { count: 7 } });
   }
 
@@ -1013,6 +1181,11 @@ async function sceneA(G) {
     Save.addRecord({ id: 'obsidian', type: 'obsidian', pos: { ...SITES.playerHut }, made: YEARS.SCENE_A_YEAR, data: {} });
     recordTell(fxAt(G, camp.x + 4, camp.z + 3, 0.8));
     await G.hud.narrator(S.act1.tradeDone);
+
+    // RECALL 2. `huntGather` was taught at the end of the gather, and the
+    // visitors asking how your people eat is the most natural question in the
+    // scene. Nobody has to be told it is a test, because it isn't one.
+    await recallBeat(G, { id: 'huntGather', ...S.recall.q.huntGather });
     for (const v of visitors) v.goTo(v.pos.x + 14, v.pos.z + 10);
   }
 
@@ -1038,6 +1211,7 @@ async function sceneA(G) {
   elder.say('🏔️👣 ➡️', 3000);
   await G.hud.narrator(S.act1.depletion2);
   await G.hud.narrator(S.act1.campMoves);
+  teach(G, 'camp'); // 4.34
 
   // --- burial (4.37) ---
   SFX.hush();
@@ -1077,6 +1251,7 @@ async function sceneA(G) {
   FX.ring({ x: SITES.grave.x, y: gy, z: SITES.grave.z }, { color: 0xb9c4cc, radius: 4.6, life: 2.6, width: 0.12 });
   FX.floaties({ x: SITES.grave.x, y: gy + 0.3, z: SITES.grave.z }, { color: 0xd9d2c0, count: 8, size: 0.1, life: 2.6, rise: 0.45 });
   await G.hud.narrator(S.act1.burialNote); // "Perhaps…" — protected hedge
+  teach(G, 'graveGoods'); // 4.37. No recall slot at a funeral, on purpose.
   await G.hud.narrator(S.act1.burialDone);
   objectiveCue(G, null); // objective + beacon both down
   G.player.equip(null);
@@ -1135,6 +1310,8 @@ async function sceneB(G) {
   await wait(400);
   FX.ring(fxAt(G, c2.x, c2.z), { color: 0xffe9a8, radius: 4.6, life: 1.0, width: 0.12 });
   await G.hud.narrator(S.act1.thawNote2); // 4.42 melt → rivers → oceans
+  teach(G, 'iceAge'); // 4.41, carried by the thawNote caption on the glimpse
+  teach(G, 'thaw');   // 4.42
   await G.hud.narrator(S.act1.sceneB_ground);
 }
 
@@ -1260,6 +1437,7 @@ async function sceneC(G) {
     recordTell(fxAt(G, SITES.fields.x, SITES.fields.z, 0.6));
     await G.hud.narrator(S.act1.plantDone);
     await G.hud.narrator(S.act1.riverNote); // 4.44 water + fertile soil
+    teach(G, 'riverside');
     Save.addRecord({ id: 'crops', type: 'crop', pos: { ...SITES.fields }, made: YEARS.SCENE_C_YEAR, data: { plots: 4 } });
     // grain into the store → burnt grain find later
     Save.addRecord({ id: 'grain', type: 'grain', pos: { ...SITES.granary }, made: YEARS.SCENE_C_YEAR, data: {} });
@@ -1292,6 +1470,7 @@ async function sceneC(G) {
   for (const g2 of goats) FX.puff(g2.pos, { count: 6, size: 0.28, life: 0.55, color: 0xb9a77e });
   await G.hud.narrator(S.act1.penDone);
   await G.hud.narrator(S.act1.settleNote);
+  teach(G, 'farming'); // 4.43
 
   // --- community store: no personal inventory (4.46) ---
   await G.hud.narrator(S.act1.granaryIntro);
@@ -1306,6 +1485,7 @@ async function sceneC(G) {
   // both "all" and "none" readings are right; the combined option is best
   if (pick === 3 || pick === 1 || pick === 2) await G.hud.narrator(S.act1.granaryRight);
   else await G.hud.narrator(S.act1.granaryWrong);
+  teach(G, 'shared'); // 4.46, taught either way: a wrong pick is corrected, not withheld
   Save.setChoice('granary', pick);
 
   // --- chieftain: task, dispute, lean week (4.45) ---
@@ -1336,6 +1516,14 @@ async function sceneC(G) {
   chief.say('🪨🪨🪨', 2600);
   await G.hud.narrator(S.act1.dispute2);
   await G.hud.narrator(S.act1.disputeNote);
+  teach(G, 'chieftain'); // 4.45
+
+  // RECALL 3. Crosses a scene boundary and a generation: `lostTongues` was
+  // taught at the fire in scene A, and a child in the new hamlet asking what
+  // the old ones sounded like is the widest gap the act can offer. Placed
+  // AFTER the granary question rather than before it, so the player does not
+  // meet two option boxes back to back and start reading them as a quiz.
+  await recallBeat(G, { id: 'lostTongues', ...S.recall.q.lostTongues });
   await G.hud.narrator(S.act1.leanWeek);
   objectiveCue(G, null); // objective + beacon both down
 }
@@ -1366,6 +1554,7 @@ async function sceneD(G) {
   G.mode = 'ground';
   await G.hud.card([S.act1.sceneD_card]);
   await G.hud.narrator(S.act1.hamletGloss); // 4.50 hamlet glossed
+  teach(G, 'hamlet');
 
   const villagers = [];
   for (let i = 0; i < 5; i++) {
@@ -1488,6 +1677,11 @@ async function sceneD(G) {
   FX.flash(bp2, { color: 0xffc98a, size: 0.7, life: 0.14 });
   FX.floaties(bp2, { color: 0xf0b060, count: 8, size: 0.09, life: 1.4, rise: 0.8 });
   await G.hud.narrator(S.act1.copperNote);
+  teach(G, 'pottery'); // 4.49
+
+  // RECALL 4. `farming` was taught back in scene C. A trader from a band that
+  // still walks is exactly the person who would want to know why yours stopped.
+  await recallBeat(G, { id: 'farming', ...S.recall.q.farming });
 
   // --- delivery run (4.47 exchange: food, clothing, tools) ---
   objectiveCue(G, S.act1.obj_delivery, SITES.granary);
@@ -1512,7 +1706,14 @@ async function sceneD(G) {
   setBeacon(G, null); // round trip complete
   FX.ring(fxAt(G, SITES.granary.x, SITES.granary.z), { color: 0xffe9a8, radius: 2.4, life: 0.7 });
   await G.hud.narrator(S.act1.deliveryDone);
+  teach(G, 'village'); // 4.47
   await G.hud.narrator(S.act1.networkNote); // 4.48 networks; villages → towns
+  teach(G, 'network');
+
+  // Anything still missed gets its second chance before the act closes, so
+  // "asked" and "correct" in the exported data describe a fair test rather than
+  // a snapshot of whoever happened to be unlucky on a first guess.
+  await flushRecall(G);
 
   // --- closing: the lingering shot ---
   objectiveCue(G, null); // objective + beacon both down

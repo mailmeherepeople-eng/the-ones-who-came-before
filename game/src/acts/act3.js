@@ -561,6 +561,12 @@ async function epigraphist(ctx) {
   const pot = Save.getRecord('pot');
   if (pot?.data?.mark) await flashback(G, pot.data.mark, S.act3.cards.potsherdMark.title);
   await G.hud.narrator(S.act3.epiNote);
+  // The narrator has been a person all along, and this is where she says so.
+  // One line, and every "Note" box back to act 1 retroactively stops being
+  // textbook voice and becomes her field notes. It sits AFTER epiNote so the
+  // reveal lands on the specialist who has just finished reading the player's
+  // own mark, which is the only place in the game where it is earned.
+  await G.hud.narrator(S.act3.epiReveal);
   await showSourceCard(G, collectCard(G, 'potsherdMark', { photo: pot?.data?.mark ?? { emoji: '📜' } }));
 }
 

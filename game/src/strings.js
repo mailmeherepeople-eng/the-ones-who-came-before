@@ -13,8 +13,23 @@ export const S = {
   newGameYes: 'Yes, start fresh',
   newGameNo: 'No, keep my story',
 
-  openingCard: 'History is the study of the human past.',
-  openingCard2: 'This is the story of how we know it.',
+  // The opening used to be the NCERT definition of history, which is the least
+  // game-like first line available and also a spoiler: the same sentence lands
+  // with earned weight at act3.reportClosing2, after seventy minutes of
+  // becoming true. It now appears once, at the end. What opens the game is the
+  // promise instead, spoken to the student rather than about the subject.
+  openingCard: 'Do not try to remember any of this.',
+  openingCard2: 'Live here a while. The remembering takes care of itself.',
+
+  // First boot only, before the era card. The game is meant to replace an
+  // evening with the textbook, and a student who does not know that will play
+  // it like a cartoon and revise from the book anyway. So it says the method
+  // out loud, once, in the game's own voice.
+  howTo: {
+    card1: 'This is your history chapter. All of it. There is nothing else you need to read.',
+    card2: 'People here will ask you things. Answer from memory, never from notes. Being wrong costs you nothing at all.',
+    card3: 'Your book fills in as you go. A faded page means you were told. A finished page means you knew.',
+  },
 
   ui: {
     interact: 'Tap to interact',
@@ -93,8 +108,33 @@ export const S = {
     sceneA_card: 'A valley, about 38,000 years ago.',
     sceneA_card2: 'You are one of the ones who came before.',
 
+    // The wake. Sound before sight, sight before words, and the player wakes
+    // the character rather than the game waking it for them. `wake` is kept
+    // because it is one of the six lines already recorded, but it now plays
+    // over a body that is already standing rather than over a black screen.
     wake: 'You wake in a rock shelter. Your tribe is stirring.',
+    wake_dark: 'Cold. Smoke. Somewhere close, a fire breathing.',
+    wake_ceiling: 'Stone above you. Firelight moving across it.',
+    wake_riseTap: 'Tap to rise',
+    wake_riseKey: 'Press any key to rise',
+    wake_stand: 'Your people are already up.',
+    // tribeNote MOVED. It used to fire over an empty wake, describing a tribe
+    // the player had not met; it now lands at the fire, with all six of them
+    // physically around you.
     tribeNote: 'Your tribe. Six of you, together. Alone, the wild wins. Together, you eat.',
+
+    // Hunger before basket. The old order taught storeLesson (shared tools)
+    // before the player had touched a berry, so the game's first act was to
+    // explain a solution to a problem nobody had felt. Now the hands fail
+    // first, and the basket is the answer.
+    hunger: 'Your stomach speaks first. It has been speaking since before you woke.',
+    // The objective line is a To-do list, so it takes the instruction; the
+    // description rides alongside as a toast instead of pretending to be one.
+    obj_bare: 'Find something to eat',
+    berryBare1: 'Berries, dark and heavy on the bush. You pick with bare hands.',
+    pickBare: 'Pick with bare hands',
+    berrySpill: 'Two handfuls, and no more hands. The rest drop back into the thorns.',
+    berryWant: 'Across the camp, a gatherer walks out swinging an empty basket.',
 
     obj_gather: 'Gather berries for the tribe',
     obj_gather_n: (n) => `Gather berries for the tribe (${n} picked)`,
@@ -399,6 +439,10 @@ export const S = {
     obj_talk: 'Interview the villagers with the Anthropologist',
     obj_epi: 'Show the marked potsherd to the Epigraphist',
     epiIntro: 'A mark, pressed on purpose. A picture… or a sign?',
+    // The narrator has been a person the whole time. One line, played once, and
+    // every "Note" line in the game retroactively stops being textbook voice
+    // and becomes her field notes. Nothing else has to be rewritten for it.
+    epiReveal: 'You have been hearing my voice this whole time. I read marks for a living. I have been reading yours.',
     epiNote:
       'One mark alone cannot tell us. When marks form a system, they become writing. And writing is where the Epigraphist begins. Keep this sherd.',
     lanternHint: 'Dark in here. Raise the lantern.',
@@ -510,5 +554,225 @@ export const S = {
     exportReport: 'Save report as image',
     drillMore: 'Practice the gap formula',
     drillQ: (a, b) => `From ${a} to ${b}, how many years?`,
+  },
+
+  // ---------- CODEX: the terms, kept ----------
+  // Structure (which entry belongs to which act and syllabus item) is in
+  // src/codex.js; the words are here, like every other user-visible string.
+  // `tells` is written to be READ TWICE: once when the term is met, and again
+  // as the restatement after the player retrieves it. So it has to be the
+  // exam's phrasing and not a poetic gloss on it.
+  codex: {
+    band: {
+      term: 'Band',
+      tells: 'A small group who live and move together. Six of you. Alone the wild wins, together you eat.',
+    },
+    huntGather: {
+      term: 'Hunters and gatherers',
+      tells: 'People who hunt animals and gather fruits, roots and plants. Nothing is planted. You take what the land gives.',
+    },
+    camp: {
+      term: 'Temporary camp',
+      tells: 'Hunters and gatherers move as the food moves, sheltering in caves and rock shelters. A camp is a tool, not a home.',
+    },
+    lostTongues: {
+      term: 'Lost languages',
+      tells: 'They spoke rich languages and every one is gone. Sound does not fossilise, and nobody had writing yet.',
+    },
+    toolmaking: {
+      term: 'Fire and stone tools',
+      tells: 'They controlled fire, and struck stone into better axes, blades and arrowheads.',
+    },
+    graveGoods: {
+      term: 'Grave goods',
+      tells: 'The dead were buried with the beads and blades they had used. That is our clue that they may have believed something continued.',
+    },
+    rockArt: {
+      term: 'Rock paintings',
+      tells: 'In hundreds of caves across the world they painted animals, whole hunts, and open hands on sheltered rock.',
+    },
+    exchange: {
+      term: 'Ornaments and exchange',
+      tells: 'Shell beads, drilled with stone tools. Groups who shared no words still met and exchanged what they had.',
+    },
+    iceAge: {
+      term: 'The last Ice Age',
+      tells: 'The Earth was very cold and much of it lay under ice. The last one ran from over 100,000 years ago to about 12,000 years ago.',
+    },
+    thaw: {
+      term: 'The thaw',
+      tells: 'The ice melted. The water swelled the rivers and drained into the oceans.',
+    },
+    farming: {
+      term: 'Settling down',
+      tells: 'Cultivating grain. Domesticating animals. People stopped walking and stayed.',
+    },
+    riverside: {
+      term: 'Why by a river',
+      tells: 'Water to drink and water for the fields. And the soil near a river is more fertile.',
+    },
+    chieftain: {
+      term: 'Chieftain',
+      tells: 'She settles quarrels, shares out the store, and watches over the well-being of everyone in the settlement.',
+    },
+    shared: {
+      term: 'Nobody owned a sack',
+      tells: 'The land was sowed together and harvested together. Everything went to the community store. No one held a private share.',
+    },
+    village: {
+      term: 'Hamlets into villages',
+      tells: 'Settlements grew, and traded what they had for what they needed: food, clothing and tools.',
+    },
+    network: {
+      term: 'Networks',
+      tells: 'Paths become routes, routes become networks, and a village on the network grows into a town.',
+    },
+    pottery: {
+      term: 'Pottery and copper',
+      tells: 'Fired clay rings hard and lasts for millennia. Copper is the first metal worked here. Iron comes much later.',
+    },
+    hamlet: {
+      term: 'Hamlet',
+      tells: 'A small settlement. A small village.',
+    },
+  },
+
+  // The 📖 panel chrome. Tone rule: a pending page is NOT a failure. The game
+  // simply has not asked yet, and the wording must never let it read as a mark
+  // against the player halfway through act 1.
+  codexUI: {
+    title: 'What you know',
+    blurb: 'A faded page means you were told it. A finished page means you said it back.',
+    known: 'you knew it',
+    pending: 'not yet said back',
+    empty: 'Nothing in here yet. Keep going.',
+    added: (term) => `📖 ${term}, added to your book`,
+    firstHint: 'Tap the book at the top right to read anything again',
+  },
+
+  // ---------- RECALL: retrieval, in fiction ----------
+  // Nobody in the game says "quiz". Every question is something a person in
+  // the world would plausibly ask, and the wrong options are wrong the way a
+  // real misunderstanding is wrong, not obviously silly. See src/recall.js.
+  recall: {
+    again: 'One more, from a while back:',
+    notQuite: 'Not quite. It is this:',
+    q: {
+      band: {
+        question: 'A child asks why the band keeps every tool in one chest. What do you tell her?',
+        options: [
+          'The tools belong to all of us. Take what the work needs, bring it back.',
+          'The strongest hunter owns them and lends them out.',
+          'They are the elder’s. She decides who may touch them.',
+        ],
+        answer: 0,
+      },
+      huntGather: {
+        question: 'The visitors point at your camp, then at the ground, asking with their hands. How do your people eat?',
+        options: [
+          'We hunt the animals and gather what grows. Nothing here is planted.',
+          'We sow grain in rows and wait for the harvest.',
+          'We keep herds in a pen and live on their milk.',
+        ],
+        answer: 0,
+      },
+      lostTongues: {
+        question: 'A child asks what the old ones at the shelter sounded like. What can you honestly say?',
+        options: [
+          'Nobody knows. They spoke richly, and not one word of it survives.',
+          'They had no language yet, only signs and gestures.',
+          'Their words are painted on the shelter wall, if you can read them.',
+        ],
+        answer: 0,
+      },
+      farming: {
+        question: 'A trader from a walking band asks how your village came to stand still. What changed?',
+        options: [
+          'We began to grow grain and to keep animals. So we stayed.',
+          'The hunting here got better, so we stopped moving.',
+          'A chieftain ordered us to build huts and remain.',
+        ],
+        answer: 0,
+      },
+    },
+  },
+
+  // ---------- SYLLABUS LABELS (teacher-facing) ----------
+  // One line per examinable item in game/COVERAGE.md. These render in the codex
+  // and in the ?data results table, so they are user-visible and belong here.
+  // 4.20 is absent on purpose: it is deliberately untaught.
+  syllabus: {
+    '4.1': 'History is the study of the human past',
+    '4.2': 'Geologists read the earth',
+    '4.3': 'Palaeontologists read fossils',
+    '4.4': 'Anthropologists study societies and cultures',
+    '4.5': 'Archaeologists dig up what people left',
+    '4.6': 'Epigraphists read inscriptions',
+    '4.7': 'Fossils are impressions preserved in rock layers',
+    '4.8': 'Eras begin at great events',
+    '4.9': 'The Gregorian calendar worldwide; India has many others',
+    '4.10': 'Gregorian: 12 months, 365 days, leap years, the 400 rule',
+    '4.11': 'CE, once written AD',
+    '4.12': 'BCE, once written BC, counted backward',
+    '4.13': 'There is no year zero',
+    '4.14': 'Across the boundary: add both, then subtract one',
+    '4.15': "The book's example: 560 BCE to 2024 CE is 2,583 years",
+    '4.16': 'A decade is ten years',
+    '4.17': 'A century; the 21st century CE is 2001 to 2100',
+    '4.18': 'The 3rd century BCE is 300 to 201 BCE',
+    '4.19': 'A millennium is a thousand years',
+    '4.21': 'A timeline shows order even without dates',
+    '4.22': 'The pañchānga',
+    '4.23': 'Indian calendars follow the sun and the moon',
+    '4.24': 'What counts as a source of history',
+    '4.25': 'The categories of sources',
+    '4.26': 'The past is a jigsaw with pieces missing',
+    '4.27': 'Sources confirm or contradict, and the historian judges',
+    '4.28': 'Who helps a historian',
+    '4.29': 'Science as a source: climate, chemistry, genetics',
+    '4.30': 'Newspapers and electronic media',
+    '4.31': 'Homo sapiens, for about 300,000 years',
+    '4.32': 'Bands and groups help each other',
+    '4.33': 'Hunters and gatherers',
+    '4.34': 'Temporary camps, rock shelters and caves',
+    '4.35': 'Their languages are lost',
+    '4.36': 'Fire, and better axes, blades and arrowheads',
+    '4.37': 'Grave goods, and belief',
+    '4.38': 'Rock paintings',
+    '4.39': 'Ornaments, and exchange between groups',
+    '4.40': 'What an Ice Age is',
+    '4.41': 'The last Ice Age, and when it ended',
+    '4.42': 'Melting ice swelled the rivers and the oceans',
+    '4.43': 'Settling down: cultivating and domesticating',
+    '4.44': 'Settling near rivers: water and fertile soil',
+    '4.45': 'Chieftains and the well-being of all',
+    '4.46': 'No private ownership: sowing and harvesting together',
+    '4.47': 'Hamlets grow into villages that exchange goods',
+    '4.48': 'Routes become networks, villages become towns',
+    '4.49': 'Pottery, and copper before iron',
+    '4.50': 'A hamlet is a small settlement',
+  },
+
+  // ---------- TEACHER SURFACES (?data and ?pilot) ----------
+  // Never reachable from the title screen, and never shown to a student.
+  results: {
+    title: 'SESSION DATA',
+    blurb: 'One row per child on this device. Nothing here has left this browser.',
+    colStudent: 'Student',
+    colTaught: 'Covered',
+    colAsked: 'Asked',
+    colRetrieved: 'Recalled',
+    colMinutes: 'Minutes',
+    colReached: 'Reached',
+    anon: 'this device',
+    caveat: 'Covered means the game taught it. Asked means the game made the child produce it from memory. A low Asked count is a gap in the game, not in the child.',
+    downloadCsv: 'Download CSV',
+    downloadJson: 'Download JSON',
+  },
+
+  pilot: {
+    title: 'Who is playing?',
+    note: 'For classroom use. Each name keeps its own separate save on this device.',
+    start: 'Start',
   },
 };
