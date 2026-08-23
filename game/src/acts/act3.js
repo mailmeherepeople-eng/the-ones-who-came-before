@@ -28,6 +28,9 @@ export async function runAct3(G, resumeBeat = null) {
   clearCrossFlora(G.world, SITES.digCamp.x, SITES.digCamp.z, 6);
   G.mesher.remeshAll();
   G.renderer.setSky(0x9ec8e8, 0xcfe0ee);
+  // first morning on site: mist still lying in the river valley
+  G.renderer.setMist(0.4, 10, 5);
+  FX.setMotes('pollen');
   G.player.teleport(SITES.digCamp.x, SITES.digCamp.z + 2, Math.PI * 1.1);
   G.mode = 'ground';
   G.input.setEnabled(true);
@@ -330,6 +333,7 @@ function digSpot(ctx, { id, x, z, prompt = '⛏️', layers = 3, onFind }) {
         FX.burst(stroke, { color: 0x8a6a42, count: 26, size: 0.22, speed: 4, life: 0.65, gravity: 8, additive: false });
         FX.puff(stroke, { color: 0xb9a77e, count: 10, size: 0.55, life: 0.85 });
         FX.flash(stroke, { color: 0xffd9a0, size: 0.8, life: 0.14 });
+        G.player.addTrauma(0.22); // the trowel bites
         if (depth < layers) {
           G.hud.toast(`${S.act3.digLocked} (${depth}/${layers})`, 2200);
           return;

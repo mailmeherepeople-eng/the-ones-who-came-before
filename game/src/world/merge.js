@@ -22,10 +22,12 @@
 // graph). Attributes are normalised to position/normal/colour first, which
 // makes the weld below trivial.
 import * as THREE from '../../vendor/three.module.js';
+import { enhance } from './shade.js';
 
 // One material for every folded mesh in the game. props.js registers this in
-// its SHARED_MATS set so disposeGroup() never disposes it.
-export const MERGED_MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+// its SHARED_MATS set so disposeGroup() never disposes it. Enhanced so folded
+// props and characters share the world's mist and cloud shadows.
+export const MERGED_MAT = enhance(new THREE.MeshLambertMaterial({ vertexColors: true }));
 
 const _inv = new THREE.Matrix4();
 const _rel = new THREE.Matrix4();
@@ -142,9 +144,14 @@ export function foldStatic(root, keep = []) {
     // never dispose it
     root.geometry = merged;
     root.material = MERGED_MAT;
+    root.castShadow = true;
+    root.receiveShadow = true;
   } else {
     const m = new THREE.Mesh(merged, MERGED_MAT);
     m.name = `${root.name || 'static'}:folded`;
+    // flags only: free until the Rich tier turns the shadow map on
+    m.castShadow = true;
+    m.receiveShadow = true;
     root.add(m);
   }
   return drop.length;

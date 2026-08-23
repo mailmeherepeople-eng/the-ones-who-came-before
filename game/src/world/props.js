@@ -3,6 +3,7 @@
 // Cheap primitives only; every factory returns { group, update? }.
 import * as THREE from '../../vendor/three.module.js';
 import { foldStatic, MERGED_MAT } from './merge.js';
+import { enhance } from './shade.js';
 
 const MAT = {
   wood: new THREE.MeshLambertMaterial({ color: 0x6d5028 }),
@@ -38,6 +39,35 @@ const MAT = {
   meat: new THREE.MeshLambertMaterial({ color: 0x9e3f34 }),
   meatDark: new THREE.MeshLambertMaterial({ color: 0x7e2f27 }),
 };
+// every lit prop material takes the shared mist and cloud-shadow terms, so a
+// cart in the dawn mist fogs with the ground it stands on (world/shade.js)
+for (const m of Object.values(MAT)) if (m.isMeshLambertMaterial) enhance(m);
+
+// soft additive glow for anything that burns: one sprite, one draw call,
+// and it does what a bloom pass would do for a fire at a thousandth of the
+// cost. Texture built on first use.
+let glowTex = null;
+function fireGlow(size, color) {
+  if (!glowTex) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 64;
+    const c = cv.getContext('2d');
+    const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.3, 'rgba(255,255,255,0.35)');
+    g.addColorStop(0.7, 'rgba(255,255,255,0.08)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, 64, 64);
+    glowTex = new THREE.CanvasTexture(cv);
+    glowTex.colorSpace = THREE.SRGBColorSpace;
+  }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.55,
+  }));
+  s.scale.set(size, size, 1);
+  return s;
+}
 
 function grp(x, y, z) {
   const g = new THREE.Group();
@@ -47,6 +77,9 @@ function grp(x, y, z) {
 function box(w, h, d, mat, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x, y, z);
+  // flags only: they cost nothing until the Rich tier's shadow map is on.
+  // Flames and embers are MeshBasic and must not throw a shadow.
+  if (mat.isMeshLambertMaterial) { m.castShadow = true; m.receiveShadow = true; }
   return m;
 }
 
@@ -84,6 +117,9 @@ export function makeCampfire(x, y, z) {
   const light = new THREE.PointLight(0xff9d3c, 6, 9);
   light.position.y = 0.9;
   g.add(light);
+  const glow = fireGlow(2.6, 0xff8a2a);
+  glow.position.y = 0.75;
+  g.add(glow);
   // 4 logs + 6 stones fold to one call. No keep list is needed: the flames,
   // core and embers are MeshBasicMaterial, which foldStatic declines on its
   // own, and the PointLight is not a mesh at all.
@@ -97,6 +133,7 @@ export function makeCampfire(x, y, z) {
       flame.scale.set(s, s, s);
       core.scale.set(2 - s, s, 2 - s);
       light.intensity = 5 + Math.sin(t * 13) * 1.2;
+      glow.material.opacity = 0.5 + Math.sin(t * 9) * 0.07 + Math.sin(t * 23) * 0.04;
       for (const e of embers) {
         const u = e.userData;
         const f = (t * u.speed + u.off) % 1;

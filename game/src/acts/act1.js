@@ -601,6 +601,9 @@ async function sceneA(G) {
   scatterWildBerries(G.world); // before remeshAll, so setRaw is enough
   G.mesher.remeshAll();
   G.renderer.setSky(0xbcd3e6, 0xd4e2ec); // colder light
+  // the ice-age basin: a thin cold mist on the low ground, snow in the air
+  G.renderer.setMist(0.45, 10, 5);
+  FX.setMotes('snow');
   // wake INSIDE the rock shelter, facing the mouth. The cave floor is y=9 so
   // the feet sit at 10 — an explicit y is required, because topAt at these
   // columns reads the cliff ABOVE the shelter and would drop us on the roof.
@@ -981,6 +984,7 @@ async function sceneA(G) {
     G.npcs.push(predator);
     Sound.playSfx('bear-roar');
     Sound.playMusic('act1.chase', { fade: 0.4 });
+    G.player.addTrauma(0.6); // the roar lands in the camera too
     FX.flash(fxAt(G, predator.pos.x, predator.pos.z, 1.0), { color: 0xff5a4a, size: 1.7, life: 0.2 });
     FX.puff(predator.pos, { count: 10, size: 0.32, life: 0.6, color: 0xb0a184 });
     predator.followTarget = G.player.pos;
@@ -1289,6 +1293,8 @@ async function sceneB(G) {
     rebuild: () => {
       buildSceneB(G.world);
       G.renderer.setSky(0x9ec8e8, 0xcfe0ee);
+      G.renderer.setMist(0);
+      FX.setMotes('pollen');
       G.player.teleport(SITES.camp2.x, SITES.camp2.z + 3, 0);
     },
     overXZ: { x: 60, z: 40 },
@@ -1338,6 +1344,8 @@ async function sceneC(G) {
   buildSceneC(G.world);
   G.mesher.remeshAll();
   G.renderer.setSky(0x9ec8e8, 0xcfe0ee);
+  G.renderer.setMist(0);
+  FX.setMotes('pollen');
   G.player.teleport(SITES.village.x - 2, SITES.village.z + 4, Math.PI * 0.9);
   G.mode = 'ground';
 

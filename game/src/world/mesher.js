@@ -8,6 +8,7 @@ import { B, BLOCK_DEFS, isOpaque, isWater } from './blocks.js';
 import { atlasTexture, tileUV } from './atlas.js';
 import { noise2 } from './terrain.js';
 import { CHUNKS_X, CHUNKS_Z } from './voxel.js';
+import { enhance } from './shade.js';
 
 const { CHUNK, SIZE_Y: SY } = WORLD;
 
@@ -16,13 +17,35 @@ const { CHUNK, SIZE_Y: SY } = WORLD;
 // uv: [axis for U, axis for V] into the corner triple, so a painted face is
 // upright on the sides and reads left-to-right on the top/bottom.
 const FACES = [
+  // Face shades are the classic voxel "cube reads as a cube" stylisation on
+  // top of the real Lambert term: tops full, sides stepped, bottoms deep.
+  // Widened 2026-08-23 (was 1.0 / 0.55 / 0.8 / 0.8 / 0.72 / 0.9): the old
+  // spread was narrow enough that a block edge needed the AO corner to show.
   { d: [0, 1, 0], c: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]], shade: 1.0, part: 'top', ax: [0, 2], uv: [0, 2] },
-  { d: [0, -1, 0], c: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], shade: 0.55, part: 'bottom', ax: [0, 2], uv: [0, 2] },
-  { d: [1, 0, 0], c: [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]], shade: 0.8, part: 'side', ax: [1, 2], uv: [2, 1] },
-  { d: [-1, 0, 0], c: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], shade: 0.8, part: 'side', ax: [1, 2], uv: [2, 1] },
-  { d: [0, 0, 1], c: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], shade: 0.72, part: 'side', ax: [0, 1], uv: [0, 1] },
-  { d: [0, 0, -1], c: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]], shade: 0.9, part: 'side', ax: [0, 1], uv: [0, 1] },
+  { d: [0, -1, 0], c: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], shade: 0.45, part: 'bottom', ax: [0, 2], uv: [0, 2] },
+  { d: [1, 0, 0], c: [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]], shade: 0.78, part: 'side', ax: [1, 2], uv: [2, 1] },
+  { d: [-1, 0, 0], c: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], shade: 0.70, part: 'side', ax: [1, 2], uv: [2, 1] },
+  { d: [0, 0, 1], c: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], shade: 0.68, part: 'side', ax: [0, 1], uv: [0, 1] },
+  { d: [0, 0, -1], c: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]], shade: 0.84, part: 'side', ax: [0, 1], uv: [0, 1] },
 ];
+
+// ---- baked sun shadows ----
+// The sun sits at (40, 60, 20) (engine/renderer.js); light travels the other
+// way, so from any point we march TOWARD the sun and the first opaque cell we
+// meet puts the point in shadow. The march steps one block in y at a time
+// (the x and z steps below are the sun direction scaled to that), which is
+// coarse enough to be cheap and fine enough for anything a tree or a cliff
+// casts. A one-block trunk can slip between samples at some corners, and that
+// is accepted: its canopy is what throws the shadow that matters.
+// Marching stops after SUN_STEPS blocks of rise: nothing in this world is
+// taller, and an open march to the top of the volume would triple the cost.
+const SUN_DX = 40 / 60, SUN_DZ = 20 / 60;
+const SUN_STEPS = 14;
+// The sample point starts half a block out along the face normal (inside the
+// open cell the face looks into, never inside its own block) and is nudged a
+// whisker toward the face centre so a corner that sits exactly on a block
+// boundary floors into the cell it belongs to rather than its neighbour.
+const SUN_EPS = 0.02;
 
 // AO level (0 = fully cornered … 3 = open) → brightness
 const AO_LUT = [0.55, 0.74, 0.87, 1.0];
@@ -37,13 +60,16 @@ export class ChunkMesher {
   constructor(world, scene) {
     this.world = world;
     this.scene = scene;
-    this.solidMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    this.waterMat = new THREE.MeshLambertMaterial({
-      vertexColors: true, transparent: true, opacity: 0.78, depthWrite: false,
-    });
-    this.crossMat = new THREE.MeshLambertMaterial({
+    // every chunk material goes through shade.js: baked sun on all three,
+    // wind sway on canopy blocks and cross flora, the wobble + specular on
+    // water. See that file for what each costs (nothing per draw call).
+    this.solidMat = enhance(new THREE.MeshLambertMaterial({ vertexColors: true }), { sun: true, sway: true });
+    this.waterMat = enhance(new THREE.MeshLambertMaterial({
+      vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false,
+    }), { water: true });
+    this.crossMat = enhance(new THREE.MeshLambertMaterial({
       vertexColors: true, side: THREE.DoubleSide,
-    });
+    }), { sun: true, sway: true });
     this.texMat = null; // built on first sight of a painted block (see atlas.js)
     this.chunks = new Map(); // key -> {solid, water, cross, tex} (Mesh|null each)
   }
@@ -69,7 +95,7 @@ export class ChunkMesher {
   // painted-block material, created only once a block with `tex` is meshed
   _texMaterial() {
     if (!this.texMat) {
-      this.texMat = new THREE.MeshLambertMaterial({ map: atlasTexture(), vertexColors: true });
+      this.texMat = enhance(new THREE.MeshLambertMaterial({ map: atlasTexture(), vertexColors: true }), { sun: true });
     }
     return this.texMat;
   }
@@ -96,13 +122,24 @@ export class ChunkMesher {
     const w = this.world;
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
 
-    const pos = [], col = [], idxArr = [];
+    const pos = [], col = [], idxArr = [], sunA = [], swayA = [];
     const wpos = [], wcol = [], widx = [];
-    const xpos = [], xcol = [], xidx = [];
-    const tpos = [], tcol = [], tuv = [], tidx = []; // painted blocks (atlas)
+    const xpos = [], xcol = [], xidx = [], xsun = [], xsway = [];
+    const tpos = [], tcol = [], tuv = [], tidx = [], tsun = []; // painted blocks (atlas)
 
     // occupancy sample for AO: 1 if the cell shadows a corner
     const occ = (x, y, z) => (isOpaque(w.get(x, y, z)) ? 1 : 0);
+    // 1 if nothing opaque stands between this point and the sun (see the
+    // SUN_* notes above). Bounded by the world volume, so a point under open
+    // sky exits in a handful of steps.
+    const sunAt = (px, py, pz) => {
+      for (let k = 0; k <= SUN_STEPS; k++) {
+        const sx = Math.floor(px + SUN_DX * k), sy = Math.floor(py + k), sz = Math.floor(pz + SUN_DZ * k);
+        if (sy >= SY) return 1;
+        if (isOpaque(w.get(sx, sy, sz))) return 0;
+      }
+      return 1;
+    };
 
     for (let y = 0; y < SY; y++) {
       for (let z = z0; z < z0 + CHUNK; z++) {
@@ -116,7 +153,7 @@ export class ChunkMesher {
           const tn = noise2(x * 0.045, z * 0.045);
 
           if (def.cross) {
-            this.emitCross(x, y, z, def, tn, xpos, xcol, xidx);
+            this.emitCross(x, y, z, def, tn, xpos, xcol, xidx, xsun, xsway, sunAt);
             continue;
           }
 
@@ -207,6 +244,36 @@ export class ChunkMesher {
 
             const vi = P.length / 3;
             let ao = null;
+            // wind: canopy blocks breathe a little as a whole; everything else
+            // stands still. Per-vertex so the shader needs no block id.
+            const leaf = id === B.LEAVES || id === B.LEAVES_DARK || id === B.LEAVES_BRIGHT;
+            const swayV = leaf ? 0.35 : 0;
+            // foam: a water surface corner hugged by a bank cell at the same
+            // level gets a pale rim, so the river meets its shore with an edge
+            // instead of a hard colour seam
+            let foam = null;
+            if (water && f.part === 'top' && wTop < 1) {
+              foam = [0, 0, 0, 0];
+              for (let ci = 0; ci < 4; ci++) {
+                const cnr = f.c[ci];
+                const sA = cnr[0] ? 1 : -1, sB = cnr[2] ? 1 : -1;
+                foam[ci] = (occ(x + sA, y, z) || occ(x, y, z + sB) || occ(x + sA, y, z + sB)) ? 1 : 0;
+              }
+            }
+            let sun = null;
+            if (!water) {
+              sun = [0, 0, 0, 0];
+              const cxm = x + 0.5, cym = y + 0.5, czm = z + 0.5;
+              for (let ci = 0; ci < 4; ci++) {
+                const cnr = f.c[ci];
+                const px = x + cnr[0], py = y + cnr[1], pz = z + cnr[2];
+                sun[ci] = sunAt(
+                  px + f.d[0] * 0.5 + (cxm - px) * SUN_EPS,
+                  py + f.d[1] * 0.5 + (cym - py) * SUN_EPS,
+                  pz + f.d[2] * 0.5 + (czm - pz) * SUN_EPS,
+                );
+              }
+            }
             if (!water) {
               // classic 4-level AO: sample the 3 cells that hug each corner
               // one step out along the face normal
@@ -239,20 +306,25 @@ export class ChunkMesher {
               if (water) {
                 // slight per-vertex shimmer + depth-leaning blue
                 const wj = 0.9 + 0.2 * hash3(x * 3 + cnr[0], y, z * 3 + cnr[2]);
-                Cc.push(
-                  Math.min(1, base[0] * f.shade * wj * 0.9),
-                  Math.min(1, base[1] * f.shade * wj),
-                  Math.min(1, base[2] * f.shade * (0.95 + wj * 0.1))
-                );
+                let wr = Math.min(1, base[0] * f.shade * wj * 0.9);
+                let wg = Math.min(1, base[1] * f.shade * wj);
+                let wb = Math.min(1, base[2] * f.shade * (0.95 + wj * 0.1));
+                if (foam && foam[ci]) {
+                  wr += (0.78 - wr) * 0.55; wg += (0.86 - wg) * 0.55; wb += (0.86 - wb) * 0.55;
+                }
+                Cc.push(wr, wg, wb);
               } else {
                 const a = AO_LUT[ao[ci]];
                 Cc.push(Math.min(1, r0 * a), Math.min(1, g0 * a), Math.min(1, b0 * a));
+                if (painted) tsun.push(sun[ci]);
+                else { sunA.push(sun[ci]); swayA.push(swayV); }
               }
             }
 
-            // flip the quad diagonal so AO interpolates without banding
-            // (anisotropy fix: keep the single dark corner off the diagonal)
-            if (!water && ao[0] + ao[2] < ao[1] + ao[3]) {
+            // flip the quad diagonal so AO (and the baked shadow edge)
+            // interpolates without banding (anisotropy fix: keep the single
+            // dark corner off the diagonal)
+            if (!water && ao[0] + ao[2] + sun[0] * 2 + sun[2] * 2 < ao[1] + ao[3] + sun[1] * 2 + sun[3] * 2) {
               I.push(vi + 1, vi + 2, vi + 3, vi + 3, vi, vi + 1);
             } else {
               I.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
@@ -263,10 +335,12 @@ export class ChunkMesher {
     }
 
     const entry = { solid: null, water: null, cross: null, tex: null };
-    if (pos.length) entry.solid = this.makeMesh(pos, col, idxArr, this.solidMat);
+    if (pos.length) entry.solid = this.makeMesh(pos, col, idxArr, this.solidMat, null, sunA, swayA);
     if (wpos.length) entry.water = this.makeMesh(wpos, wcol, widx, this.waterMat);
-    if (xpos.length) entry.cross = this.makeMesh(xpos, xcol, xidx, this.crossMat);
-    if (tpos.length) entry.tex = this.makeMesh(tpos, tcol, tidx, this._texMaterial(), tuv);
+    if (xpos.length) entry.cross = this.makeMesh(xpos, xcol, xidx, this.crossMat, null, xsun, xsway);
+    if (tpos.length) entry.tex = this.makeMesh(tpos, tcol, tidx, this._texMaterial(), tuv, tsun);
+    // the river receives the Rich-tier shadow map but never casts into it
+    if (entry.water) entry.water.castShadow = false;
     this.chunks.set(key, entry);
   }
 
@@ -274,8 +348,11 @@ export class ChunkMesher {
   // flower or reed instead of a cube. Never occludes neighbours.
   // Quads are TAPERED trapezoids: top verts pull toward the centre by
   // def.crossTaper (default 0.5) so cover reads as tufts, not slabs.
-  emitCross(x, y, z, def, tn, P, Cc, I) {
+  emitCross(x, y, z, def, tn, P, Cc, I, SunA, SwayA, sunAt) {
     const h1 = hash3(x, 1, z), h2 = hash3(x, 2, z), h3 = hash3(x, 3, z);
+    // one sun sample per tuft, from the open cell it stands in: it is under
+    // a canopy or it is not
+    const sunV = sunAt(x + 0.5, y + 0.5, z + 0.5);
     const cx = x + 0.5 + (h1 - 0.5) * 0.3;
     const cz = z + 0.5 + (h2 - 0.5) * 0.3;
     const ang = h3 * Math.PI;
@@ -323,20 +400,31 @@ export class ChunkMesher {
         }
         Cc.push(Math.min(1, r), Math.min(1, g), Math.min(1, b));
       }
+      // roots stay put, tips bend: bottom verts 0, top verts 1 (a stacked
+      // lower reed segment keeps its top still so the joint never tears)
+      SunA.push(sunV, sunV, sunV, sunV);
+      const tip = stacked ? 0 : 1;
+      SwayA.push(0, 0, tip, tip);
       // DoubleSide material — one winding is enough
       I.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
     }
   }
 
-  makeMesh(pos, col, idx, mat, uv = null) {
+  makeMesh(pos, col, idx, mat, uv = null, sun = null, sway = null) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    if (sun) g.setAttribute('sun', new THREE.Float32BufferAttribute(sun, 1));
+    if (sway) g.setAttribute('sway', new THREE.Float32BufferAttribute(sway, 1));
     g.setIndex(idx);
     g.computeVertexNormals();
     const mesh = new THREE.Mesh(g, mat);
     mesh.frustumCulled = true;
+    // flags only; they cost nothing until the renderer turns its shadow map
+    // on (engine/renderer.js setRich)
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     this.scene.add(mesh);
     return mesh;
   }

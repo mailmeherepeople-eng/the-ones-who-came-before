@@ -51,6 +51,11 @@
 //     One quick additive billboard flash (knapping strike, documentation photo).
 //   FX.confetti(pos, {count:26, size:0.14, life:1.1, speed:3.5})
 //     Multicolour celebratory burst for quest completions.
+//   FX.setMotes(kind)   kind: 'pollen' | 'snow' | 'ash' | null
+//     Ambient air: a cloud of slow motes that lives around the camera and
+//     wraps with it, so the air has something in it wherever you walk.
+//     Entirely GPU-driven (positions wrap in the vertex shader), one draw
+//     call, no per-frame CPU. null switches it off. Needs FX.setCamera().
 //
 // PERF NOTES (low-end Android budget)
 //   Particles: exactly two THREE.Points draw calls — one additive pool (900)
@@ -104,6 +109,55 @@ const FRAG = /* glsl */ `
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const _c = new THREE.Color(); // shared scratch — emitters are synchronous
+
+// ---------------------------------------------------------------- motes
+// Points kept inside a box centred on the camera. Each vertex drifts with
+// time and is wrapped back into the box in the shader, and fades out near
+// the box walls so nothing ever pops in or out.
+const MOTE_BOX = 18; // blocks, edge length
+const MOTE_KINDS = {
+  pollen: { count: 220, color: 0xfff1c2, size: 0.085, alpha: 0.55, rise: 0.12, drift: 0.35, wobble: 0.5 },
+  snow:   { count: 320, color: 0xf4f8ff, size: 0.075, alpha: 0.65, rise: -0.9, drift: 0.5, wobble: 0.9 },
+  ash:    { count: 160, color: 0xffb27a, size: 0.07, alpha: 0.6, rise: 0.5, drift: 0.25, wobble: 0.7 },
+};
+const MOTE_VERT = /* glsl */ `
+  attribute vec3 aSeed;
+  uniform vec3 uCenter;
+  uniform float uTime;
+  uniform float uScale;
+  uniform float uRise;
+  uniform float uDrift;
+  uniform float uWobble;
+  uniform float uSize;
+  varying float vFade;
+  void main() {
+    float B = ${MOTE_BOX}.0;
+    vec3 p = position;
+    p.y += uTime * uRise * (0.6 + aSeed.x * 0.8);
+    p.x += uTime * uDrift * (0.5 + aSeed.y) + sin(uTime * (0.7 + aSeed.z) + aSeed.x * 6.28) * uWobble;
+    p.z += sin(uTime * (0.5 + aSeed.x) + aSeed.y * 6.28) * uWobble;
+    // wrap into the box around the camera
+    p = mod(p - uCenter + B * 0.5, B) - B * 0.5;
+    vec3 w = p + uCenter;
+    float edge = max(abs(p.x), max(abs(p.y), abs(p.z))) / (B * 0.5);
+    vFade = 1.0 - smoothstep(0.7, 1.0, edge);
+    vec4 mv = modelViewMatrix * vec4(w, 1.0);
+    float dist = max(0.5, -mv.z);
+    vFade *= smoothstep(0.6, 2.5, dist); // never a blob in your face
+    gl_PointSize = min(${MAX_POINT_PX}.0, uSize * (0.7 + aSeed.z * 0.6) * uScale / dist);
+    gl_Position = projectionMatrix * mv;
+  }`;
+const MOTE_FRAG = /* glsl */ `
+  precision mediump float;
+  uniform vec3 uColor;
+  uniform float uAlpha;
+  varying float vFade;
+  void main() {
+    vec2 d = gl_PointCoord - 0.5;
+    float a = uAlpha * vFade * smoothstep(0.5, 0.12, length(d));
+    if (a < 0.01) discard;
+    gl_FragColor = vec4(uColor, a);
+  }`;
 
 // ---------------------------------------------------------------- particles
 class ParticlePool {
@@ -232,6 +286,9 @@ export const FX = {
   _emitters: [], // persistent flame/smoke emitters (handle-based)
   _ringThin: null,
   _ringThick: null,
+  _camera: null,
+  _motes: null,   // { points, kind }
+  _pointScale: 1,
 
   // Call once at boot with the persistent renderer.scene. Idempotent; a second
   // call with a different scene just re-parents the FX group.
@@ -252,6 +309,7 @@ export const FX = {
       pr = Math.min(window.devicePixelRatio || 1, 1.5); // mirrors PERF.MAX_PIXEL_RATIO
     }
     const pointScale = (h * pr) / (2 * Math.tan((70 * Math.PI / 180) / 2));
+    this._pointScale = pointScale;
 
     this._add = new ParticlePool(ADD_CAP, THREE.AdditiveBlending, pointScale);
     this._norm = new ParticlePool(NORM_CAP, THREE.NormalBlending, pointScale);
@@ -287,6 +345,54 @@ export const FX = {
     }
   },
 
+  // the camera the motes wrap around (main.js sets it once at boot)
+  setCamera(camera) { this._camera = camera; },
+
+  // Ambient motes around the camera; see the header. Rebuilt only when the
+  // kind changes, so calling it every scene is free.
+  setMotes(kind) {
+    if (!this._group) return;
+    if (this._motes && this._motes.kind === kind) return;
+    if (this._motes) {
+      this._group.remove(this._motes.points);
+      this._motes.points.geometry.dispose();
+      this._motes.points.material.dispose();
+      this._motes = null;
+    }
+    const k = MOTE_KINDS[kind];
+    if (!k) return;
+    // fewer on the low tier: same fill-rate argument as the particle pools
+    const n = Math.round(k.count * (QUALITY.particleCap >= 1500 ? 1 : 0.55));
+    const pos = new Float32Array(n * 3), seed = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = rnd(-MOTE_BOX / 2, MOTE_BOX / 2);
+      pos[i * 3 + 1] = rnd(-MOTE_BOX / 2, MOTE_BOX / 2);
+      pos[i * 3 + 2] = rnd(-MOTE_BOX / 2, MOTE_BOX / 2);
+      seed[i * 3] = Math.random(); seed[i * 3 + 1] = Math.random(); seed[i * 3 + 2] = Math.random();
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 3));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uCenter: { value: new THREE.Vector3() },
+        uTime: { value: 0 },
+        uScale: { value: this._pointScale },
+        uRise: { value: k.rise }, uDrift: { value: k.drift }, uWobble: { value: k.wobble },
+        uSize: { value: k.size },
+        uColor: { value: new THREE.Color(k.color) },
+        uAlpha: { value: k.alpha },
+      },
+      vertexShader: MOTE_VERT, fragmentShader: MOTE_FRAG,
+      transparent: true, depthWrite: false, blending: kind === 'snow' ? THREE.NormalBlending : THREE.AdditiveBlending,
+    });
+    const points = new THREE.Points(g, mat);
+    points.frustumCulled = false; // the box follows the camera; always in view
+    points.renderOrder = 5;
+    this._group.add(points);
+    this._motes = { points, kind, t: 0 };
+  },
+
   // Advance all live effects. Cheap when idle (early-outs on dead slots).
   update(dt) {
     if (!this._group) return;
@@ -295,6 +401,13 @@ export const FX = {
 
     this._add.update(dt);
     this._norm.update(dt);
+    if (this._motes && this._camera) {
+      const m = this._motes;
+      m.t += dt;
+      const u = m.points.material.uniforms;
+      u.uTime.value = m.t;
+      u.uCenter.value.copy(this._camera.position);
+    }
 
     for (const s of this._rings) {
       if (!s.live) continue;

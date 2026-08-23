@@ -12,6 +12,8 @@ import { runAct1 } from './acts/act1.js';
 import { SFX } from './audio.js';
 import { FX } from './fx/fx.js';
 import { Settings } from './settings.js';
+import { SITES } from './world/terrain.js';
+import { buildSceneB } from './world/states.js';
 
 const canvas = document.getElementById('gl');
 const uiRoot = document.getElementById('ui-root');
@@ -81,10 +83,12 @@ G.audio = SFX;
 // saved preference is applied at boot without duplicating the logic here.
 Settings.subscribe(() => {
   G.player.lockCamera = Settings.get('lockCamera');
+  G.renderer.setRich(Settings.get('rich'));
 });
 
 // visual FX layer: init once on the persistent scene; wire player juice hooks
 FX.init(G.renderer.scene);
+FX.setCamera(G.renderer.camera);
 G.player.onFootstep = (p) => FX.puff(p, { count: 3, size: 0.2, life: 0.45, alpha: 0.3, color: 0xb9a77e });
 G.player.onLand = (p) => FX.puff(p, { count: 12, size: 0.32, life: 0.6, color: 0xb9a77e });
 G.player.onSplash = (p) => FX.burst(p, { count: 24, size: 0.13, speed: 3, life: 0.6, gravity: 9, additive: false, color: 0xbfe4f5 });
@@ -316,6 +320,12 @@ async function boot() {
     <button class="btn primary" id="t-start"></button>
     <button class="btn" id="t-new" style="display:none"></button>
     <div class="studio"></div>`;
+  // The valley behind the title. The screen paints its gradient first (two
+  // frames, so a slow phone shows SOMETHING at once), then the lush valley is
+  // built and the gradient fades to reveal it with the camera on a slow orbit
+  // over the river bend. The act that starts next rebuilds the world for its
+  // own scene, exactly as it always has.
+  const stopTitleWorld = startTitleWorld(title);
   title.querySelector('h1').textContent = S.title;
   title.querySelector('h2').textContent = S.subtitle;
   title.querySelector('.studio').textContent = S.studio;
@@ -341,6 +351,7 @@ async function boot() {
       else location.reload();
     }, { once: true });
   });
+  stopTitleWorld();
   title.remove();
 
   if (mode === 'new') {
@@ -354,6 +365,48 @@ async function boot() {
   } else {
     await playFrom(Math.max(1, Save.data.act), Save.data.beat);
   }
+}
+
+// ---------- the valley behind the title ----------
+// Returns a function that hands the camera back. Builds on the frame after
+// the title has painted so the boot never waits on a remesh.
+function startTitleWorld(titleEl) {
+  let alive = true;
+  let t = 0;
+  const look = { x: SITES.fishSpot.x - 4, y: 9, z: SITES.fishSpot.z + 2 };
+  const cam = G.renderer.camera;
+  const run = () => {
+    if (!alive) return;
+    buildSceneB(G.world);
+    G.mesher.remeshAll();
+    // late afternoon: the act skies are noon blues; this is the one golden
+    // hour in the game, and it belongs to the first thing anyone sees
+    G.renderer.setSky(0x8fb8dc, 0xe9cfa6);
+    G.renderer.setMist(0.35, 11, 5);
+    FX.setMotes('pollen');
+    G.player.modelHidden = true;
+    if (G.player.model) G.player.model.visible = false;
+    G.mode = 'title';
+    G.tick = (dt) => {
+      if (G.mode !== 'title') return;
+      t += dt;
+      const a = t * 0.04;
+      const r = 26;
+      // high enough to clear every canopy on the orbit, low enough that the
+      // river bend and the cliff both stay in frame
+      cam.position.set(look.x + Math.cos(a) * r, look.y + 16 + Math.sin(t * 0.2) * 0.6, look.z + Math.sin(a) * r);
+      cam.lookAt(look.x, look.y - 1, look.z);
+    };
+    titleEl.classList.add('live');
+  };
+  requestAnimationFrame(() => requestAnimationFrame(run));
+  return () => {
+    alive = false;
+    if (G.mode === 'title') { G.mode = 'boot'; G.tick = null; }
+    G.renderer.setMist(0);
+    FX.setMotes('pollen');
+    G.player.modelHidden = false;
+  };
 }
 
 boot().catch((e) => {

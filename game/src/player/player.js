@@ -5,10 +5,21 @@
 import * as THREE from '../../vendor/three.module.js';
 import { PLAYER, WORLD } from '../constants.js';
 import { isSolid, isWater } from '../world/blocks.js';
+import { enhance } from '../world/shade.js';
 
 // camera boom: desired follow distance (wheel/pinch adjusts within MIN..MAX),
 // orbit pivot height above the feet, and how far short of a wall hit to stop
 const CAM = { DIST: 4.6, MIN: 2.2, MAX: 7.5, PIVOT: 1.5, PAD: 0.3, HIDE_BELOW: 1.15 };
+
+// ---- camera feel (GAME-OVERVIEW section 20) ----
+// Rest FOV, and how far it opens while running: speed reads as speed.
+const FOV_REST = 70, FOV_RUN = 75;
+// Shake follows Eiserloh's GDC 2016 rules: a trauma value in 0..1 that decays
+// linearly, shake strength = trauma squared, ROTATIONAL only (a translated
+// camera in third person makes people queasy and clips into walls), driven
+// by smooth noise rather than random jitter. Peak angles in radians.
+const SHAKE_YAW = 0.03, SHAKE_PITCH = 0.025, SHAKE_ROLL = 0.035;
+const TRAUMA_DECAY = 1.5;
 
 // Auto step-up height. 1.05 matches the ceiling NPCs get in npc.js passable(),
 // so a person and a character can walk exactly the same ground.
@@ -62,6 +73,17 @@ export class Player {
     this._wasInWater = false;
     this._solidTime = 0; // seconds BOTH eye and feet cells have been solid (rescue timer)
     this._camDir = new THREE.Vector3(); // scratch for the camera unclip probe
+    // camera feel: trauma for shake, smoothed FOV for the run kick
+    this.trauma = 0;
+    this._shakeT = Math.random() * 100;
+    this._fov = FOV_REST;
+    this._fovTarget = FOV_REST;
+  }
+
+  // Ask for a camera shake. 0.3 is a heavy landing, 0.6 a charging bear, 1 is
+  // the ground itself moving. Adds, so repeated hits stack toward the cap.
+  addTrauma(amount) {
+    this.trauma = Math.min(1, this.trauma + amount);
   }
 
   // teleport(x, z, yaw, y?) — with no `y` the feet land on the highest column
@@ -93,8 +115,10 @@ export class Player {
     const box = (w, h, d, color, x, y, z, pivotTop = false) => {
       const geo = new THREE.BoxGeometry(w, h, d);
       if (pivotTop) geo.translate(0, -h / 2, 0);
-      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
+      const m = new THREE.Mesh(geo, enhance(new THREE.MeshLambertMaterial({ color })));
       m.position.set(x, y, z);
+      m.castShadow = true; // free until the Rich tier's shadow map is on
+      m.receiveShadow = true;
       return m;
     };
     const g = new THREE.Group();
@@ -187,8 +211,9 @@ export class Player {
   // the model), the hand sits ~0.45 below it, and +z is the model's front.
   _buildEquipItem(kind) {
     const box = (w, h, d, color, x = 0, y = 0, z = 0) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), enhance(new THREE.MeshLambertMaterial({ color })));
       m.position.set(x, y, z);
+      m.castShadow = true;
       return m;
     };
     const wood = 0x6d5028, woodDark = 0x4c3a1e, tan = 0xc9a866, tanDark = 0xb08f52;
@@ -349,6 +374,19 @@ export class Player {
     this.camera.rotation.set(0, 0, 0);
     this.camera.rotateY(-this.yaw);
     this.camera.rotateX(-this.pitch);
+    // shake: applied AFTER the basis so nothing that reads yaw/pitch (movement
+    // math, the boom DDA, FX aiming) ever sees it. Three summed sines at
+    // unrelated frequencies stand in for Perlin noise: smooth, never a jolt.
+    if (this.trauma > 0) {
+      const s = this.trauma * this.trauma;
+      const t = this._shakeT;
+      const n1 = Math.sin(t * 21.3) * 0.6 + Math.sin(t * 33.7 + 1.3) * 0.4;
+      const n2 = Math.sin(t * 25.1 + 2.1) * 0.6 + Math.sin(t * 38.9 + 0.4) * 0.4;
+      const n3 = Math.sin(t * 18.7 + 4.2) * 0.6 + Math.sin(t * 29.3 + 2.8) * 0.4;
+      this.camera.rotateY(n1 * SHAKE_YAW * s);
+      this.camera.rotateX(n2 * SHAKE_PITCH * s);
+      this.camera.rotateZ(n3 * SHAKE_ROLL * s);
+    }
     // collapsed boom = camera inside the body: hide the model so we don't
     // stare at the inside of the character's head
     if (this.model) this.model.visible = !this.modelHidden && d > CAM.HIDE_BELOW;
@@ -367,10 +405,28 @@ export class Player {
     }
   }
 
+  // trauma decay and the FOV ease run every frame the rig is ours, frozen
+  // or not, so a shake started by a cutscene still settles
+  _updateFeel(dt, running) {
+    if (this.trauma > 0) {
+      this.trauma = Math.max(0, this.trauma - TRAUMA_DECAY * dt);
+      this._shakeT += dt;
+    }
+    this._fovTarget = running ? FOV_RUN : FOV_REST;
+    const k = 1 - Math.exp(-dt * 6);
+    const next = this._fov + (this._fovTarget - this._fov) * k;
+    if (Math.abs(next - this._fov) > 0.01) {
+      this._fov = next;
+      this.camera.fov = next;
+      this.camera.updateProjectionMatrix();
+    }
+  }
+
   update(dt, inp) {
     if (this.frozen) {
       // camera-safety still runs while frozen (cutscene inside the cave must
       // not leave the camera buried); the model keeps breathing
+      this._updateFeel(dt, false);
       this.syncCamera();
       this._cameraUnclip();
       this._updateModel(dt);
@@ -485,6 +541,7 @@ export class Player {
     // ---- visual feedback only from here down: reads state, never writes
     // pos/vel/onGround. ----
     this._fxDetect(dt, wasGround, fallSpeed, inWater);
+    this._updateFeel(dt, this.onGround && !inWater && Math.hypot(this.vel.x, this.vel.z) > PLAYER.SPEED * 0.6);
     this.syncCamera();      // TPS boom (occlusion DDA replaces bob/ceiling clamp)
     this._cameraUnclip();   // probe fallback for any corner the DDA missed
     this._updateModel(dt);
@@ -555,9 +612,12 @@ export class Player {
     this._wasInWater = inWater;
 
     // landing: touched down this frame after falling fast enough to notice
-    if (this.onGround && !wasGround && !inWater && fallSpeed > 7 && this.onLand) {
-      this._fxPos.set(this.pos.x, this.pos.y + 0.05, this.pos.z);
-      this.onLand(this._fxPos);
+    if (this.onGround && !wasGround && !inWater && fallSpeed > 7) {
+      this.addTrauma(Math.min(0.45, 0.12 + (fallSpeed - 7) * 0.05));
+      if (this.onLand) {
+        this._fxPos.set(this.pos.x, this.pos.y + 0.05, this.pos.z);
+        this.onLand(this._fxPos);
+      }
     }
 
     // footsteps: cadence by distance walked, so sprint-vs-stroll feels right

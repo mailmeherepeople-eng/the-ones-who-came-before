@@ -4,6 +4,7 @@
 // is CONTROLLED, not part of the story, so "start over" must never reset it
 // and jumping acts with ?act=N must never lose it.
 import { S } from './strings.js';
+import { QUALITY_TIER } from './constants.js';
 
 const KEY = 'towcb-settings-v1';
 
@@ -27,6 +28,15 @@ export const SETTINGS = [
     label: () => S.ui.setMusic,
     note: () => S.ui.setMusicNote,
     def: true,
+  },
+  {
+    // Rich tier: the shadow map, cloud shadows and the post pass
+    // (engine/renderer.js setRich). On by default only where the capability
+    // guess says the GPU can take it; the baked lighting runs everywhere.
+    id: 'rich',
+    label: () => S.ui.setRich,
+    note: () => S.ui.setRichNote,
+    def: QUALITY_TIER === 'high',
   },
 ];
 

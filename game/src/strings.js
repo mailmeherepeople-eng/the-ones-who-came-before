@@ -53,6 +53,8 @@ export const S = {
     setSoundNote: 'Narration, effects and the sounds of the valley. Turn this off and the game plays in silence.',
     setMusic: 'Music',
     setMusicNote: 'Background music only. Narration and effects keep playing.',
+    setRich: 'Rich graphics',
+    setRichNote: 'Moving shadows, cloud shadows and a film finish. Turn this off if the game stutters on your phone.',
     setLockCamera: 'Lock camera behind me',
     setLockCameraNote: 'The camera swings around to stay behind you as you walk, so you do not have to keep dragging. Dragging still works whenever you want it.',
     takeAim: 'Take Aim',

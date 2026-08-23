@@ -3,6 +3,8 @@
 import { S } from '../strings.js';
 import { Settings, SETTINGS } from '../settings.js';
 import { Sound, voiceIdFor } from '../sound.js';
+import { iconFor } from './icons.js';
+import { SFX } from '../audio.js';
 
 export class HUD {
   constructor(uiRoot) {
@@ -12,15 +14,25 @@ export class HUD {
       <div id="hud-objective" class="fade-out"></div>
       <div id="hud-prompt" class="fade-out"></div>
       <div id="hud-hint" class="fade-out"></div>
-      <button id="hud-codex" class="fade-out">📖 <span class="count">0/0</span></button>
-      <button id="hud-satchel" class="fade-out">🧺 <span class="count">0</span></button>
+      <button id="hud-codex" class="fade-out">${iconFor('📖')} <span class="count">0/0</span></button>
+      <button id="hud-satchel" class="fade-out">${iconFor('🧺')} <span class="count">0</span></button>
       <div id="hud-zoom" class="fade-out">
         <button class="btn" id="zoom-out-btn" title="${S.ui.zoomOutHint}">🔍−</button>
       </div>
       <button id="hud-settings" title="${S.ui.settings}" aria-label="${S.ui.settings}">⚙</button>
       <div id="hud-actions"></div>
+      <div class="hud-bar top"></div>
+      <div class="hud-bar bottom"></div>
       <div id="fader"></div>
     `);
+    this._barTimer = null;
+    // every button in the game clicks. Delegated once here rather than wired
+    // per button, so a new panel gets it for free. pointerdown, not click:
+    // the sound must land with the finger, not after the 300 ms tap delay.
+    this.root.addEventListener('pointerdown', (e) => {
+      const b = e.target.closest?.('button, .btn, .settings-row, .choice-box .btn');
+      if (b && !b.disabled) SFX.click();
+    });
     this.objectiveEl = this.root.querySelector('#hud-objective');
     this.promptEl = this.root.querySelector('#hud-prompt');
     this.hintEl = this.root.querySelector('#hud-hint');
@@ -144,7 +156,10 @@ export class HUD {
       if (icon) {
         const i = document.createElement('span');
         i.className = 'p-icon';
-        i.textContent = icon;
+        // a drawn glyph where one exists (ui/icons.js); the emoji otherwise
+        const svg = iconFor(icon);
+        if (svg) i.innerHTML = svg;
+        else i.textContent = icon;
         this.promptEl.appendChild(i);
       }
       if (label) {
@@ -205,6 +220,15 @@ export class HUD {
   async fadeOut(ms = 700) { await this._fade(true, ms); }
   async fadeIn(ms = 700) { await this._fade(false, ms); }
 
+  // Cinematic bars for narrator beats. They slide in with the first line and
+  // stay through a chain of lines: the release is delayed so a beat that
+  // strings three boxes together does not flicker the bars between them.
+  _letterbox(on) {
+    clearTimeout(this._barTimer);
+    if (on) { this.root.classList.add('narrating'); return; }
+    this._barTimer = setTimeout(() => this.root.classList.remove('narrating'), 420);
+  }
+
   // Narrator box. Resolves on tap/click/E, and ALSO when its voice clip ends.
   //
   // When a recording exists for this line the box narrates and then closes
@@ -240,6 +264,8 @@ export class HUD {
       el.setAttribute('role', 'button');
       el.tabIndex = 0;
       this.root.appendChild(el);
+      this._letterbox(true);
+      SFX.page();
       let closed = false;
       let swallowClick = false;
       const openedAt = performance.now();
@@ -256,6 +282,7 @@ export class HUD {
         clip?.stop(); // tapping through cuts the narration with it
         removeEventListener('keydown', onKey);
         el.remove();
+        this._letterbox(false);
         this.input?.clearEdges(); // the dismissing press must not re-trigger interact/jump
         resolve();
       };
@@ -306,6 +333,7 @@ export class HUD {
     const el = document.createElement('div');
     el.className = 'card-overlay';
     this.root.appendChild(el);
+    SFX.page();
     for (let i = 0; i < list.length; i++) {
       const entry = list[i];
       const t = typeof entry === 'string' ? { text: entry } : entry;

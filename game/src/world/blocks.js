@@ -64,17 +64,19 @@ const flora = (base, accent, extra = {}) => ({
 
 export const BLOCK_DEFS = {
   [B.AIR]: { opaque: false, solid: false },
-  // warmer, softer grass with a clear grass-rim/soil contrast on the sides
-  [B.GRASS]: { top: C(0x87a556), side: C(0x8a6742), bottom: C(0x74542f), opaque: true, solid: true },
+  // grass: a real green (was 0x87a556, a khaki that sat in the same value
+  // band as sand and dirt, so the valley read as one beige sheet), with a
+  // clear grass-rim/soil contrast on the sides
+  [B.GRASS]: { top: C(0x79a843), side: C(0x8a6742), bottom: C(0x74542f), opaque: true, solid: true },
   [B.DIRT]: { top: C(0x8a6440), side: C(0x7e5a39), bottom: C(0x704e30), opaque: true, solid: true },
   [B.STONE]: { top: C(0x9a948b), side: C(0x8b867d), bottom: C(0x7c7770), opaque: true, solid: true },
   [B.SAND]: { top: C(0xe3cf9a), side: C(0xd6c085), bottom: C(0xc6ae70), opaque: true, solid: true },
   // deeper blue-teal river water
-  [B.WATER]: { top: C(0x2f7490), side: C(0x286680), bottom: C(0x1e5069), opaque: false, solid: false, water: true },
+  [B.WATER]: { top: C(0x2b7a9c), side: C(0x256b88), bottom: C(0x1b526e), opaque: false, solid: false, water: true },
   [B.ICE]: { top: C(0xd6ecf6), side: C(0xb9d8ea), bottom: C(0xa3c6dc), opaque: true, solid: true },
   [B.ROCK]: { top: C(0x77705f), side: C(0x6a6355), bottom: C(0x5c564a), opaque: true, solid: true },
   [B.WOOD]: { top: C(0x9b7746), side: C(0x74562c), bottom: C(0x9b7746), opaque: true, solid: true },
-  [B.LEAVES]: { top: C(0x5b8a3c), side: C(0x527d38), bottom: C(0x497031), opaque: true, solid: true },
+  [B.LEAVES]: { top: C(0x528f33), side: C(0x48802e), bottom: C(0x3e7028), opaque: true, solid: true },
   [B.BUSH]: { top: C(0x47823a), side: C(0xa63d30), bottom: C(0x38622c), opaque: true, solid: true },
   [B.BUSH_BARE]: { top: C(0x6b7448), side: C(0x5f6841), bottom: C(0x525a38), opaque: true, solid: true },
   [B.THATCH]: { top: C(0xd2a95f), side: C(0xc0954e), bottom: C(0xac8343), opaque: true, solid: true },
@@ -92,7 +94,7 @@ export const BLOCK_DEFS = {
   // whole cold basin cast grey-blue under the scene-A sky
   [B.SNOWGRASS]: { top: C(0xeaeee2), side: C(0x8a6742), bottom: C(0x74542f), opaque: true, solid: true },
   // ---- decorative flora (all walk-through, all crossed quads) ----
-  [B.TALLGRASS]: flora(0x7ea24f, 0x9ab55f),
+  [B.TALLGRASS]: flora(0x6fa545, 0x93bd58),
   // flowers keep more top width than grass so the bloom still reads
   [B.FLOWER_RED]: flora(0x5f8c44, 0xd8503c, { crossTaper: 0.3 }),
   [B.FLOWER_YELLOW]: flora(0x5f8c44, 0xeac944, { crossTaper: 0.3 }),
@@ -109,8 +111,8 @@ export const BLOCK_DEFS = {
   // spikier than meadow grass so act1's dense cold scatter reads as frost.
   [B.SNOWTUFT]: flora(0xa2b183, 0xdce4cb, { crossH: 0.6, crossTaper: 0.62 }),
   // ---- tree / rock / strata variants (cube blocks) ----
-  [B.LEAVES_DARK]: { top: C(0x41682e), side: C(0x3b5f2b), bottom: C(0x345526), opaque: true, solid: true },
-  [B.LEAVES_BRIGHT]: { top: C(0x74a341), side: C(0x69963c), bottom: C(0x5d8636), opaque: true, solid: true },
+  [B.LEAVES_DARK]: { top: C(0x3b6c2a), side: C(0x356228), bottom: C(0x2f5723), opaque: true, solid: true },
+  [B.LEAVES_BRIGHT]: { top: C(0x77ad3a), side: C(0x6b9e35), bottom: C(0x5e8c30), opaque: true, solid: true },
   // pale WARM birch bark — creamy, never concrete grey (banding via mesher jitter)
   [B.WOOD_BIRCH]: { top: C(0xbfa87e), side: C(0xe6d9b6), bottom: C(0xbfa87e), opaque: true, solid: true },
   [B.ROCK_DARK]: { top: C(0x453f37), side: C(0x3d3831), bottom: C(0x36322b), opaque: true, solid: true },

@@ -3,7 +3,7 @@
 Written for a session starting cold with no memory of this project. Read this
 top to bottom (five minutes), then open the two files in §7.
 
-Last updated **2026-08-11 01:20 IST**.
+Last updated **2026-08-23 19:05 IST**.
 
 ---
 
@@ -101,7 +101,18 @@ Inherited conventions that will bite if ignored:
 - `world/merge.js` folds static part-meshes for performance. **Anything
   animated must be passed in `keep`** or it loses its transform.
 
-## 5. Current state (2026-08-11)
+## 5. Current state (2026-08-23)
+
+**Lighting pass (2026-08-23, GAME-OVERVIEW section 20, uncommitted at the time
+of writing):** baked sun shadows in the mesher, a deeper palette and face
+shading, ACES tone mapping, a horizon that holds colour, wind sway, a living
+river, ground mist and motes, camera feel, the valley orbiting behind the
+title, Spectral and Cinzel, SVG prompt icons, letterbox narrator beats, UI
+sounds, and a "Rich graphics" Settings toggle (shadow map + cloud shadows +
+one post pass, default on for the `high` tier). The Lite path adds no draw
+calls and no passes. `world/shade.js` is the one file to read first: every
+material in the game goes through it.
+
 
 All three acts play. Content lint green (38 files). Zero console errors across
 Acts 1, 2 and 3 and the world editor, on desktop and at a 375×812 touch

@@ -17,7 +17,7 @@
 //      (see the fetch handler below for why cache-first was wrong here).
 //
 // BUMP CACHE ON EVERY DEPLOY.
-const CACHE = 'towcb-v5';
+const CACHE = 'towcb-v6';
 
 // Enumerated rather than globbed: no build step here, so there is nothing to
 // generate a manifest, and an explicit list is greppable and diffable. Missing
@@ -41,12 +41,14 @@ const ASSETS = [
   './src/recall.js',
   './src/results.js',
   './src/engine/renderer.js',
+  './src/engine/post.js',
   './src/engine/input.js',
   './src/world/voxel.js',
   './src/world/blocks.js',
   './src/world/atlas.js',
   './src/world/mesher.js',
   './src/world/merge.js',
+  './src/world/shade.js',
   './src/world/terrain.js',
   './src/world/states.js',
   './src/world/props.js',
@@ -66,6 +68,7 @@ const ASSETS = [
   './src/ui/container.js',
   './src/ui/codexPanel.js',
   './src/ui/hud.js',
+  './src/ui/icons.js',
   './src/ui/minigames.js',
   './src/ui/objective.js',
   './src/ui/paint.js',

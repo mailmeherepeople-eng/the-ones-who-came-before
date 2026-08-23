@@ -121,6 +121,41 @@ export class GameAudio {
     this._tone(147, { dur: 1.6, gain: 0.05, type: 'sine' });
   }
   step() { this._tone(880, { dur: 0.05, gain: 0.02, type: 'triangle' }); }
+
+  // UI: a 40 ms wooden tick for every button press. Two short partials, no
+  // sustain, quiet enough to disappear under narration.
+  click() {
+    if (!this.ctx) return;
+    this._tone(1320, { dur: 0.035, gain: 0.035, type: 'triangle', sweep: 900 });
+    this._tone(420, { dur: 0.05, gain: 0.03, type: 'sine' });
+  }
+
+  // UI: a paper rustle when a card or narrator box opens. Filtered noise
+  // with a fast swell and a soft tail, no file on disk.
+  page() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * 0.22);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 2600;
+    bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(this.master);
+    src.start(t);
+    src.stop(t + 0.25);
+  }
 }
 
 // shared singleton — import { SFX } anywhere a sting is needed

@@ -18,6 +18,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { WORLD, PLAYER } from '../constants.js';
 import { isSolid, isWater } from '../world/blocks.js';
 import { foldStatic } from '../world/merge.js';
+import { enhance } from '../world/shade.js';
 import { S } from '../strings.js';
 
 const SY = WORLD.SIZE_Y;
@@ -62,13 +63,15 @@ function geoBox(w, h, d, pivotTop) {
 
 function matFor(color) {
   let m = MATS.get(color);
-  if (!m) { m = new THREE.MeshLambertMaterial({ color }); MATS.set(color, m); }
+  if (!m) { m = enhance(new THREE.MeshLambertMaterial({ color })); MATS.set(color, m); }
   return m;
 }
 
 function box(w, h, d, color, x = 0, y = 0, z = 0, pivotTop = false) {
   const m = new THREE.Mesh(geoBox(w, h, d, pivotTop), matFor(color));
   m.position.set(x, y, z);
+  m.castShadow = true; // free until the Rich tier's shadow map is on
+  m.receiveShadow = true;
   return m;
 }
 

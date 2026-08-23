@@ -2,11 +2,24 @@
 // limiter, WebGL context-loss recovery (spec addendum §3).
 // Sky: gradient dome + sun disc/glow + drifting cloud billboards, all derived
 // from the two hexes acts already pass to setSky(skyHex, fogHex).
+//
+// Lighting pass (2026-08-23, GAME-OVERVIEW section 20): ACES tone mapping in
+// the material shaders (free: no extra pass until the Rich tier asks for one),
+// a stronger sun over a weaker sky fill so the mesher's baked shadows have
+// something to cut into, a horizon that no longer bleaches to white, and two
+// tier-gated extras behind setRich(): a tight directional shadow map that
+// follows the camera, and the merged post pass in engine/post.js.
 import * as THREE from '../../vendor/three.module.js';
-import { PERF, QUALITY } from '../constants.js';
+import { PERF, QUALITY, QUALITY_TIER } from '../constants.js';
+import { SHADE, tickShade, setClouds } from '../world/shade.js';
+import { Post } from './post.js';
 
 // matches this.sun.position (40, 60, 20) so the disc sits on the light
 const SUN_DIR = new THREE.Vector3(40, 60, 20).normalize();
+// Rich tier: how far the shadow box reaches around the camera's focus, and
+// how far back along the sun the shadow camera sits
+const SHADOW_HALF = 14;
+const SHADOW_BACK = 70;
 
 export class Renderer {
   constructor(canvas) {
@@ -21,23 +34,41 @@ export class Renderer {
 
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' });
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, PERF.MAX_PIXEL_RATIO));
+    // Filmic curve, applied inside every material's fragment shader (three
+    // only adds a separate output pass when rendering into a target, which
+    // is the Rich tier's job, see _render). Exposure sits a touch under 1:
+    // ACES alone on the old pale palette washed the valley out, and the
+    // contrast is meant to come from shadows and colour, not from the curve.
+    this.gl.toneMapping = THREE.ACESFilmicToneMapping;
+    this.gl.toneMappingExposure = 0.98;
+    this.rich = false;
+    this.post = null;
+    this._shadowFrame = 0;
+    this._focus = new THREE.Vector3();
 
     this.sky = null; // group (dome + sun + clouds), follows the camera
     this._clouds = [];
     this.setSky(0x9ec8e8, 0xcfe0ee);
 
-    // slightly golden key light; cool sky fill over warm earth bounce
-    this.sun = new THREE.DirectionalLight(0xffe4b8, 1.2);
+    // slightly golden key light over a cool sky fill and warm earth bounce.
+    // Sun up, hemisphere down (was 1.2 / 0.95): lit faces brighter, shaded
+    // faces darker, which is what the baked shadows need to read as shadows.
+    this.sun = new THREE.DirectionalLight(0xffe4b8, 1.55);
     this.sun.position.set(40, 60, 20);
-    this.scene.add(this.sun);
-    this.hemi = new THREE.HemisphereLight(0xaecdea, 0x7d6a48, 0.95);
+    this.sun.target.position.set(0, 0, 0);
+    this.scene.add(this.sun, this.sun.target);
+    this.hemi = new THREE.HemisphereLight(0xaecdea, 0x7d6a48, 0.62);
     this.scene.add(this.hemi);
     // very weak, slightly cool fill from the opposite azimuth: faces pointing
     // away from the sun (toward the camera in the default camp view) must
     // never drop to pure ambient black. Fill, not flattening — keep it faint.
-    this.fill = new THREE.DirectionalLight(0xbdd2ec, 0.25);
+    // It is added AFTER the sun on purpose: shade.js masks directional light
+    // index 0 with the baked shadow term, and three sorts shadow casters
+    // first, so the sun is index 0 whether or not its shadow map is on.
+    this.fill = new THREE.DirectionalLight(0xbdd2ec, 0.22);
     this.fill.position.set(-30, 40, -25);
     this.scene.add(this.fill);
+    SHADE.sunColor.value.copy(this.sun.color);
 
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -61,7 +92,7 @@ export class Renderer {
       if (now - this._lastTick > 600 && !this.paused) {
         if (this.onFrame) this.onFrame(0.1);
         this._updateSky(0.1);
-        this.gl.render(this.scene, this.camera);
+        this._render(0.1);
         this._lastTick = now;
       }
     }, 300);
@@ -74,18 +105,25 @@ export class Renderer {
     const hsl = { h: 0, s: 0, l: 0 };
     sky.getHSL(hsl);
     const zenith = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.3 + 0.04), Math.max(0, hsl.l * 0.7));
-    // horizon: fogHex warmed slightly; fog uses the SAME color so terrain
-    // melts into the dome instead of banding against it
-    const horizon = fog.clone().lerp(new THREE.Color(0xfff0d6), 0.22);
+    // horizon: the act's fog hex pulled a third of the way back toward the
+    // sky colour and warmed a touch. The raw fog hexes are near-white, and
+    // used straight they bleached the bottom of the dome to nothing; this
+    // keeps a visible band of colour at the horizon. Fog uses the SAME colour
+    // so terrain still melts into the dome instead of banding against it.
+    const horizon = fog.clone().lerp(sky, 0.34).lerp(new THREE.Color(0xffe2bd), 0.16);
 
     if (!this.sky) this._buildSky();
     this._paintGradient(zenith, sky, fog, horizon);
 
     this.scene.background = zenith.clone(); // fallback fill behind the dome
     this.scene.fog = new THREE.Fog(horizon.clone(), PERF.FOG_NEAR, PERF.FAR_PLANE - 6);
+    // ground mist borrows the horizon so it reads as the same air
+    SHADE.mistColor.value.copy(horizon);
 
     // hemisphere fill follows the era's sky so voxel tops stay in harmony
     if (this.hemi) this.hemi.color.copy(sky).lerp(new THREE.Color(0xffffff), 0.3);
+    // the warm band hugging the horizon on the sun's side takes the sky's hue
+    if (this._haze) this._haze.material.color.copy(horizon).lerp(new THREE.Color(0xffd9a8), 0.5);
 
     // clouds sit slightly grey of the sky — never bright enough to read as a
     // second sun disc
@@ -98,6 +136,81 @@ export class Renderer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.gl.setSize(w, h, false);
+    if (this.post) {
+      const size = this.gl.getDrawingBufferSize(new THREE.Vector2());
+      this.post.setSize(size.x, size.y);
+    }
+  }
+
+  // ---------- ground mist ----------
+  // Height fog in every enhanced material (world/shade.js). `top` is where
+  // it has cleared completely, `floor` where it is at full strength,
+  // `density` 0..1. density 0 switches it off. Used for the ice-age basin and
+  // the dig camp at dawn; everywhere else the air is clear.
+  setMist(density = 0, top = 12, floor = 6) {
+    SHADE.mist.value.set(top, floor, density, 0.08);
+  }
+
+  // ---------- Rich tier ----------
+  // Shadow map + post pass + cloud shadows, all at once. Off on the Lite tier
+  // and on the low quality tier by default; a Settings toggle flips it.
+  setRich(on) {
+    on = !!on;
+    if (on === this.rich) return;
+    this.rich = on;
+    const gl = this.gl;
+    if (on) {
+      const phone = QUALITY_TIER === 'low' || matchMedia('(pointer: coarse)').matches;
+      gl.shadowMap.enabled = true;
+      gl.shadowMap.type = THREE.PCFShadowMap; // PCFSoft is the expensive one on mobile
+      gl.shadowMap.autoUpdate = false;        // we update every other frame in _render
+      this.sun.castShadow = true;
+      this.sun.shadow.mapSize.set(phone ? 512 : 1024, phone ? 512 : 1024);
+      if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
+      const c = this.sun.shadow.camera;
+      c.left = -SHADOW_HALF; c.right = SHADOW_HALF; c.top = SHADOW_HALF; c.bottom = -SHADOW_HALF;
+      c.near = 1; c.far = SHADOW_BACK + 60;
+      c.updateProjectionMatrix();
+      this.sun.shadow.bias = -0.0006;
+      this.sun.shadow.normalBias = 0.06;
+      if (!this.post) this.post = new Post(gl);
+      this.post.scale = phone ? 0.8 : 1;
+      this.resize();
+      setClouds(true);
+      this._shadowFrame = 0;
+    } else {
+      gl.shadowMap.enabled = false;
+      this.sun.castShadow = false;
+      setClouds(false);
+    }
+    // every material with a compiled program must pick the change up
+    this.scene.traverse((o) => {
+      if (!o.material) return;
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of ms) m.needsUpdate = true;
+    });
+  }
+
+  // keep the shadow box on the part of the world the camera is looking at
+  _followShadow() {
+    const cam = this.camera;
+    cam.getWorldDirection(this._focus);
+    this._focus.multiplyScalar(SHADOW_HALF * 0.6).add(cam.position);
+    this.sun.target.position.copy(this._focus);
+    this.sun.position.copy(this._focus).addScaledVector(SUN_DIR, SHADOW_BACK);
+    // every other frame is plenty at 30 fps; the map is re-rendered in full
+    // each time it updates
+    if ((this._shadowFrame++ & 1) === 0) this.gl.shadowMap.needsUpdate = true;
+  }
+
+  _render(dt) {
+    tickShade(dt);
+    if (this.rich) {
+      this._followShadow();
+      this.post.render(this.scene, this.camera, SHADE.time.value);
+    } else {
+      this.gl.render(this.scene, this.camera);
+    }
   }
 
   // ---------- sky dome / sun / clouds ----------
@@ -113,7 +226,9 @@ export class Renderer {
     this._gradTex.colorSpace = THREE.SRGBColorSpace;
     const dome = new THREE.Mesh(
       new THREE.SphereGeometry(R, 20, 12),
-      new THREE.MeshBasicMaterial({ map: this._gradTex, side: THREE.BackSide, fog: false, depthWrite: false })
+      // dithering: a 256-step gradient under a tone curve bands visibly on a
+      // phone panel; the Bayer dither is a few ALU and kills it
+      new THREE.MeshBasicMaterial({ map: this._gradTex, side: THREE.BackSide, fog: false, depthWrite: false, dithering: true })
     );
     dome.frustumCulled = false;
     dome.renderOrder = -30;
@@ -131,9 +246,23 @@ export class Renderer {
       map: glowTex, blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true,
     }));
     glow.position.copy(sunPos);
-    glow.scale.setScalar(R * 0.55);
+    glow.scale.setScalar(R * 0.7);
     glow.renderOrder = -20;
     group.add(glow);
+    // a wide, faint warm band low on the sun's side of the horizon: the one
+    // thing that says "a sun is up over there" when the disc is out of frame
+    const hazeTex = this._radialTex(128, [
+      [0, 'rgba(255,255,255,0.5)'], [0.5, 'rgba(255,255,255,0.16)'], [1, 'rgba(255,255,255,0)'],
+    ]);
+    const haze = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: hazeTex, blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true, opacity: 0.7,
+    }));
+    const hz = new THREE.Vector3(SUN_DIR.x, 0, SUN_DIR.z).normalize().multiplyScalar(R * 0.9);
+    haze.position.set(hz.x, R * 0.05, hz.z);
+    haze.scale.set(R * 1.5, R * 0.42, 1);
+    haze.renderOrder = -21;
+    group.add(haze);
+    this._haze = haze;
     const disc = new THREE.Sprite(new THREE.SpriteMaterial({
       map: discTex, blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true,
     }));
@@ -272,6 +401,6 @@ export class Renderer {
     this._lastTick = t;
     if (this.onFrame) this.onFrame(step);
     this._updateSky(step);
-    this.gl.render(this.scene, this.camera);
+    this._render(step);
   }
 }

@@ -137,6 +137,10 @@ export async function runAct2(G) {
       // frame you cross the boundary even though the terrain is still catching
       // up over the next few frames.
       G.renderer.setSky(s === 0 ? 0xbcd3e6 : 0x9ec8e8, s === 0 ? 0xd4e2ec : 0xcfe0ee);
+      // the diorama is seen from 70 units up: ground mist and air motes
+      // would only blur the strata that the act is about
+      G.renderer.setMist(0);
+      FX.setMotes(null);
       // sky-mode fog: setSky just rebuilt scene.fog for a GROUND camera; from
       // 70+ units up those defaults wash the whole far half of the valley to
       // milky beige. Pull the fog band out so the diorama stays crisp and only

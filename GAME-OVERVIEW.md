@@ -13,7 +13,7 @@ Made by "Git Gud Studio". One valley, one save file, three acts, ~50 syllabus it
 | Genre | Third-person educational adventure in a voxel sandbox world |
 | Platform | Browser (desktop + mobile Chrome), fully offline after first load |
 | Engine | Three.js v0.185 (vendored), vanilla JavaScript ES modules, **no build step, no npm dependencies** |
-| Rendering | Vertex-colored voxel chunks by default (plus an optional texture-atlas pass for player-painted blocks), Lambert lighting, 30 fps frame limiter tuned for low-end Android |
+| Rendering | Vertex-colored voxel chunks by default (plus an optional texture-atlas pass for player-painted blocks), Lambert lighting with baked sun shadows and ACES tone mapping, 30 fps frame limiter tuned for low-end Android; an optional Rich tier adds a shadow map and one post pass (section 20) |
 | Persistence | `localStorage` save, autosave at every beat, resume from title |
 | Run | `npx serve -l 8321 game` → http://localhost:8321 (or the `.claude/launch.json` "game" config) |
 | Content lint | `node game/tools/lint-strings.mjs` — blocks old-syllabus terms, stray date literals, and edits to protected NCERT phrasings |
@@ -95,9 +95,9 @@ game/src/
 - **Bodies are solid, both ways.** `player.resolveCharacters(list)` pushes the player out of any character cylinder *through `moveAxis`*, so being crowded can never shove you through a wall, and it cancels the velocity component heading into the body so holding W against someone reads as a firm stop rather than a jitter. On the character side, `npc.js` holds a module-level `PLAYER_BODY` (registered once from main.js) and `tryMove` rejects any step that **closes the gap** on the player while always allowing a step that opens it — so a character can be pressed against you but never wedged inside you. Both sides settle at exactly the sum of the radii (0.62 blocks).
 - **Characters can hold things and work.** `npc.carry(kind)` parents a small item group to an arm (so it inherits the walk swing, exactly like the player's `equip`), and `npc.pose(name)` applies a work pose — `aim / cast / pick / chop / tend` — *only while standing still*, so the walk cycle is never fought. A `busy` flag suppresses both idle wandering and the "turn to watch the player" idle churn while an errand owns the character.
 - **FX system**: one pooled Points system per blend mode (additive + normal, 1500 particle cap, oldest-steal, zero steady-state allocation) plus small mesh pools for rings/pillars/waves. Emitters: `burst, puff, ring, pillar (persistent, pulsing), pulseWave, floaties, trail, flash, confetti, flames, smoke`. The whole particle load is 2 draw calls.
-- **Sky/atmosphere**: gradient sky dome (canvas texture derived from each act's two `setSky` hex colors), additive sun disc + glow, drifting cloud sprites, warm key light + cool hemisphere + weak opposite fill so characters never go black.
+- **Sky/atmosphere**: gradient sky dome (canvas texture derived from each act's two `setSky` hex colors, with a horizon band that no longer bleaches to white), additive sun disc + glow + a horizon haze sprite, drifting cloud sprites, warm key light + cool hemisphere + weak opposite fill so characters never go black, optional ground mist (`setMist`) and ambient motes (`FX.setMotes`). See section 20.
 - **Save system**: `records` (physical things you made — these are literally what Act 3 digs up, including your actual painting PNG and pot profile/mark), `cards` (Act 3 evidence), `choices`, per-beat checkpoints. `?act=N` debug jumps seed stand-in records so any act is playable standalone.
-- **UI skin**: parchment/ember palette via CSS custom properties, no images or external fonts — everything is CSS gradients and system fonts. Speech bubbles are DOM elements projected from 3D positions.
+- **UI skin**: parchment/ember palette via CSS custom properties, no image files: CSS gradients, an inline SVG grain, stroke SVG icons (`ui/icons.js`), and Spectral + Cinzel from Google Fonts with a Georgia fallback offline. Speech bubbles are DOM elements projected from 3D positions.
 
 ---
 
@@ -1458,3 +1458,115 @@ goes near a classroom.
 - `S.act3.eraLabels` has a key named `tribe`, but `ui/report.js` reads
   `E.band`, so the first row of the site report's timeline strip renders the
   word "undefined". Pre-existing, one word to fix, left for the act 3 pass.
+
+## 20. The lighting pass (2026-08-23 19:05 IST)
+
+The game looked rudimentary when shown to people, and the diagnosis was that
+it was not blocky, it was **unlit**: nothing cast a shadow, the whole palette
+sat in one khaki band (top faces 1.0 against sides 0.8), the sky bleached to
+white at the horizon, nothing moved, and the first thing anyone saw was a
+brown CSS gradient. A live test in the console proved the order of
+operations: tone mapping alone made it worse (ACES spread a pale palette
+flatter), shadows first gave the curve something to bite on. So contrast went
+into the world before any filter went over it.
+
+Everything below runs inside the existing 30 fps phone budget. The Lite path
+(every device) adds no draw calls and no render passes: its cost is a few ALU
+per vertex and fragment on the materials the game already draws. The Rich
+path is a Settings toggle ("Rich graphics"), on by default on the `high`
+quality tier only.
+
+### 20.1 Baked sun shadows (`world/mesher.js`, `world/shade.js`)
+
+Each face corner marches toward the sun `(40, 60, 20)` through the voxel
+grid, one block of rise per step for up to 14 blocks, starting half a block
+out along the face normal and nudged 2% toward the face centre so a lattice
+corner floors into its own cell. The first opaque cell hit puts the corner
+in shadow. The result is a per-vertex `sun` attribute (0 or 1, interpolated
+across the quad; the AO diagonal flip now weighs it too so a shadow edge
+never bands). In the shader it masks **directional light 0 only**: a
+shadowed face keeps every bit of sky and ground bounce and never goes black.
+Cross flora takes one sample per tuft. A full `remeshAll()` with the march
+costs 78 ms on a desktop, against roughly 60 before.
+
+The sun is light index 0 because it is added before the fill light and three
+sorts shadow casters first, so this holds whether or not the Rich shadow map
+is on. Do not add another DirectionalLight before the sun.
+
+### 20.2 Shading, palette and light ratio
+
+Face shades widened to 1.0 / 0.78 / 0.70 / 0.68 / 0.84 / 0.45 (top, +x, -x,
++z, -z, bottom). Grass top is a real green (`0x79a843`, was `0x87a556`),
+canopies split into three greens, tall grass and the river deepened a touch.
+Grass SIDES keep the original brown: a darker brown on top of the new
+shading made distant terraces read as stripes. Sun 1.55 over hemisphere 0.62
+(was 1.2 / 0.95). ACES tone mapping at exposure 0.98, in-material, so it is
+free. The sky dome dithers.
+
+### 20.3 Sky and air (`engine/renderer.js`)
+
+The horizon colour is the act's fog hex pulled a third of the way back toward
+the sky colour and warmed, instead of the raw near-white fog hex. The sun
+glow is larger and a wide faint warm sprite hugs the horizon on the sun's
+side. `setMist(density, top, floor)` is a height fog in every enhanced
+material: on in the ice-age basin (0.45) and at the Act 3 dig camp (0.4),
+off everywhere else. `FX.setMotes('pollen' | 'snow' | 'ash' | null)` is a
+GPU-wrapped cloud of motes around the camera, one draw call, no CPU.
+
+### 20.4 Motion
+
+`sway` attribute: tuft tips 1, leaf blocks 0.35, everything else 0; the
+vertex shader bends them with summed sines keyed on world position. The
+river wobbles its normal per fragment, shimmers, carries one sun specular,
+and the mesher paints a pale foam rim on any surface corner hugged by a bank.
+Camera: FOV eases 70 to 75 while running; `player.addTrauma(a)` drives a
+rotational-only shake (trauma squared, three summed sines, never a
+translation) that decays at 1.5 per second. Landings, the bear's roar and
+each dig stroke add trauma. Every campfire carries an additive glow sprite
+that pulses with its light.
+
+Shader time wraps at 200 PI; every frequency in `shade.js` is a multiple of
+0.01 so the wrap is seamless. Keep it that way when adding one.
+
+### 20.5 The skin
+
+- Title: the lush valley (`buildSceneB`) is built on the frame after the
+  title paints and the camera orbits the river bend at golden hour behind it
+  (`main.js startTitleWorld`). `G.mode` is `'title'` while it runs. The act
+  that starts next rebuilds the world as it always did.
+- Fonts: Spectral for everything read, Cinzel for the title and headings,
+  loaded from Google Fonts at runtime with `display=swap`. Offline the game
+  falls back to Georgia, which is what it shipped with before. Vendoring the
+  woff2 files into `game/fonts/` (and the precache) is the one follow-up.
+- `ui/icons.js`: stroke SVG glyphs for every emoji prompt key, drawn in
+  `currentColor`. `showPrompt` uses the glyph where one exists and the emoji
+  otherwise, so a new prompt never breaks.
+- Narrator boxes slide letterbox bars in (`#ui-root.narrating`), held across a
+  chain of lines; hidden while the sky act's own letterbox is up.
+- Parchment grain on narrator and choice boxes: a static inline
+  `feTurbulence` SVG in `--grain`. Never animate it.
+- `SFX.click()` on every button press (delegated on `#ui-root`, pointerdown),
+  `SFX.page()` when a card or narrator box opens. Synthesised, no files.
+
+### 20.6 Rich tier (`renderer.setRich`, `engine/post.js`)
+
+One directional shadow map (1024 desktop, 512 phone, `PCFShadowMap`, never
+PCFSoft) in a 28-block orthographic box that follows the camera's focus,
+`shadowMap.autoUpdate = false` and `renderer.shadowMap.needsUpdate = true`
+every other frame. Note the flag lives on the RENDERER, not the light; the
+light's own `needsUpdate` does nothing under manual mode, and a map that is
+never rendered produces "mismatch between texture format and sampler type"
+warnings on every draw. Cloud shadows are a define-gated texture fetch in
+the same materials. The post pass is one full-screen triangle: five-tap
+FXAA, a warm lift and cool gain, 1.12 saturation, film grain, then ACES and
+the sRGB transfer (three skips both when rendering into a target). Half-float
+target, 0.8 render scale on phones. Every mesh in the game carries
+`castShadow`/`receiveShadow` flags already, which cost nothing until the map
+is on.
+
+### 20.7 Files
+
+New: `src/world/shade.js`, `src/engine/post.js`, `src/ui/icons.js` (all in
+the service-worker precache, cache bumped to v6). Touched: mesher, blocks,
+renderer, merge, props, npc, player, fx, hud, audio, settings, strings,
+main, act1/2/3, style.css, index.html.
