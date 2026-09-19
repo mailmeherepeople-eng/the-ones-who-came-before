@@ -1,7 +1,7 @@
 // ACT 1 — LIVE. Four scenes (Band, Thaw, Roots, Fire and Clay), every beat
 // from design doc §4. Player actions write ObjectRecords the later acts read.
 import * as THREE from '../../vendor/three.module.js';
-import { YEARS } from '../constants.js';
+import { YEARS, WORLD } from '../constants.js';
 import { S } from '../strings.js';
 import { Save } from '../save.js';
 import { B } from '../world/blocks.js';
@@ -24,6 +24,9 @@ import { openContainer } from '../ui/container.js';
 import { groundAnchor, objectiveCue, setBeacon, nearestSite } from '../ui/objective.js';
 import { teach, refreshCodexBadge } from '../codex.js';
 import { recallBeat, flushRecall } from '../recall.js';
+import { gatherWithBasket } from './gathering.js';
+import { needsOnboarding, runOnboarding, tutorialCheckpoint, dressTrainingShelter } from './onboarding.js';
+import { syncEquipment } from '../ui/equipment.js';
 
 export async function runAct1(G, resumeScene = null) {
   const scenes = [
@@ -93,13 +96,9 @@ let STORE_BOX_AT = null;
 let STORE_A = null;
 
 // The player model has one visual slot but the inventory has many, so this
-// decides what the hands show: the borrowed tool if there is one, otherwise
-// whatever is being carried. Call it after every transfer.
+// respects the selected tool's saved equip/put-away state. Call it after transfers.
 function syncEquip(G) {
-  const tool = Inv.heldTool();
-  const show = tool ?? Inv.contents('player')[0]?.id ?? null;
-  G.player.equip(show ? (ITEMS[show]?.equip ?? null) : null);
-  G.hud.setSatchel(Inv.totalOfKind('player', 'harvest'), Inv.total('player') > 0);
+  syncEquipment(G);
 }
 
 // The crate visibly fills as the band's food piles up. Twelve is "full" and it
@@ -261,10 +260,8 @@ function dressSceneACold(world) {
 // on your own terms, so foraging is a thing you do rather than a checklist at
 // one location.
 //
-// They are B.SHRUB_BERRY blocks, not props, and that is the whole trick.
-// SHRUB_BERRY is cross flora, and every cross-flora block in a chunk merges
-// into ONE mesh, so a hundred of these cost nothing. A hundred prop bushes
-// would have cost ~200 draw calls, about +70% on Act 1.
+// SHRUB_BERRY blocks are placement seeds. addWildBerryPicks replaces them
+// with the same model as the task bushes, instanced in two draw calls.
 //
 // Scene A needs the explicit scatter because terrain's bush-blob pass (the only
 // generator of SHRUB_BERRY) is skipped entirely when the world is iced, so the
@@ -296,29 +293,42 @@ function scatterWildBerries(world, target = 110) {
 // Register one interactable per wild bush. These are plain distance checks in
 // nearestInteract, so ~110 of them is a rounding error next to a frame.
 function addWildBerryPicks(G) {
-  let found = 0;
-  for (let x = 0; x < 128; x++) {
-    for (let z = 14; z < 128; z++) {
+  const sites = [], picked = new Set(Save.activity('wildBerries').sites ?? []);
+  for (let x = 0; x < WORLD.SIZE_X; x++) {
+    for (let z = 14; z < WORLD.SIZE_Z; z++) {
       const gy = G.world.topAt(x, z) + 1;
       if (G.world.get(x, gy, z) !== B.SHRUB_BERRY) continue;
-      found++;
+      G.world.set(x,gy,z,B.AIR);
+      sites.push({cellX:x,cellZ:z,x:x+.5,y:gy,z:z+.5,hasBerries:!picked.has(`${x},${z}`)});
+    }
+  }
+  const patch = addProp(G,P.makeBerryPatch(sites));
+  for (let i=0;i<sites.length;i++) {
+      const site=sites[i], plant=patch.plants[i], x=site.cellX,z=site.cellZ;
+      if (!plant.hasBerries) continue;
       G.interactables.push({
-        id: `wild-${x}-${z}`, x, z, r: 2.0, prompt: '🫐', label: S.act1.pickBerry, enabled: true,
+        id: `wild-${x}-${z}`, x:site.x, z:site.z, r: 2.4, prompt: '🫐', label: S.act1.pickBerry, enabled: true,
         onInteract(self) {
+          if (!Inv.has('player', 'basket')) { G.hud.toast(S.revision.needBasket); return; }
+          if (Inv.equippedTool() !== 'basket') { G.hud.toast(G.input.isTouch ? S.onboarding.equipNeededTouch : S.onboarding.equipNeeded); return; }
           self.enabled = false;
+          Save.setActivity('wildBerries', { sites: [...(Save.activity('wildBerries').sites ?? []), `${x},${z}`] });
           G.interactables = G.interactables.filter((o) => o !== self);
-          G.world.set(x, gy, z, B.AIR); // marks the chunk dirty; mesher flushes it
-          const bp = { x: x + 0.5, y: gy + 0.4, z: z + 0.5 };
+          plant.setBerries(false);
+          const bp = { x:site.x, y:site.y+0.65, z:site.z };
           FX.puff(bp, { count: 4, size: 0.24, life: 0.5 });
           FX.floaties(bp, { color: 0xd8503c, count: 5, size: 0.09, life: 1.1, rise: 0.9 });
           Inv.add('player', 'berry', 2);
+          if (!Save.getRecord('gathered')) {
+            Save.setActivity('gather', { picked: (Save.activity('gather').picked ?? 0) + 2 });
+            G.hud.setObjective(S.revision.gatherPick(Save.activity('gather').picked));
+          }
           syncEquip(G);
           G.audio?.blip?.();
         },
       });
-    }
   }
-  return found;
+  return patch;
 }
 
 // Fishing spots ON the bank, derived from the river's own centre line rather
@@ -426,13 +436,13 @@ async function wakeSequence(G) {
 
   // 4. Eyes open. A genuinely slow fade (hud.fadeIn drives the CSS duration
   //    now), then the era card over firelit stone, then breathing.
-  await G.hud.fadeIn(2000);
-  await G.hud.card([S.act1.sceneA_card, S.act1.sceneA_card2]);
+  await G.hud.fadeIn(900);
+  await G.hud.card([S.act1.sceneA_card]);
   const restY = cam.position.y;
-  await tween(2600, (t) => {
+  await tween(700, (t) => {
     cam.position.y = restY + Math.sin(t * Math.PI * 2) * 0.035; // two slow breaths
   });
-  G.hud.toast(S.act1.wake_ceiling, 3600); // ambient: costs no tap
+  G.hud.toast(needsOnboarding() ? S.onboarding.wake : S.act1.wake_ceiling, 3600);
 
   // 5. The player wakes the character. The game does not wake it for them.
   G.hud.hint(G.input.isTouch ? S.act1.wake_riseTap : S.act1.wake_riseKey, 0);
@@ -480,70 +490,12 @@ async function wakeSequence(G) {
   G.player.setModelHidden(false);
   G.mode = 'ground';
   G.input.setEnabled(true);
-  G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
-  await G.hud.narrator(S.act1.wake_stand);
+  if (!needsOnboarding()) {
+    G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
+    await G.hud.narrator(S.act1.wake_stand);
+  }
 }
 
-// ---------- hunger before basket ----------
-//
-// A bush inside the camp bowl, between the shelter mouth (42,14) and the fire
-// (40,26), off the walking line so it reads as "right there" rather than as an
-// errand. Its own prop, not one of the six SITES.berries: those belong to the
-// gather beat and stripping one here would leave a bare bush in it.
-const HUNGER_BUSH = { x: 37, z: 19 };
-
-async function bareHandBeat(G) {
-  await G.hud.narrator(S.act1.hunger);
-  const bush = addProp(G, P.makeBerryBush(
-    HUNGER_BUSH.x + 0.5, groundY(G, HUNGER_BUSH.x, HUNGER_BUSH.z), HUNGER_BUSH.z + 0.5));
-  objectiveCue(G, S.act1.obj_bare, HUNGER_BUSH);
-  G.hud.toast(S.act1.berryBare1, 4200);
-
-  // Two fistfuls succeed and the third spills. The failure IS the tutorial: no
-  // line of text explains why a basket is worth walking for, the empty hands do.
-  let picked = 0;
-  await new Promise((resolve) => {
-    G.interactables.push({
-      id: 'barehand', x: HUNGER_BUSH.x, z: HUNGER_BUSH.z, r: 2.6, enabled: true,
-      prompt: '🫐', label: S.act1.pickBare,
-      onInteract(self) {
-        picked++;
-        const bp = fxAt(G, HUNGER_BUSH.x, HUNGER_BUSH.z, 0.7);
-        if (picked <= 2) {
-          Inv.add('player', 'berry', 1);
-          syncEquip(G);
-          FX.floaties(bp, { color: 0xd8503c, count: 4, size: 0.09, life: 1.1 });
-          SFX.blip?.();
-          return;
-        }
-        // The spill. FX.burst with gravity, NOT FX.puff: puff pins gravity to 0
-        // and always gives its particles a positive vy, so berries dropped with
-        // it would rise. Same shape as the fishing splash further down.
-        FX.burst(bp, { color: 0xd8503c, count: 16, size: 0.13, speed: 2.6, life: 0.7, gravity: 9, additive: false });
-        Inv.take('player', 'berry', Inv.count('player', 'berry')); // back into the thorns
-        syncEquip(G);
-        bush.setBerries(false);
-        SFX.trick?.();
-        self.enabled = false;
-        resolve();
-      },
-    });
-  });
-  G.interactables = G.interactables.filter((o) => o.id !== 'barehand');
-  setBeacon(G, null);
-  G.hud.toast(S.act1.berrySpill, 4200);   // ambient, costs no tap
-  await G.hud.narrator(S.act1.berryWant); // the want the Community Chest answers
-}
-
-// ---------- bow hunting (real arrows — replaces the old timing minigame) ----------
-const ARROW_SPEED = 22;   // blocks/s along the camera ray
-const ARROW_UPBIAS = 1.5; // blocks/s added to vy at launch
-const ARROW_GRAV = 12;    // blocks/s² downward
-const ARROW_LIFE = 3;     // seconds in flight before despawn
-const ARROW_HIT_R = 0.9;  // hit radius against a deer's body centre
-// One kill fed nobody. The tribe is six people, so the hunt asks for three
-// animals: enough that the player has to re-stalk a spooked herd rather than
-// land one lucky shot, and it makes the store box beat below carry real weight.
 const HUNT_TARGET = 3;
 const _arrowDir = new THREE.Vector3(); // scratch — synchronous use only
 const _ARROW_Z = new THREE.Vector3(0, 0, 1);
@@ -589,6 +541,8 @@ function removeArrow(G, arrows, i) {
 // ---------- SCENE A — Band ----------
 
 async function sceneA(G) {
+  const training = needsOnboarding();
+  if (training) Save.setActivity('onboarding', { started:true });
   await G.hud.fadeOut(400);
   resetStage(G);
   setBeacon(G, null); // sweep: no beacon crosses a scene boundary
@@ -604,10 +558,15 @@ async function sceneA(G) {
   // the ice-age basin: a thin cold mist on the low ground, snow in the air
   G.renderer.setMist(0.45, 10, 5);
   FX.setMotes('snow');
+  dressTrainingShelter(G);
   // wake INSIDE the rock shelter, facing the mouth. The cave floor is y=9 so
   // the feet sit at 10 — an explicit y is required, because topAt at these
   // columns reads the cliff ABOVE the shelter and would drop us on the roof.
-  G.player.teleport(SITES.shelter.x, SITES.shelter.z - 2, Math.PI, CAVE_FLOOR_Y + 0.02);
+  if (training) {
+    const at = tutorialCheckpoint(Save.activity('onboarding').step ?? 0);
+    G.player.teleport(at.x, at.z, at.yaw, at.y);
+    FX.setMotes(null);
+  } else G.player.teleport(SITES.shelter.x, SITES.shelter.z - 2, Math.PI, CAVE_FLOOR_Y + 0.02);
   G.mode = 'ground';
   // ground mode means the frame loop is driving the player again, and the
   // opening card/narration chain below is several seconds long: without this
@@ -664,11 +623,12 @@ async function sceneA(G) {
   // item. Anything already sitting in the player's hands from a previous run
   // is dropped back, so a resumed scene never starts you holding the tribe's
   // only bow.
-  Inv.stock('chest', { basket: 4, bow: 2, rod: 2, spear: 2, waterskin: 1 });
-  Inv.clear('player');
-  if (!Save.getRecord('gathered')) Inv.clear('store');
+  if (!Save.activity('campStock').ready) {
+    Inv.stock('chest', { basket: 4, bow: 2, rod: 2, spear: 2, waterskin: 1 });
+    Save.setActivity('campStock', { ready: true });
+  }
   addStations(G, chest);
-  addWildBerryPicks(G); // the whole valley is forageable, not just the six bushes
+  const wildBerryPatch = addWildBerryPicks(G);
   refreshStoreFill();
   syncEquip(G);
   G.hud.onSatchel = () => openContainer(G, 'player');
@@ -767,70 +727,15 @@ async function sceneA(G) {
     });
   } else {
     await G.hud.fadeIn(500);
-    await G.hud.card([S.act1.sceneA_card, S.act1.sceneA_card2]);
+    await G.hud.card([S.act1.sceneA_card]);
     G.mode = 'ground';
     G.input.setEnabled(true);
-    G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
+    if (!training) G.hud.hint(G.input.isTouch ? S.ui.joystickHint : S.ui.desktopHint, 8000);
   }
   refreshCodexBadge(G); // the 📖 pill reappears with whatever is already in it
 
-  // --- hunger, then the basket, then berries (4.33) ---
-  //
-  // The order used to be backwards. storeLesson ("the tribe's tools belong to
-  // everyone") fired before the player had touched a single berry, which made
-  // it the first thing the game TEACHES. Now the hands fail first and it is the
-  // first thing the game ANSWERS.
-  if (!Save.getRecord('gathered')) {
-    await bareHandBeat(G);
-    await takeFromChest(G, 'basket', S.act1.obj_store_basket);
-    chest.openFor(1200); // the lid drops again behind you
-    FX.floaties(fxAt(G, STORE_A.x, STORE_A.z, 0.6), { color: 0xffd9a0, count: 8, size: 0.1, life: 1.4 });
-    await G.hud.narrator(S.act1.storeLesson); // shared tools — now an answer, not a lecture
-    teach(G, 'band'); // 4.32 groups help each other, learned by borrowing
-
-    // The basket STAYS in your hands through the gather. It used to be
-    // replaced the moment you picked anything up, which quietly undid the
-    // lesson: you cannot be taught that the tool is borrowed if it vanishes
-    // before you can give it back.
-    const berrySites = SITES.berries.slice(0, 5);
-    const remaining = new Set(berrySites);
-    objectiveCue(G, S.act1.obj_gather);
-    setBeacon(G, nearestSite(G, [...remaining]));
-    await new Promise((resolve) => {
-      for (const b of berrySites) {
-        G.interactables.push({
-          id: `berry-${b.x}`, x: b.x, z: b.z, r: 2.4, prompt: '🫐', label: S.act1.pickBerry, enabled: true,
-          onInteract(self) {
-            self.enabled = false;
-            remaining.delete(b);
-            berryProps.get(b)?.setBerries(false);
-            const bp = { x: b.x + 0.5, y: groundY(G, b.x, b.z) + 0.7, z: b.z + 0.5 };
-            FX.puff(bp, { count: 5, size: 0.28, life: 0.55 });
-            FX.floaties(bp, { color: 0xaef0c8, count: 7, size: 0.1, life: 1.3 });
-            FX.floaties(bp, { color: 0xd8503c, count: 4, size: 0.09, life: 1.1, rise: 0.9 });
-            Inv.add('player', 'berry', 3); // a handful per bush, not a single fruit
-            syncEquip(G);
-            const got = Inv.count('player', 'berry');
-            G.hud.setObjective(S.act1.obj_gather_n(got));
-            if (remaining.size === 0 || got >= 12) {
-              setBeacon(G, null);
-              FX.confetti({ x: G.player.pos.x, y: G.player.pos.y + 1.2, z: G.player.pos.z }, { count: 24 });
-              resolve();
-            } else {
-              setBeacon(G, nearestSite(G, [...remaining])); // guide to the next bush
-            }
-          },
-        });
-      }
-    });
-    G.interactables = G.interactables.filter((o) => !String(o.id).startsWith('berry-'));
-    await G.hud.narrator(S.act1.gatherDone);
-    await putInStore(G, 'berry', S.act1.obj_depositBerries, S.act1.depositBerriesDone);
-    await returnToChest(G, 'basket', S.act1.obj_returnBasket, S.act1.returnBasketDone);
-    await G.hud.narrator(S.act1.huntersGatherers);
-    teach(G, 'huntGather'); // 4.33
-    Save.addRecord({ id: 'gathered', type: 'camp', pos: { ...camp }, made: YEARS.SCENE_A_YEAR, data: { label: 'gather' } });
-  }
+  if (training) await runOnboarding(G);
+  await gatherWithBasket(G, { berryProps, chestAt: STORE_A, takeFromChest, putInStore, returnToChest, syncEquip, until });
 
   // --- hunt (real bow: fetch the bow, stalk the plains, loose arrows) ---
   if (!Save.getRecord('hunted')) {
@@ -867,6 +772,11 @@ async function sceneA(G) {
     const arrows = [];
     const downedList = await new Promise((resolve) => {
       const bag = [];
+      for (const saved of Save.activity('hunt').kills ?? []) {
+        const d=deer[saved.index];
+        if(d) {d.pos.set(saved.x,saved.y,saved.z);d.down();bag.push(d);}
+      }
+      if (bag.length >= HUNT_TARGET) { resolve(bag); return; }
       let hit = null; // set for one frame per kill, so a shot never double-counts
       G.tick = (dt, inp) => {
         // E / Enter still fires while aiming, for players on a keyboard
@@ -892,6 +802,7 @@ async function sceneA(G) {
               hit = d;
               d.down();
               bag.push(d);
+              Save.setActivity('hunt',{kills:bag.map(animal=>({index:deer.indexOf(animal),x:animal.pos.x,y:animal.pos.y,z:animal.pos.z}))});
               FX.puff(d.pos, { count: 10, size: 0.32, life: 0.6, color: 0xb9a77e });
               for (const o of deer) {
                 if (o !== d && !o.downed && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < 8) {
@@ -933,13 +844,15 @@ async function sceneA(G) {
     // one carcass becomes one meat pickup; collect them all before carrying
     // the haul home, so the walk back happens once rather than three times
     const meats = [];
+    const deerIds = new Map(deer.map((animal,index)=>[animal,index]));
     for (const d of downedList) {
       const at = { x: d.pos.x, y: d.pos.y, z: d.pos.z };
       d.dispose();
       G.npcs = G.npcs.filter((n) => n !== d);
       const k = deer.indexOf(d);
       if (k >= 0) deer.splice(k, 1);
-      meats.push({ at, prop: addProp(G, P.makeMeat(at.x, at.y, at.z)) });
+      const id=deerIds.get(d);
+      if (!(Save.activity('hunt').collected ?? []).includes(id)) meats.push({ id, at, prop: addProp(G, P.makeMeat(at.x, at.y, at.z)) });
     }
     for (let i = 0; i < meats.length; i++) {
       const m = meats[i];
@@ -948,6 +861,7 @@ async function sceneA(G) {
       P.disposeGroup(G.renderer.scene, m.prop.group);
       G.props = G.props.filter((pp) => pp !== m.prop);
       Inv.add('player', 'meat', 1);
+      Save.setActivity('hunt',{collected:[...(Save.activity('hunt').collected ?? []),m.id]});
       syncEquip(G); // the bow is still the tool, so the bow is still what shows
       FX.floaties({ x: m.at.x, y: m.at.y + 0.5, z: m.at.z }, { color: 0xffd9a0, count: 12, size: 0.11, life: 1.6, rise: 1.0 });
     }
@@ -1006,11 +920,12 @@ async function sceneA(G) {
 
   // --- fish the river (rod from the store first; the float minigame stays) ---
   if (!Save.getRecord('fished')) {
-    await takeFromChest(G, 'rod', S.act1.obj_store_rod);
+    if (!Save.activity('fish').caught) await takeFromChest(G, 'rod', S.act1.obj_store_rod);
     chest.openFor(1200);
     // Four spots along the bank, not one, and derived from riverX() so they are
     // actually ON the water. SITES.fishSpot is 11 blocks inland from the river
     // centre, which is why the old splash FX fired over dry grass.
+    if (!Save.activity('fish').caught) {
     const spots = FISH_SPOTS(G);
     objectiveCue(G, S.act1.obj_fish, spots[0]);
     const picked = await new Promise((resolve) => {
@@ -1034,6 +949,8 @@ async function sceneA(G) {
     FX.burst(splash, { color: 0xbfe4f5, count: 26, size: 0.13, speed: 3.4, life: 0.6, gravity: 9, additive: false });
     FX.burst(splash, { color: 0x9fd8ff, count: 8, size: 0.1, speed: 2.4, life: 0.45 });
     Inv.add('player', 'fish', 2);
+    Save.setActivity('fish', {caught:true});
+    }
     syncEquip(G);
     await G.hud.narrator(S.act1.fishCaught);
     await putInStore(G, 'fish', S.act1.obj_depositFish, S.act1.depositFishDone);
@@ -1117,12 +1034,14 @@ async function sceneA(G) {
   // NOTE: beads and obsidian are guarded separately so a quit between the
   // drilling and the trade cannot permanently lose the obsidian record
   if (!Save.getRecord('beads')) {
-    let shells = 0;
-    const shellsLeft = new Set(SITES.shells);
+    const collectedShells = new Set(Save.activity('shells').sites ?? []);
+    let shells = collectedShells.size;
+    const shellsLeft = new Set(SITES.shells.filter(s => !collectedShells.has(`${s.x},${s.z}`)));
     objectiveCue(G, S.act1.obj_shells);
     setBeacon(G, nearestSite(G, [...shellsLeft]));
     await new Promise((resolve) => {
-      for (const s of SITES.shells) {
+      if (shells >= 3) { resolve(); return; }
+      for (const s of shellsLeft) {
         const prop = addProp(G, P.makeShellPickup(s.x, groundY(G, s.x, s.z), s.z));
         G.interactables.push({
           id: `shell-${s.x}`, x: s.x, z: s.z, r: 2.4, prompt: '🐚', label: S.act1.lbl_shell, enabled: true,
@@ -1134,6 +1053,8 @@ async function sceneA(G) {
             FX.floaties(sp, { color: 0xf2e3c9, count: 8, size: 0.1, life: 1.3 });
             G.renderer.scene.remove(prop.group);
             shells++;
+            collectedShells.add(`${s.x},${s.z}`);
+            Save.setActivity('shells', { sites: [...collectedShells] });
             G.hud.setObjective(S.act1.obj_shells_n(shells));
             if (shells >= 3) { setBeacon(G, null); resolve(); }
             else setBeacon(G, nearestSite(G, [...shellsLeft]));
@@ -1199,6 +1120,8 @@ async function sceneA(G) {
   ambient.stop();
   // every bush empties: the gather sites are berry-bush props now
   for (const bp of berryProps.values()) bp.setBerries(false);
+  wildBerryPatch.setBerries(false);
+  G.interactables = G.interactables.filter(o => !String(o.id).startsWith('wild-'));
   for (const d of deer) {
     // herds wander beyond the ridge — clamped inside world bounds
     d.home = { x: Math.min(120, d.home.x + 22), z: Math.max(8, d.home.z - 24) };

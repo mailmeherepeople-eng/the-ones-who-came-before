@@ -146,6 +146,7 @@ export class Player {
     sh.rotation.x = -Math.PI / 2;
     sh.position.y = 0.03;
     g.add(sh);
+    this._blobShadow = sh;
     g.rotation.y = this._modelYaw;
     scene.add(g);
     this.model = g;
@@ -156,6 +157,16 @@ export class Player {
     if (!this.model) return;
     const g = this.model;
     g.position.set(this.pos.x, this.pos.y - this._stepLift, this.pos.z); // eased after an auto-step
+    // Ground the contact shadow independently of the body's step smoothing.
+    // Sample below the feet (not topAt, which reads the roof inside a cave).
+    if (this._blobShadow) {
+      let y = Math.floor(this.pos.y + 0.05) - 1;
+      while (y >= 0 && !isSolid(this.world.get(Math.floor(this.pos.x), y, Math.floor(this.pos.z)))) y--;
+      const height = this.pos.y - (y + 1);
+      this._blobShadow.position.y = y + 1.045 - g.position.y;
+      this._blobShadow.visible = y >= 0 && height < 3;
+      this._blobShadow.material.opacity = Math.max(0, 0.19 * (1 - height / 3));
+    }
     const hs = Math.hypot(this.vel.x, this.vel.z);
     if (hs > 0.6) {
       // face where we're going (shortest-arc lerp, matches NPC yaw feel)
@@ -377,7 +388,7 @@ export class Player {
     // shake: applied AFTER the basis so nothing that reads yaw/pitch (movement
     // math, the boom DDA, FX aiming) ever sees it. Three summed sines at
     // unrelated frequencies stand in for Perlin noise: smooth, never a jolt.
-    if (this.trauma > 0) {
+    if (this.trauma > 0 && !this.gentleCamera) {
       const s = this.trauma * this.trauma;
       const t = this._shakeT;
       const n1 = Math.sin(t * 21.3) * 0.6 + Math.sin(t * 33.7 + 1.3) * 0.4;
@@ -412,7 +423,7 @@ export class Player {
       this.trauma = Math.max(0, this.trauma - TRAUMA_DECAY * dt);
       this._shakeT += dt;
     }
-    this._fovTarget = running ? FOV_RUN : FOV_REST;
+    this._fovTarget = running && !this.gentleCamera ? FOV_RUN : FOV_REST;
     const k = 1 - Math.exp(-dt * 6);
     const next = this._fov + (this._fovTarget - this._fov) * k;
     if (Math.abs(next - this._fov) > 0.01) {
@@ -460,8 +471,8 @@ export class Player {
     } else {
       this._solidTime = 0;
     }
-    this.yaw += inp.look.x;
-    this.pitch = Math.max(-1.2, Math.min(1.35, this.pitch + inp.look.y));
+    this.yaw += inp.look.x * (this.lookScale ?? 1);
+    this.pitch = Math.max(-1.2, Math.min(1.35, this.pitch + inp.look.y * (this.lookScale ?? 1)));
 
     // Camera lock (Settings): swing the camera around to sit behind the
     // direction of travel, so crossing the valley needs no dragging at all.
@@ -535,6 +546,9 @@ export class Player {
     }
     this.moveAxis(1, dy);
 
+    // The expanded valley remains bounded: never fall forever beyond its rim.
+    this.pos.x = Math.max(PLAYER.RADIUS, Math.min(WORLD.SIZE_X - 1 - PLAYER.RADIUS, this.pos.x));
+    this.pos.z = Math.max(PLAYER.RADIUS, Math.min(WORLD.SIZE_Z - 1 - PLAYER.RADIUS, this.pos.z));
     // world floor safety
     if (this.pos.y < -4) this.teleport(this.pos.x, this.pos.z);
 

@@ -16,9 +16,14 @@
 // SourceCard (Act 3, derived): { recordId, title, photo, layer, specialist,
 //   category, tells } — every rendered field must exist here or in the record.
 import { SAVE_KEY } from './constants.js';
+import { snapshotRead, snapshotWrite } from './storage.js';
 
 const FRESH = () => ({
   version: 1,
+  updatedAt: 0,
+  activeMs: 0,
+  activities: {},
+  objective: null,
   act: 0,
   beat: 'start',
   records: [],
@@ -58,6 +63,19 @@ class SaveSystem {
     const slot = this.currentSlot();
     if (slot) this.key = `${SAVE_KEY}:${slot}`;
     this.load();
+    this.lastWrite = Promise.resolve(true);
+    this.ready = this.restoreSnapshot();
+  }
+
+  async restoreSnapshot() {
+    const key = this.key;
+    try {
+      const stored = await snapshotRead(key);
+      if (key === this.key && stored?.version === 1 && (stored.updatedAt ?? 0) > (this.data.updatedAt ?? 0)) {
+        this.data = { ...FRESH(), ...stored };
+      }
+    } catch { /* synchronous local save remains available */ }
+    return this.data;
   }
 
   currentSlot() {
@@ -69,7 +87,8 @@ class SaveSystem {
   // of data are ruined. Called at boot, before any beat runs, and only when the
   // teacher has turned the pilot flag on. Passing null returns to the ordinary
   // single save, which is what a child playing at home always uses.
-  useSlot(slotId) {
+  async useSlot(slotId) {
+    await this.lastWrite;
     try {
       if (slotId) localStorage.setItem(SLOT_KEY, slotId);
       else localStorage.removeItem(SLOT_KEY);
@@ -77,6 +96,7 @@ class SaveSystem {
     this.key = slotId ? `${SAVE_KEY}:${slotId}` : SAVE_KEY;
     this.data = FRESH();
     this.load();
+    await this.restoreSnapshot();
     return this.data;
   }
 
@@ -95,31 +115,34 @@ class SaveSystem {
   }
 
   persist() {
+    this.data.updatedAt = Math.max(Date.now(), (this.data.updatedAt ?? 0) + 1);
+    const snapshot = JSON.parse(JSON.stringify(this.data));
+    const key = this.key;
+    let localOK = false;
     try {
-      localStorage.setItem(this.key, JSON.stringify(this.data));
+      localStorage.setItem(key, JSON.stringify(snapshot));
+      localOK = true;
     } catch (e) {
-      // storage full (thumbnails) — drop largest art payloads progressively
-      console.warn('save persist failed; retrying without art', e);
-      try {
-        const slim = JSON.parse(JSON.stringify(this.data));
-        for (const r of slim.records) {
-          if (r.data?.png) r.data.png = null;
-          if (r.data?.mark) r.data.mark = null;
-        }
-        // cards carry copies of the same dataURLs — strip those too
-        for (const c of slim.cards) {
-          if (typeof c.photo === 'string') c.photo = { emoji: '🗿' };
-        }
-        localStorage.setItem(this.key, JSON.stringify(slim));
-      } catch (e2) { console.error('save persist failed twice', e2); }
+      // Keep the full snapshot, including art, in the larger async store.
     }
+    this.lastWrite = this.lastWrite.then(async () => {
+      let durable = false;
+      try { await snapshotWrite(key, snapshot); durable = true; } catch { /* report below */ }
+      const ok = localOK || durable;
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('save-status', { detail: { ok } }));
+      return ok;
+    });
+    return this.lastWrite;
   }
 
   reset() {
     const session = this.data.session; // starting over must not lose WHO is playing
+    const updatedAt = this.data.updatedAt;
     this.data = FRESH();
     this.data.session = session;
-    try { localStorage.removeItem(this.key); } catch { /* ignore */ }
+    this.data.updatedAt = updatedAt;
+    // Write a newer empty snapshot, so an old async copy cannot resurrect it.
+    this.persist();
   }
 
   get hasProgress() { return this.data.beat !== 'start'; }
@@ -127,7 +150,7 @@ class SaveSystem {
   checkpoint(act, beat) {
     this.data.act = act;
     this.data.beat = beat;
-    this.data.beatTimes[beat] = Date.now();
+    this.data.beatTimes[beat] ??= Date.now();
     this.persist();
   }
 
@@ -143,6 +166,43 @@ class SaveSystem {
   getRecords(type) { return this.data.records.filter((r) => r.type === type); }
 
   setChoice(key, val) { this.data.choices[key] = val; this.persist(); }
+
+  activity(id) { return this.data.activities[id] ?? {}; }
+  setActivity(id, patch) {
+    this.data.activities[id] = { ...this.activity(id), ...patch };
+    this.persist();
+  }
+
+  export() { return JSON.stringify(this.data, null, 2); }
+
+  async import(text) {
+    if (text.length > 12 * 1024 * 1024) throw new Error('Oversized save');
+    const data = JSON.parse(text);
+    if (data.version !== 1 || !Array.isArray(data.records) || !Array.isArray(data.cards)
+      || !Number.isInteger(data.act) || data.act < 0 || data.act > 3 || typeof data.beat !== 'string') throw new Error('Invalid save');
+    // Photos enter HTML image attributes. Only our PNG data URLs are allowed.
+    for (const r of data.records) {
+      if (!r || typeof r.id !== 'string' || typeof r.type !== 'string') throw new Error('Invalid record');
+      for (const k of ['png', 'mark']) if (r.data?.[k] && !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(r.data[k])) throw new Error('Invalid image');
+    }
+    for (const c of data.cards) {
+      if (!c || typeof c.title !== 'string' || typeof c.recordId !== 'string') throw new Error('Invalid card');
+      if (typeof c.photo === 'string' && !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(c.photo)) throw new Error('Invalid image');
+      if (c.photo && typeof c.photo !== 'string' && !/^[\p{L}\p{N}\p{P}\p{S}\p{Z}\uFE0F\u200D]*$/u.test(c.photo.emoji ?? '')) throw new Error('Invalid icon');
+    }
+    for (const key of ['inventory', 'choices', 'claims', 'codex', 'mastery', 'activities', 'beatTimes']) {
+      if (key in data && (!data[key] || typeof data[key] !== 'object' || Array.isArray(data[key]))) throw new Error('Invalid state');
+    }
+    if ('labUsed' in data && (!Array.isArray(data.labUsed) || data.labUsed.some(v=>typeof v!=='string'))) throw new Error('Invalid lab');
+    if ('activeMs' in data && (!Number.isFinite(data.activeMs) || data.activeMs<0)) throw new Error('Invalid time');
+    if (data.inventory) for(const name of ['player','chest','store']) {
+      const items=data.inventory[name];
+      if(!items || typeof items!=='object' || Array.isArray(items) || Object.values(items).some(n=>!Number.isFinite(n)||n<0)) throw new Error('Invalid inventory');
+    }
+    const before = this.data;
+    this.data = { ...FRESH(), ...data, session: before.session, updatedAt:Math.max(before.updatedAt ?? 0,data.updatedAt ?? 0) };
+    if (!await this.persist()) { this.data = before; throw new Error('Save unavailable'); }
+  }
 
   addCard(card) {
     if (!this.data.cards.find((c) => c.recordId === card.recordId && c.title === card.title)) {
@@ -188,6 +248,7 @@ class SaveSystem {
     if (correct) {
       m.correct += 1;
       m.firstCorrectAt ??= Date.now();
+      if (this.data.codex[itemId]?.taught) this.data.codex[itemId].mastered ??= Date.now();
     }
     this.persist();
     return m;

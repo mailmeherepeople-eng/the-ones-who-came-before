@@ -52,10 +52,11 @@ function walk(dir, filter) {
 // ---------- 1 + 2: delegate to the tools that already do these ----------
 function runTool(name, script, args = []) {
   const r = spawnSync(process.execPath, [join(here, script), ...args], { encoding: 'utf8' });
-  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
+  const out = `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? r.error.message : ''}`.trim();
   record(name, r.status === 0, out.split('\n').slice(-3).join(' | '));
 }
 
+runTool('gameplay regressions', 'regression.mjs');
 runTool('content lint', 'lint-strings.mjs');
 runTool('audio manifest in sync', 'sync-audio-manifest.mjs', ['--check']);
 

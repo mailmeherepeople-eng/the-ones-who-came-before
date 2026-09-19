@@ -1,12 +1,15 @@
 // Unified input: WASD + pointer-lock mouse on desktop; virtual joystick +
 // drag-look + jump button on touch. Emits an abstract state the player reads.
+import { S } from '../strings.js';
 export class Input {
   constructor(canvas, uiRoot) {
     this.canvas = canvas;
+    this.canvas.tabIndex = 0;
     this.move = { x: 0, y: 0 }; // strafe, forward (-1..1)
     this.lookDelta = { x: 0, y: 0 };
     this.jump = false;
     this.interactPressed = false;
+    this.equipPressed = false;
     this.zoomDelta = 0; // +out, -in
     this.enabled = true;
     this.isTouch = matchMedia('(pointer: coarse)').matches;
@@ -17,14 +20,16 @@ export class Input {
 
     // ---- keyboard ----
     addEventListener('keydown', (e) => {
+      if (e.target?.closest?.('input, textarea, select, [contenteditable], [role=dialog]')) return;
       this.keys.add(e.code); // before the repeat guard: held keys must survive setEnabled cycles
       if (e.repeat) return;
       if (!this.enabled) return;
       if (e.code === 'KeyE' || e.code === 'Enter') this.interactPressed = true;
+      if (e.code === 'KeyQ') this.equipPressed = true;
       if (e.code === 'Space') { this.jump = true; e.preventDefault(); }
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
-    addEventListener('blur', () => this.keys.clear());
+    addEventListener('blur', () => { this.keys.clear(); this.clearEdges(); });
 
     // ---- mouse look (pointer lock) ----
     canvas.addEventListener('click', () => {
@@ -67,6 +72,7 @@ export class Input {
     this.jumpEl = document.createElement('button');
     this.jumpEl.id = 'touch-jump';
     this.jumpEl.textContent = '↥';
+    this.jumpEl.setAttribute('aria-label', S.onboarding.jumpAction);
     uiRoot.appendChild(this.jumpEl);
     this.jumpEl.addEventListener('touchstart', (e) => { e.preventDefault(); this.jump = true; this._jumpTouchHeld = true; });
     this.jumpEl.addEventListener('touchend', () => { this._jumpTouchHeld = false; });
@@ -173,6 +179,7 @@ export class Input {
   // does not re-trigger an interact or jump on the next frame)
   clearEdges() {
     this.interactPressed = false;
+    this.equipPressed = false;
     this.jump = false;
   }
 
@@ -183,7 +190,7 @@ export class Input {
     // the player through those.
     if (!this.enabled) {
       this.lookDelta.x = 0; this.lookDelta.y = 0;
-      this.jump = false; this.interactPressed = false; this.zoomDelta = 0;
+      this.jump = false; this.interactPressed = false; this.equipPressed = false; this.zoomDelta = 0;
       return { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, jump: false, jumpHeld: false, interact: false, zoom: 0 };
     }
     // keyboard always contributes (touch-primary hybrids can have keyboards);
@@ -202,11 +209,13 @@ export class Input {
       jump: this.jump,
       jumpHeld: this.keys.has('Space') || !!this._jumpTouchHeld,
       interact: this.interactPressed,
+      equip: this.equipPressed,
       zoom: this.zoomDelta,
     };
     this.lookDelta.x = 0; this.lookDelta.y = 0;
     this.jump = false;
     this.interactPressed = false;
+    this.equipPressed = false;
     this.zoomDelta = 0;
     return out;
   }
@@ -214,6 +223,7 @@ export class Input {
   setEnabled(on) {
     this.enabled = on;
     if (!on) {
+      this.clearEdges();
       this.keys.clear();
       this.move.x = 0; this.move.y = 0;
       if (this._pointerLocked) document.exitPointerLock?.();

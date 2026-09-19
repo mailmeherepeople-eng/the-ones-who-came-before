@@ -92,7 +92,31 @@ export const Inv = {
   move(from, to, id, n = 1) {
     const got = this.take(from, id, n);
     if (got > 0) this.add(to, id, got);
+    if (got > 0 && to === 'player' && ITEMS[id]?.kind === 'tool') this.selectTool(id);
     return got;
+  },
+
+  selectedTool() {
+    const selected = Save.data.equipment?.selected;
+    return selected && this.has('player', selected) ? selected : this.heldTool();
+  },
+
+  equippedTool() {
+    const selected = this.selectedTool();
+    const state = Save.data.equipment;
+    return selected && (state?.selected !== selected || state.equipped !== false) ? selected : null;
+  },
+
+  selectTool(id, equipped = true) {
+    if (ITEMS[id]?.kind !== 'tool' || !this.has('player', id)) return false;
+    Save.data.equipment = { selected: id, equipped };
+    touch();
+    return true;
+  },
+
+  toggleTool() {
+    const selected = this.selectedTool();
+    return selected ? this.selectTool(selected, !this.equippedTool()) : false;
   },
 
   // [{ id, n }], tools first then harvests, stable within each group so the
@@ -130,7 +154,7 @@ export const Inv = {
 
   clear(where) { this.stock(where, {}); },
 
-  resetAll() { Save.data.inventory = fresh(); touch(); },
+  resetAll() { Save.data.inventory = fresh(); delete Save.data.equipment; touch(); },
 
   onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
 

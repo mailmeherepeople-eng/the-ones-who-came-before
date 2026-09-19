@@ -4,6 +4,7 @@ import { S } from '../strings.js';
 import { Save, FIND_META } from '../save.js';
 import { YEARS, gapYears, fmtYear, fmtNum } from '../constants.js';
 import { SFX } from '../audio.js';
+import { activity } from './activity.js';
 
 // ---------- source cards ----------
 
@@ -49,7 +50,9 @@ export function showSourceCard(G, card, { layer = null } = {}) {
     el.querySelector('.sc-tells').textContent = card.tells;
     el.querySelector('.sc-cat').textContent = S.act3.sourceCategories[card.category];
     G.hud.root.appendChild(el);
+    const scope = activity(G.hud.root, el, G.input);
     el.querySelector('button').addEventListener('click', () => {
+      scope.close();
       el.remove();
       G.input?.clearEdges?.();
       resolve();
@@ -58,9 +61,9 @@ export function showSourceCard(G, card, { layer = null } = {}) {
 }
 
 function photoHTML(photo) {
-  if (typeof photo === 'string') return `<img class="sc-photo" src="${photo}" alt="">`;
+  if (typeof photo === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(photo)) return `<img class="sc-photo" src="${photo}" alt="">`;
   const emoji = photo?.emoji ?? '🗿';
-  return `<div class="sc-photo" style="display:flex;align-items:center;justify-content:center;font-size:64px">${emoji}</div>`;
+  return `<div class="sc-photo" style="display:flex;align-items:center;justify-content:center;font-size:64px">${esc(emoji)}</div>`;
 }
 
 // ---------- pot portrait ----------
@@ -132,16 +135,18 @@ export function wirePanelClose(G, el, onClose, { backdrop = false } = {}) {
     dim.className = 'panel-dim';
     G.hud.root.appendChild(dim);
   }
+  const scope = activity(G.hud.root, el, G.input);
   let done = false;
   const close = () => {
     if (done) return;
     done = true;
+    scope.close();
     removeEventListener('keydown', onKey);
     dim?.remove();
     onClose();
   };
   const onKey = (e) => {
-    if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); close(); }
+    if (e.code === 'Escape' && !e.repeat && el.contains(document.activeElement)) { e.preventDefault(); close(); }
   };
   addEventListener('keydown', onKey);
   dim?.addEventListener('click', close);
@@ -155,6 +160,7 @@ export function wirePanelClose(G, el, onClose, { backdrop = false } = {}) {
   x.addEventListener('click', close);
   wrap.appendChild(x);
   el.prepend(wrap);
+  close.scope = scope;
   return close;
 }
 
@@ -199,69 +205,62 @@ export function satchelPanel(G) {
 
 // ---------- claim board ----------
 
-export function claimBoard(G) {
-  return new Promise((resolve) => {
-    const claims = [
-      { id: 'settled', text: S.act3.claims.settled, correct: 'supported', result: S.act3.claimResult_settled, ev: ['🌾', '🏺', '🗣'] },
-      { id: 'fort', text: S.act3.claims.fort, correct: 'contradicted', result: S.act3.claimResult_fort, ev: ['🗣', '🗣', '⛏'], hint: S.act3.claimHint_shared },
-      { id: 'animals', text: S.act3.claims.animals, correct: 'supported', result: S.act3.claimResult_animals, ev: ['🖼', '🦴', '🗣'] },
-    ];
-    const el = document.createElement('div');
-    el.className = 'bigpanel';
-    el.innerHTML = `<h2>⚖️ ${S.act3.claimBoard}</h2>`;
-    // ✕ / Escape reuse the same resolve path as the end-of-board Continue —
-    // no panel may ever trap the player, even before all verdicts are picked
-    const close = wirePanelClose(G, el, () => { el.remove(); resolve(); });
-    const painting = Save.getRecord('painting');
+export function claimSpecs() {
+  return [
+    {id:'settled', text:S.act3.claims.settled, correct:'supported', result:S.act3.claimResult_settled, evidence:['grain','pot','oralG'], min:2},
+    {id:'fort', text:S.revision.sharedClaim, correct:'contradicted', result:S.revision.sharedResult, evidence:['oralF','oralT'], min:2},
+    {id:'exchange', text:S.revision.exchangeClaim, correct:'supported', result:S.codex.exchange.tells, evidence:['obsidian','beads'], min:1},
+    {id:'belief', text:S.revision.beliefClaim, correct:'cantTell', result:S.revision.beliefResult, evidence:['burial','beads'], min:1},
+  ];
+}
 
-    for (const cl of claims) {
-      const c = document.createElement('div');
-      c.className = 'claim';
-      c.innerHTML = `
-        <div class="c-text"></div>
-        <div class="c-evidence"></div>
-        ${cl.hint ? `<div class="c-result" style="display:block;border:none;padding:0"></div>` : ''}
-        <div class="c-verdicts">
-          <button class="vbtn chip-btn" data-v="supported">${S.act3.verdicts.supported}</button>
-          <button class="vbtn chip-btn" data-v="contradicted">${S.act3.verdicts.contradicted}</button>
-          <button class="vbtn chip-btn" data-v="cantTell">${S.act3.verdicts.cantTell}</button>
-        </div>
-        <div class="c-result c-final" style="display:none"></div>`;
-      c.querySelector('.c-text').textContent = cl.text;
-      if (cl.hint) c.querySelector('.c-result').textContent = '💡 ' + cl.hint;
-      const ev = c.querySelector('.c-evidence');
-      for (const icon of cl.ev) {
-        if (icon === '🖼' && painting?.data?.png) {
-          ev.insertAdjacentHTML('beforeend', `<img src="${painting.data.png}" alt="">`);
-        } else {
-          ev.insertAdjacentHTML('beforeend', `<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:#17100a;border-radius:6px;border:1px solid var(--panel-line);font-size:22px">${icon}</div>`);
-        }
+export function claimBoard(G) {
+  return new Promise(resolve => {
+    const specs=claimSpecs(), el=document.createElement('div'); el.className='bigpanel evidence-board';
+    const close=wirePanelClose(G,el,()=>{el.remove();resolve(specs.every(c=>Save.activity('claim-'+c.id).done));});
+    const title=document.createElement('h2'); title.textContent=S.act3.claimBoard; el.appendChild(title);
+    const intro=document.createElement('p'); intro.textContent=S.revision.evidencePrompt; el.appendChild(intro);
+    for(const cl of specs) {
+      const section=document.createElement('section'); section.className='claim';
+      const heading=document.createElement('h3'); heading.textContent=cl.text; section.appendChild(heading);
+      const selected=new Set(Save.activity('claim-'+cl.id).evidence ?? []);
+      const relevant=Save.data.cards.filter(c=>cl.evidence.includes(c.recordId));
+      const other=Save.data.cards.filter(c=>!cl.evidence.includes(c.recordId)).slice(0,2);
+      const choices=[...relevant,...other].sort((a,b)=>a.title.localeCompare(b.title));
+      for(const card of choices) {
+        const item=document.createElement('div'); item.className='evidence-item';
+        const label=document.createElement('label'), check=document.createElement('input'); check.type='checkbox';
+        check.checked=selected.has(card.recordId); label.append(check,document.createTextNode(card.title));
+        check.disabled=!!Save.activity('claim-'+cl.id).done;
+        check.addEventListener('change',()=>{ check.checked?selected.add(card.recordId):selected.delete(card.recordId); });
+        const details=document.createElement('details'), summary=document.createElement('summary'), description=document.createElement('p');
+        summary.textContent=S.revision.evidenceInspect; description.textContent=card.tells;
+        details.append(summary,description); item.append(label,details); section.appendChild(item);
       }
-      c.querySelectorAll('.vbtn').forEach((b) => {
-        b.addEventListener('click', () => {
-          if (cl.done) return;
-          cl.done = true;
-          cl.picked = b.dataset.v;
-          Save.setClaim(cl.id, cl.picked);
-          b.classList.add('sel-' + b.dataset.v);
-          const fin = c.querySelector('.c-final');
-          fin.style.display = 'block';
-          const right = cl.picked === cl.correct;
-          fin.textContent = (right ? '✓ ' : '✗ ') + cl.result;
-          fin.style.color = right ? 'var(--accent2)' : 'var(--danger)';
-          if (claims.every((x) => x.done)) {
-            const doneBtn = document.createElement('button');
-            doneBtn.className = 'btn primary mg-confirm fx-pop';
-            doneBtn.style.cssText = 'display:block;margin:12px auto 0';
-            doneBtn.textContent = S.ui.continue;
-            doneBtn.addEventListener('click', close);
-            el.appendChild(doneBtn);
-          }
+      const feedback=document.createElement('p'); feedback.setAttribute('role','status');
+      if(Save.activity('claim-'+cl.id).done) feedback.textContent='✓ '+cl.result;
+      const verdicts=document.createElement('div'); verdicts.className='c-verdicts';
+      for(const verdict of ['supported','contradicted','cantTell']) {
+        const button=document.createElement('button'); button.className='btn small'; button.textContent=S.act3.verdicts[verdict];
+        button.disabled=!!Save.activity('claim-'+cl.id).done;
+        button.addEventListener('click',()=>{
+          if(!selected.size) {feedback.textContent=S.revision.evidenceMissing;return;}
+          const evidenceOK=selected.size>=cl.min && [...selected].every(id=>cl.evidence.includes(id));
+          const right=verdict===cl.correct && evidenceOK;
+          Save.recordRecall('4.27',right);
+          Save.setClaim(cl.id,verdict);
+          Save.setActivity('claim-'+cl.id,{evidence:[...selected],done:right});
+          feedback.textContent=right?'✓ '+cl.result:(!evidenceOK?S.revision.evidenceRetry:cl.result);
+          if(right) section.querySelectorAll('button, input').forEach(b=>b.disabled=true);
+          if(specs.every(c=>Save.activity('claim-'+c.id).done)) done.disabled=false;
         });
-      });
-      el.appendChild(c);
+        verdicts.appendChild(button);
+      }
+      section.append(verdicts,feedback); el.appendChild(section);
     }
-    G.hud.root.appendChild(el);
+    const done=document.createElement('button'); done.className='btn primary'; done.textContent=S.ui.continue;
+    done.disabled=!specs.every(c=>Save.activity('claim-'+c.id).done); done.addEventListener('click',close);
+    el.appendChild(done); G.hud.root.appendChild(el);
   });
 }
 
@@ -279,9 +278,15 @@ export function labTray(G) {
     el.innerHTML = `<h2>🔬 ${S.act3.lab}</h2>
       <div style="text-align:center;font-size:12.5px;color:var(--ink-dim);margin-bottom:12px">${S.act3.labNote}</div>
       <div id="lab-rows"></div>`;
-    const close = wirePanelClose(G, el, () => { el.remove(); resolve(); });
+    const close = wirePanelClose(G, el, () => { el.remove(); resolve(samples.every(s=>Save.data.labUsed.includes(s.id))); });
     const rows = el.querySelector('#lab-rows');
-    let used = 0;
+    let used = samples.filter(s => Save.data.labUsed.includes(s.id)).length;
+    const doneBtn = document.createElement('button');
+    doneBtn.className = 'btn primary mg-confirm';
+    doneBtn.textContent = S.ui.continue;
+    doneBtn.disabled = used !== samples.length;
+    doneBtn.addEventListener('click', close);
+    el.appendChild(doneBtn);
     for (const s of samples) {
       const row = document.createElement('div');
       row.className = 'claim lab-bench';
@@ -292,25 +297,19 @@ export function labTray(G) {
           <div class="lab-out" style="font-size:13px;color:var(--ink-dim);flex:1"></div>
         </div>`;
       const btn = row.querySelector('button');
+      if (Save.data.labUsed.includes(s.id)) { btn.disabled = true; row.querySelector('.lab-out').textContent = s.label; }
       btn.addEventListener('click', () => {
         btn.disabled = true;
         const out = row.querySelector('.lab-out');
         out.textContent = '…';
-        setTimeout(() => {
+        close.scope.timeout(() => {
           out.textContent = s.label;
           out.style.color = 'var(--accent2)';
           out.classList.add('fx-pop');
           Save.useLab(s.id);
           collectCard(G, s.cardKey, { photo: { emoji: s.icon } });
           used++;
-          if (used === samples.length) {
-            const doneBtn = document.createElement('button');
-            doneBtn.className = 'btn primary mg-confirm fx-pop';
-            doneBtn.style.cssText = 'display:block;margin:12px auto 0';
-            doneBtn.textContent = S.ui.continue;
-            doneBtn.addEventListener('click', close);
-            el.appendChild(doneBtn);
-          }
+          doneBtn.disabled = used !== samples.length;
         }, 900);
       });
       rows.appendChild(row);
@@ -369,6 +368,8 @@ export function siteReport(G) {
       </div>
       <div class="rep-body" style="margin-top:10px">${esc(S.act3.recentNote)}</div>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap">
+        <button class="btn small chip-btn" id="rep-journal">${S.revision.journal}</button>
+        <button class="btn small chip-btn" id="rep-chapter">${S.textbook.title}</button>
         <button class="btn small chip-btn" id="rep-drill">${S.act3.drillMore}</button>
         <button class="btn primary mg-confirm" id="rep-done">${S.ui.continue}</button>
       </div>`;
@@ -376,6 +377,8 @@ export function siteReport(G) {
 
     const close = wirePanelClose(G, el, () => { el.remove(); resolve(); });
     el.querySelector('#rep-done').addEventListener('click', close);
+    el.querySelector('#rep-journal').addEventListener('click', async () => { const { downloadJournal } = await import('./journal.js'); downloadJournal(); });
+    el.querySelector('#rep-chapter').addEventListener('click', async () => { const { chapterNotebook } = await import('./chapterNotebook.js'); await chapterNotebook(G.hud.root); });
     const drillBtn = el.querySelector('#rep-drill');
     drillBtn.addEventListener('click', async () => {
       drillBtn.disabled = true;
@@ -399,6 +402,7 @@ async function drillLoop(G, reportEl) {
     const expect = gapYears(a, b);
     const got = await numberPrompt(G.hud.root, { title: S.act3.drillQ(fmtYear(a), fmtYear(b)) });
     if (!reportEl.isConnected) return;
+    Save.recordRecall('4.14', got === expect);
     G.hud.toast(got === expect ? '✓ ' + fmtNum(expect) : '✗ ' + fmtNum(expect), 2400);
   }
 }

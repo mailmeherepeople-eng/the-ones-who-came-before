@@ -20,6 +20,7 @@
 import { S } from '../strings.js';
 import { codexList, codexCounts } from '../codex.js';
 import { wirePanelClose } from './report.js';
+import { practiceRecall } from '../recall.js';
 
 // Returns a Promise that resolves on close; the promise also carries a
 // .close() so the HUD button can toggle it shut, matching satchelPanel.
@@ -63,6 +64,11 @@ export function codexPanel(G) {
     const close = wirePanelClose(G, el, () => { el.remove(); resolve(); }, { backdrop: true });
     closeFn = close;
     el.querySelector('.btn.primary').addEventListener('click', close);
+    if (met.length) {
+      const practice = document.createElement('button'); practice.className='btn'; practice.textContent=S.revision.practice;
+      practice.addEventListener('click', async () => { close(); await practiceRecall(G); });
+      el.appendChild(practice);
+    }
     G.hud.root.appendChild(el);
   });
   p.close = () => closeFn?.();

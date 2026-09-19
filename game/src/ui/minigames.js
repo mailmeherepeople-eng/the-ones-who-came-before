@@ -3,6 +3,8 @@
 // drilling (hold-through), and fishing (reaction tap).
 import { S } from '../strings.js';
 import { SFX } from '../audio.js';
+import { Settings } from '../settings.js';
+import { activity } from './activity.js';
 
 export function timingGame(uiRoot, {
   title,
@@ -13,6 +15,7 @@ export function timingGame(uiRoot, {
   failText = null,
   mode = 'tap', // 'tap' | 'react' (zone appears after random delay)
 } = {}) {
+  if (Settings.get('assisted')) { zone = Math.max(zone, 1.6); speed *= 0.65; }
   return new Promise((resolve) => {
     const el = document.createElement('div');
     el.className = 'minigame';
@@ -31,6 +34,12 @@ export function timingGame(uiRoot, {
     `;
     el.querySelector('h3').textContent = title;
     uiRoot.appendChild(el);
+    const scope = activity(uiRoot, el);
+    if (Settings.get('assisted')) {
+      const assist = document.createElement('button'); assist.className = 'btn'; assist.textContent = S.revision.assistAction;
+      assist.addEventListener('pointerdown', e => e.stopPropagation());
+      assist.addEventListener('click', () => finish(true)); el.appendChild(assist);
+    }
 
     const zonePath = el.querySelector('#tg-zone');
     const needle = el.querySelector('#tg-needle');
@@ -118,7 +127,10 @@ export function timingGame(uiRoot, {
     addEventListener('keydown', onKey);
 
     function finish(ok) {
+      if (!running) return;
       running = false;
+      scope.close();
+      clearTimeout(zoneTimer);
       if (ok) SFX.success();
       flash(el.querySelector('.stage'), ok ? 'fx-flash' : 'mg-shake');
       cancelAnimationFrame(raf);
@@ -214,12 +226,12 @@ export function numberPrompt(uiRoot, { title, placeholder = '' }) {
       <button class="btn primary mg-confirm" style="width:100%;margin-top:10px">${S.ui.done}</button>`;
     el.querySelector('h3').textContent = title;
     uiRoot.appendChild(el);
+    const scope = activity(uiRoot, el);
     const input = el.querySelector('input');
-    setTimeout(() => input.focus(), 60);
     const submit = () => {
       const v = readNumber(input); // same separator tolerance as the countdown
       if (Number.isNaN(v)) { input.style.borderColor = 'var(--danger)'; return; }
-      el.remove(); resolve(v);
+      scope.close(); el.remove(); resolve(v);
     };
     el.querySelector('button').addEventListener('click', submit);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });

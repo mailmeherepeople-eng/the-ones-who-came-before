@@ -45,6 +45,8 @@ export class Renderer {
     this.post = null;
     this._shadowFrame = 0;
     this._focus = new THREE.Vector3();
+    this._shadowRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), SUN_DIR).normalize();
+    this._shadowUp = new THREE.Vector3().crossVectors(SUN_DIR, this._shadowRight);
 
     this.sky = null; // group (dome + sun + clouds), follows the camera
     this._clouds = [];
@@ -163,7 +165,7 @@ export class Renderer {
       const phone = QUALITY_TIER === 'low' || matchMedia('(pointer: coarse)').matches;
       gl.shadowMap.enabled = true;
       gl.shadowMap.type = THREE.PCFShadowMap; // PCFSoft is the expensive one on mobile
-      gl.shadowMap.autoUpdate = false;        // we update every other frame in _render
+      gl.shadowMap.autoUpdate = false;        // updated together with the light in _render
       this.sun.castShadow = true;
       this.sun.shadow.mapSize.set(phone ? 512 : 1024, phone ? 512 : 1024);
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
@@ -196,11 +198,19 @@ export class Renderer {
     const cam = this.camera;
     cam.getWorldDirection(this._focus);
     this._focus.multiplyScalar(SHADOW_HALF * 0.6).add(cam.position);
+    // Snap the light-space X/Y axes to shadow texels. Otherwise tiny camera
+    // movements change the sampling grid and the player's shadow crawls.
+    const right = this._shadowRight, up = this._shadowUp;
+    const texel = (SHADOW_HALF * 2) / this.sun.shadow.mapSize.x;
+    for (const axis of [right, up]) {
+      const value = this._focus.dot(axis);
+      this._focus.addScaledVector(axis, Math.round(value / texel) * texel - value);
+    }
     this.sun.target.position.copy(this._focus);
     this.sun.position.copy(this._focus).addScaledVector(SUN_DIR, SHADOW_BACK);
-    // every other frame is plenty at 30 fps; the map is re-rendered in full
-    // each time it updates
-    if ((this._shadowFrame++ & 1) === 0) this.gl.shadowMap.needsUpdate = true;
+    // The matrix and its depth map must describe the SAME frame. Updating
+    // the matrix every frame but the map every other frame caused flicker.
+    this.gl.shadowMap.needsUpdate = true;
   }
 
   _render(dt) {
@@ -391,13 +401,17 @@ export class Renderer {
     const dt = Math.min(0.1, (t - this._last) / 1000 || 0);
     this._last = t;
     this._acc += dt;
+    this._simulationElapsed = (this._simulationElapsed ?? 0) + dt;
     // frame limiter: render at most TARGET_FPS; skip fast frames to flatten
     // the thermal curve on phones
-    if (this._acc < this._frameInterval) return;
-    const step = Math.min(this._acc, 0.1);
+    if (this._acc + 1e-9 < this._frameInterval) return;
+    const step = Math.min(this._simulationElapsed, 0.1);
+    this._simulationElapsed = 0;
     // carry the remainder so non-multiple refresh rates hold the target rate,
     // but never bank more than one interval (no spiral after hitches)
-    this._acc = Math.min(this._acc - this._frameInterval, this._frameInterval);
+    // Render scheduling keeps its remainder; simulation consumes elapsed time
+    // exactly once, independently of the display refresh rate.
+    this._acc = Math.max(0, Math.min(this._acc - this._frameInterval, this._frameInterval));
     this._lastTick = t;
     if (this.onFrame) this.onFrame(step);
     this._updateSky(step);

@@ -2,9 +2,11 @@
 
 A single-player browser voxel game that teaches **NCERT Class 6 Social Science, Chapter 4 — "Timeline and Sources of History"** — by making the player *live* the history first and *excavate their own past* afterward. You spend Act 1 as an early human leaving traces (a cave painting, a pot with your maker's mark, a burial), Act 2 watching millennia erase and bury those traces, and Act 3 as a five-specialist excavation team digging your own life back up and reasoning about it like a historian.
 
-Made by "Git Gud Studio". One valley, one save file, three acts, ~50 syllabus items covered (see `game/COVERAGE.md` for the item-by-item mapping).
+Made by "Git Gud Studio". One valley, one save file, three acts, 51 tracked syllabus concepts covered (see `game/COVERAGE.md` for the item-by-item mapping).
 
 ---
+
+Current release changes are in **sections 21 and 22**. Earlier dated sections describe prior iterations; section 21 supersedes the bare-hand opening, 49-item totals and old persistence/shadow behaviour. Section 22 describes the current Act 2 interface.
 
 ## 1. Quick facts
 
@@ -14,7 +16,7 @@ Made by "Git Gud Studio". One valley, one save file, three acts, ~50 syllabus it
 | Platform | Browser (desktop + mobile Chrome), fully offline after first load |
 | Engine | Three.js v0.185 (vendored), vanilla JavaScript ES modules, **no build step, no npm dependencies** |
 | Rendering | Vertex-colored voxel chunks by default (plus an optional texture-atlas pass for player-painted blocks), Lambert lighting with baked sun shadows and ACES tone mapping, 30 fps frame limiter tuned for low-end Android; an optional Rich tier adds a shadow map and one post pass (section 20) |
-| Persistence | `localStorage` save, autosave at every beat, resume from title |
+| Persistence | Full localStorage + IndexedDB snapshots, activity checkpoints, import/export, resume from title |
 | Run | `npx serve -l 8321 game` → http://localhost:8321 (or the `.claude/launch.json` "game" config) |
 | Content lint | `node game/tools/lint-strings.mjs` — blocks old-syllabus terms, stray date literals, and edits to protected NCERT phrasings |
 | World editor | `?edit` or **F2** — a full in-game scene editor, lazily loaded, host-adapter based so it is reusable in any three.js project. See `game/EDITOR.md` and §7 below |
@@ -27,7 +29,7 @@ Everything lives under `game/`. No framework, no bundler — `index.html` loads 
 
 ```
 game/src/
-├── main.js            boot, title screen, frame loop, act sequencing, Tab act-menu
+├── main.js            boot, title screen, frame loop, act sequencing, Alt+M act-menu
 ├── constants.js       world dims, player physics values, canonical dates, SAVE_KEY
 ├── strings.js         EVERY user-visible string (Hindi swap planned); lint-protected
 ├── save.js            localStorage save system: records, cards, choices, beat checkpoints
@@ -38,7 +40,7 @@ game/src/
 │   └── input.js       WASD/mouse (pointer-lock + drag fallback), touch joystick +
 │                      drag-look + tap-to-interact + pinch zoom, injectInteract()
 ├── world/
-│   ├── voxel.js       flat Uint8 world (128×32×128), get/set, topAt, dirty chunks
+│   ├── voxel.js       flat Uint8 world (160×24×160), get/set, topAt, dirty chunks
 │   ├── blocks.js      ~38 block defs + registerBlock() for runtime/custom types
 │   ├── atlas.js       lazy 256×256 texture atlas (16×16 tiles) for painted blocks
 │   ├── mesher.js      chunk mesher: face culling, per-vertex ambient occlusion,
@@ -85,7 +87,7 @@ game/src/
 
 ### Engine details worth knowing
 
-- **World**: a single 128×32×128 voxel volume. Terrain is deterministic value-noise (no RNG seeds stored) — one valley with a winding river, a north cliff containing a carved rock-shelter cave, plains east, meadow west, and a banded fossil cliff. Every named location lives in `SITES` (terrain.js) — the single source of truth acts script against.
+- **World**: a single 160×24×160 voxel volume. Terrain is deterministic value-noise (no RNG seeds stored) — one valley with a winding river, a north cliff containing a carved rock-shelter cave, plains east, meadow west, and a banded fossil cliff. Every named location lives in `SITES` (terrain.js) — the single source of truth acts script against.
 - **Meshing**: 16×16-column chunks, culled faces, indexed geometry. Each chunk emits up to **four** meshes — solid, water, cross-flora, and (only if a painted block is present) textured. Visual richness comes from *vertex color math*, not textures: classic 4-level **ambient occlusion** per vertex, low-frequency position tinting (meadow patches, warm/cool grass drift), per-face jitter, birch-ring banding, depth-graded cave rock, per-vertex water shimmer. Flora blocks (`cross: true`) render as two tapered crossed quads instead of cubes — tall grass, flowers, ferns, berry shrubs, snow tufts, reeds — all `solid: false` so they never block movement.
 - **Water surface geometry**: a water cell whose neighbour above is *not* water is the surface cell, and **all** of its faces (top and sides) are emitted at 0.85 of block height. Getting this wrong is visible — when only the top face was lowered, every surface cell had a 0.15 wall standing proud of its own surface and the river read as floating slabs with a gap underneath. Submerged cells stay full height so a column has no internal seams.
 - **Walkability is sacred**: riverbank heights are capped (≤1 block above water at the edge, ≤2 one step back) so every stretch of river is exitable; the cave approach is a graded ≤1-block staircase; player jump clears 2.2 blocks; a jump-press in water breaches with enough force to climb 2-block banks. These were hand-verified — terrain height changes are treated as forbidden by default. The one deliberate addition is the **log crossing** (`buildLogCrossing`, states.js): three trunks laid at `WATER_LEVEL + 1`, which is exactly the height the near banks are capped to, so both ends are flush — no step, no jump. It is laid outward from the river centre and stops at the first dry column on each side, so it can never leave planks floating over open ground.
@@ -109,9 +111,10 @@ game/src/
 | Look (orbit camera) | mouse drag, or click canvas for pointer lock | drag right side of screen |
 | Interact | **E** or Enter, or **click the prompt pill** | tap the world / tap the prompt pill |
 | Jump | Space | ↥ button |
+| Equip / put away | Q or equipment button | equipment button |
 | Camera distance | scroll wheel | pinch |
 | Rise to the sky act | 🔍− HUD button (when offered) | same |
-| **Act select (dev/testing)** | **Tab** → choose Act 1 / 2 / 3 | — |
+| **Act select (dev/testing)** | **Alt+M** → choose Act 1 / 2 / 3 | — |
 | **World editor (dev)** | **F2** (or `?edit`) | — |
 
 Interaction model: walk near an interactable → a pill with its emoji (🫐 ⛏️ 🎣 …) pops at the top of the screen → press E / tap / click the pill. Minigames and dialogs are DOM overlays; the world pauses interaction but keeps rendering.
@@ -122,7 +125,7 @@ Story text (the `.narrator` box) is **centred on screen**, not docked to the bot
 
 ## 4. The world
 
-One valley, persistent across all three acts, ~128×128 blocks:
+One valley, persistent across all three acts, 160×160 blocks:
 
 - **The river** snakes north–south through the middle (sand banks, reeds, cattails, driftwood, wading NPCs). Water is deep blue-teal with per-vertex shimmer. At **z ≈ 37**, on the walking line from Camp A to the eastern plains, three logs lie across it — the ford the band has always used, and the player's dry way over. It is set dressing that reads as history *and* a mobility fix: before it, reaching the hunting ground meant swimming.
 - **The north cliff** (top of the map) rises in banded rock terraces. Carved into it at (42,14): the **rock shelter** — a real walk-in cave with a graded approach path, dark banded interior rock, stalactite noses at the mouth, drifting dust motes, and the painting wall deep inside where your Act 1 art physically persists.
@@ -201,8 +204,8 @@ As you scrub: the valley rebuilds through 8 era stages (ice camp → hamlet → 
 1. **P1 — The Erosion Window**: a cutaway panel (docked top-right) shows *your* hut underground: your actual pot silhouette, your basket, and (if the burial happened) the elder's grave. Objective: scrub ~5,200 years forward. Layer by layer you watch: the basket **fray and vanish** by ~2,000 years (replaced by a hatched void), the pot **chip but survive**, flesh and cloth fade while **bones, beads and the stone blade persist**, the hut collapse into a mound, soil bury everything. *"Every object from the past is a piece of a jigsaw. Some pieces are gone forever."*
 2. **The Long Bar**: a full-screen log-scale deep-time strip from Earth's formation (4.54 bya) to now — Homo sapiens is a red sliver at 300,000 years, writing at 6,500. Read and continue.
 3. **Free scrub**: all era markers go live; drag from 5400 BCE to near today, watching the whole valley transform.
-4. **P2 — The Trick**: extreme close-up on the BCE/CE boundary. CE counts forward from the conventional year of the birth of Jesus (formerly AD); BCE counts backward (formerly BC). Then a 30-second challenge: *"Find the year ZERO on the dial."* **You can't — it doesn't exist.** TRICK QUESTION card: *"1 BCE steps straight to 1 CE."*
-5. **P3 — The Gap**: first you're made to *count* the Buddha→2024 gap on the dial against a 30-second timer (tedious on purpose; skippable) — then the reward: **add both numbers, subtract 1** — the book's own example, verbatim: 560 + 2024 − 1 = **2,583 years**. Then practice: type the answer for 250 BCE → 2026 CE (2,275); wrong answers are corrected, never punished.
+4. **P2 — BCE/CE:** a user-paced time expedition explains BCE/BC and CE/AD, lets players walk a five-stone bridge across the missing year zero, and uses label-matching and older-object questions with supportive retries.
+5. **P3 — The Gap:** count four jumps from 2 BCE to 3 CE before learning the shortcut. Reveal the Buddha-to-2024 calculation in three parts; retain 560 + 2024 − 1 = **2,583 years**. Practise a short crossing, a same-era gap and the Aśhoka-to-today gap. No countdown; Back and Show me how support review.
 6. **P4 — Steps of Time**: the dial locks to fixed strides with +/− buttons: **decade** (3 clicks), **century** (step back to Aśhoka — the first click crosses the missing zero), **millennium** (5 strides), and finally two *unlabeled* flags: *"Which happened first?"* — *"You did not need the dates. A timeline shows ORDER all by itself."*
 7. **P5 — Faces of the Calendar**: the Gregorian face (12 months, 365 days, leap-year 400 rule: 1800 ✗ 1900 ✗ 2000 ✓) swaps to the **Indian luni-solar face** (every tick gains ☾; the pañchānga predicts eclipses and festival dates). *"Swap the face: the world beneath does not change. Only the counting does."*
 8. **P6 — Arrival**: a long ride to 2026 CE; the camera descends to the grassed mound; a **survey flag** is planted in the turf with a small celebration. Fade out.
@@ -409,13 +412,13 @@ Act 1 doesn't just *tell* you about sources — it manufactures them from your p
 | The elder's burial | flesh/cloth go, bones stay | the quiet dig; inference about belief |
 | Burnt grain, hearth, arrowheads, obsidian | persist | dug up by the archaeologist |
 
-Debug jumps (`?act=2/3`, or the Tab menu) seed stand-in records so every act works standalone.
+Debug jumps (`?act=2/3`, or the Alt+M menu) seed stand-in records so every act works standalone.
 
 ---
 
 ## 9. Debug & testing tools
 
-- **Tab** anywhere → act-select menu (Act 1 / 2 / 3 / stay). Jumps reset progress and use the seeded-records path.
+- **Alt+M** → act-select menu (Act 1 / 2 / 3 / stay). Jumps reset progress and use the seeded-records path.
 - **F2** / `?edit` — the world editor (§7). `window.__editor` is the instance; `G.host` is the adapter.
 - `?act=N` — jump straight to an act (requires no saved progress).
 - `?fast` — 3-second countdown challenges instead of 30.
@@ -452,7 +455,7 @@ fix.
 7. ~~**Birch/snag trunks can read concrete-grey in shade**~~ — **fixed.** Trunk side faces get a warm bias in the mesher. The cause was lighting, not palette: side faces are lit almost entirely by the cool hemisphere and fill lights.
 8. ~~**Act 2's P3 "beat the clock" reward is unconditional**~~ — **honoured rather than reworded.** `countdownChallenge` takes an optional `answer` and renders a numeric box; a correct answer before the clock earns confetti and its own line. The formula is still taught either way, because beating the clock proves you can count, not that you know the shortcut.
 9. ~~**Narrator boxes ignore synthetic/dispatched clicks**~~ — **fixed.** Listeners attach immediately and the 350 ms guard became a timestamp; the old delayed-attach swallowed any click aimed at the box. Kept a div with `role="button"` and `tabIndex=0` rather than a real `<button>`, which would have dragged in a UA style reset for no behavioural gain.
-10. ~~**Tab act-menu wipes the save with only a written warning**~~ — **fixed.** A second confirm, shown only when `Save.hasProgress`, since with nothing to lose the extra tap is noise.
+10. ~~**Alt+M act-menu wipes the save with only a written warning**~~ — **fixed.** A second confirm, shown only when `Save.hasProgress`, since with nothing to lose the extra tap is noise.
 11. ~~**Minor dead code**~~ — **fixed.** `S.act2.deepTime_hint` and `S.act2.todayMarker` removed. The `dispose()` comment audit found the existing comments already accurate (shared module caches, detach only, never `disposeGroup`), so nothing changed there.
 12. ~~**Modern village ambient NPCs vanish at the interviews beat**~~ — **improved, with a known residual.** `retireAmbients()` sends them outward and disposes them once they are out of the camera frustum (or past 26 units), capped at 14 s. In the normal case, where the player is still walking to the village, they are gone within 700 ms and the pop is unobservable. A player who stands in the village and watches them for the full 14 s still sees them go. Fading is not available: character materials are shared module caches, so changing opacity would affect every character. `disposeAmbients()` remains the hard sweep for teardown and resumed sessions.
 
@@ -1570,3 +1573,104 @@ New: `src/world/shade.js`, `src/engine/post.js`, `src/ui/icons.js` (all in
 the service-worker precache, cache bumped to v6). Touched: mesher, blocks,
 renderer, merge, props, npc, player, fx, hud, audio, settings, strings,
 main, act1/2/3, style.css, index.html.
+
+
+## 21. Gameplay, reliability and textbook coverage update
+
+**Updated 18 September 2026, 18:55 IST.** This section supersedes older descriptions of the bare-hand opening, Tab shortcut, 49-item codex and shadow/save behaviour.
+
+### Player-visible changes
+
+- **First task:** the bare-hand picking/spilling sequence is removed. Two instruction cards explain tool use and four concrete steps: borrow a basket, collect 12 berries, deposit them in the food box, return the basket. Both scripted and wild bushes require the basket. Step objectives and a beacon guide the player. Picked food is counted separately from carried food, so an early deposit does not erase progress.
+- **Opening:** one short promise card, one era card and shorter silent holds get the player to the first activity sooner. The game no longer claims to replace every textbook activity.
+- **Act 2 life:** a separate, illustrative settlement changes across ten timeline phases, adding homes, fields, paths, market stalls, travellers, carts, boats and orchards. People and river traffic move while time is stationary. This is explicitly an imagined valley, not a claim that every global event took place at this archaeological site. It does not alter frozen walkable terrain heights.
+- **Act 2 teaching:** predict which materials survive before the erosion reveal; put changes in order; practise key concepts at the end. Event captions appear higher, above teaching panels, and remain for eight seconds. The dial recentres on resize and supports arrow keys. Scripted changes to the displayed year now update the world even when marker popups are suppressed.
+- **Shadows and movement:** the rich-mode light matrix and depth map update together on every rendered frame, with the light-space origin snapped to shadow texels. The player's contact shadow follows the ground below their feet independently of body step smoothing, including inside the cave. The render limiter no longer double-counts leftover time, so game speed is consistent across display refresh rates.
+- **Evidence work:** four claims require relevant source selections as well as a verdict. Players assess settlement, exchange, repeated accounts with a common origin, and uncertain beliefs. The board supports a genuine “cannot tell” conclusion. Closing it or the lab leaves unfinished work resumable rather than treating it as complete.
+- **Review:** all 51 tracked concepts now have persistent codex entries and a practice route, including Acts 2 and 3. Teacher totals distinguish concepts encountered, questions attempted and successful retrieval.
+- **Textbook notebook:** available in Settings and the Site Report. Includes the seven-date ordering exercise, eight numeric date questions, source-map examples, glossary/calendar details, and eight open investigation prompts. Typed project notes persist and appear in the downloadable journal. The book's gender-role caution is explicitly taught and checked in Act 3. Both millennium plurals are taught in Act 2. See `game/COVERAGE.md` for a page-by-page audit against the supplied book.
+- **Field journal:** download a self-contained printable HTML document containing the player's original art, discovered sources, conclusions and selected evidence, revision entries and project notes.
+- **Accessibility and controls:** native Tab navigation is preserved; act selection moves to Alt+M and Settings. Modal focus/input ownership prevents movement and key leakage during dialogs. Settings add larger reading text, gentle camera, slower look controls, timing assistance, and a choice of manual or automatic narrated-text advancement. Specialist controls retain touch targets and show the selected role on narrow screens.
+
+### Saves and classroom data
+
+Full snapshots are written to localStorage and IndexedDB. Storage quota failures no longer strip original painting or pot-mark data. Boot chooses the newer valid snapshot; reset writes a new empty snapshot so old asynchronous data cannot revive progress. A failure of both stores shows an export instruction. Settings can export/import the current story with format/image validation.
+
+Gathering, wild berry depletion, hunt kills/meat collection, fishing catches, shell collection, dig layers, lantern reveals, interviews, claim evidence, lab samples and notebook tasks retain progress. Unfinished minigames can still restart; this is not a promise that every animation resumes at its exact frame. The objective is saved for a return reminder. Autosave also runs periodically and on page hide.
+
+Classroom labels keep Unicode, while random IDs separate storage slots. Slot lookup and result export also read IndexedDB. Active foreground simulation time replaces the wall-clock gap between the first and last checkpoint. CSV export escapes formula-like student labels.
+
+### Implementation and validation
+
+New runtime modules: `storage.js`, `acts/gathering.js`, `sky/livingValley.js`, `ui/activity.js`, `ui/journal.js`, `ui/chapterNotebook.js`. Service-worker cache is v7 and includes every new module. Shared activity scopes own focus, input restoration and disposable timers in the updated dialogs/minigames.
+
+`node game/tools/check.mjs` runs content lint, manifest synchronisation, service-worker coverage, control-character checks and the gameplay regression suite. Regressions cover 30/60/90/120/144 Hz simulation timing, codex completeness, all textbook numeric answers, reversible valley phases, the missing year zero, storage quota fallback, reset ordering, slot isolation and invalid import rejection. `game/tools/browser-tests.html` exercises real IndexedDB, nested dialog input/focus, dial resize/keyboard/world synchronisation, all evidence verdicts, journal generation, active-time results, CSV escaping and notebook answers/notes. The browser harness uses a separate test slot and restores the previous slot.
+
+The textbook is reference input under `fees1dd/` and is ignored by Git. No textbook page images are bundled into the game. The audit concerns Chapter 4; the remaining textbook chapters are separate expansion work.
+
+Verification in this pass: all five machine checks passed and all 53 source modules passed syntax checking. Browser integration checks passed, and manual spot checks covered the four-step tutorial, taking a basket, retaining it after reload, collecting berries, Act 2 settlement progression and raised captions, the chapter notebook at desktop width, and opening/closing the editor via backtick. Shadow regressions check ground anchoring beneath a cave roof and during body smoothing, plus synchronized light/depth-map updates. This was targeted verification, not a complete three-act replay or a physical low-end-phone performance test. New teaching text uses the normal text fallback when no matching narration recording exists.
+
+## 22. Act 2 notebook and timeline controls
+
+Updated 18 September 2026, 22:41 IST (Asia/Kolkata).
+
+The existing aerial world, erosion sequence and descent into Act 3 remain. Act 2 uses a compact, non-scrolling dark notebook on the left for the current task and historical reference. Continue narration and timed challenges appear at the centre of the screen. The soil cutaway stays visible in a separate panel at the top right throughout Act 2. The redundant river-travel caption has been removed. World captions have a warm translucent background, stronger contrast and a gold edge, above the timeline.
+
+The bottom ruler retains its transparent fade. Its landmark buttons jump directly to their labelled dates, even when automatic historical notifications are suppressed. Nearby symbols occupy separate rows to remain clickable. Dragging, wheel scrolling, arrows and landmark selection lift, enlarge and illuminate the ruler; release settles onto a whole year with a brief date/cursor response. Reduced-motion preferences retain the highlight without the lift. Year crossings produce quiet synthesized ticks, respecting the sound preference; dense fast scrubs blend into a ratchet without queuing hundreds of audio nodes.
+
+Arrows flank the year and step one year at a time, adopting the decade, century or millennium size during the corresponding lesson. Clicking the year opens exact BCE/CE entry with validation and no year zero. While entering a date, the form occupies the ruler area so it does not cover the notebook or world caption. Scripted movement and teaching locks prevent conflicting manual input.
+
+Watch time pass has a persistent compact slider with 1x, 10x, 100x, 250x and 500x stops and clickable speed labels. One times speed means one year per second; the default is 100x. Backward and forward buttons flank play/pause. They select the direction while paused and reverse it immediately while playing. Playback is available during preservation and free exploration. It stops at either endpoint and pauses for manual input, teaching overlays, hidden tabs and phase changes. On narrow phones, transport sits beneath the soil panel to leave room for the date and ruler. Act 2 panels are removed before Act 3.
+
+River travel starts at the imagined valley's later trade phase, using the Indus-Sarasvati timeline anchor. This is local narrative timing, not an assertion about the invention of boats. Walkers and carts require dry ground; boat hulls require water. Orchard crowns remain spaced and staggered. Terrain heights are unchanged.
+
+`sky/interface.js` owns the reference panels and playback; `sky/dial.js` owns timeline interaction, lesson steps and settling. Cache v9 includes the runtime module. Browser regressions cover landmark jumps, wheel ticks, teaching locks, all five playback rates, reversal, BCE/CE crossings, exact dates, modal interruption, centred teaching ownership, soil placement and disposal. Simulation/content/audio-manifest checks pass. Targeted visual checks cover live landmark selection, centred preservation narration, the editor shortcut, and reference/control layouts at six widths from 320 to 1280 pixels with normal and larger text. This is targeted verification, not a complete three-act replay or a physical-device performance test.
+
+## 23. Illustrated discoveries and time expeditions
+
+Updated 18 September 2026, 23:10 IST (Asia/Kolkata). This supersedes historical descriptions of the timed year-zero trick and the timed gap challenge.
+
+All twelve Act 2 landmarks now have original, locally bundled SVG illustrations. Clicking an illustrated landmark still sets its exact year and additionally opens a centred discovery card: a brief story, an observation question, an explanatory clue and an optional discovery stamp. Players may reveal a clue or leave at any time. Passing a landmark during playback updates the compact notebook without opening a modal. The notebook's discovery counter can take the player to the nearest uncollected landmark during free exploration. Completed clues persist in the save's activities map and receive a checkmark on their marker; revisiting never duplicates progress. These stamps are separate from syllabus mastery.
+
+Artwork is explicitly labelled as illustrative. Symbolic images for religious/calendar landmarks are not presented as eyewitness scenes or accurate portraits. Canonical chapter dates, approximate-date qualifications, the imagined local valley and the missing year zero are preserved. The files total only tens of kilobytes and require no external image requests.
+
+Timeline markers now keep stable DOM nodes through year updates so hover, focus and pointer targets survive rendering. Circular image markers have hover/focus emphasis and discovered states. A subtle moving line indicates forward or backward playback. Very short phone screens use a closer ruler scale instead of stacking the overview over the controls; the full date range remains reachable through playback, exact entry and discovery navigation. Existing lift, tick sounds, exact-date controls and whole-year settling remain; reduced-motion and muted settings are respected.
+
+The BCE/CE lesson now has four manually advanced stops: names and aliases, a playable year bridge, matching BC to BCE, and deciding which BCE object is older. The gap lesson has six: counting jumps, the shortcut, a three-part historical calculation, a small crossing, a same-era subtraction and a final typed historical gap. Explanations wait for the student. Back revisits completed stops, incorrect answers explain the reasoning and permit retry, and Show me how provides supported progress. No timer, impossible task, or speed-based reward remains in these lessons. The century explanation is split into CE and BCE, followed by a museum-drawer application question. Recall prompts use time-machine and museum contexts.
+
+The benchmark was the combination of curiosity-driven historical exploration in Ubisoft's Discovery Tour and clear, adjustable feedback described in the official Horizon Forbidden West accessibility notes. These informed interaction priorities, not an assertion of AAA production quality or measured learning outcomes. Sources: https://www.ubisoft.com/en-ca/game/assassins-creed/discovery-tour and https://blog.playstation.com/2022/02/10/accessibility-features-in-horizon-forbidden-west/ .
+
+New runtime modules: `sky/discoveries.js`, `sky/timeLessons.js`; original images: `assets/history/*.svg`. Service-worker cache v10 precaches both modules and all twelve images. Browser regressions check stable marker nodes, image decoding, discovery rewards/revisits, input ownership, bridge progression, explanations/retries, all worked steps and supported numeric progress. Existing playback, storage, textbook, journal and evidence-board regressions remain. Targeted appearance checks cover desktop, tablet and phone widths, exact-date controls and centred modals; the world editor opens via backtick. Child playtesting and low-end-device performance measurements remain separate validation work.
+
+## 24. Teaching animations
+
+Updated 19 September 2026, 00:15 IST (Asia/Kolkata).
+
+The time expeditions now animate the learning actions. A small illustrated traveller hops between the year stones with a landing highlight; the crossing from 1 BCE to 1 CE receives a persistent explanatory caption and a brief reveal. The jump count responds to each click. BC/BCE and AD/CE cards arrive as matching pairs. The short gap formula builds in readable pieces. Revealing each part of the historical calculation adds only the new explanation and its numeric term; after the third part, the total settles at 2,583. Correct-answer feedback and the newly available Continue control receive a brief response.
+
+The effects do not delay answers or auto-advance pages. Rapid clicks retarget the current hop, Back retains learning progress, and leaving a page cancels its animations, resize observer and pending focus callback. Reduced-motion preferences remove the animated travel while preserving destination states, explanations and the exact total; changing that preference during a lesson also cancels active effects. Decorative figures are hidden from assistive technology, the formula has an accessible mathematical label, and the running total is announced politely. Horizontal overflow was checked and removed. Service-worker cache is v11.
+
+Browser integration verifies the traveller, the exact total, rapid bridge clicks, reduced-motion behavior and page-animation cleanup alongside the existing lesson progression and retry checks. Manual checks cover the animated bridge in the actual aerial world and the world-editor shortcut; responsive fixtures cover centred lesson boundaries.
+
+
+## 25. Cave onboarding and expanded exploration
+
+Updated 19 September 2026, 14:49 IST (Asia/Kolkata).
+
+New players wake in a separate northwest cave, with a broad practice chamber, a two-block jump sill, a basket alcove and a bent, graded exit into the original valley. The painted rock shelter and all original history/evidence sites remain where they were. The map footprint is now 160 by 160 blocks, 56.25% larger than 128 by 128, with an eastern grove and a southern forageable meadow. The river formula and original base height function retain the old 128-block reference, and vegetation in the old valley keeps its sampling scale. Expansion continues beyond the old boundary ridges. The training cave is the deliberate local terrain exception. The camera and collision rig are retained; the player is constrained inside the enlarged world boundary.
+
+The opening has twelve action-driven stages: look towards a floor marker, walk to it, walk backwards, strafe left, strafe right, jump over a real obstacle, pick up the group's basket, equip it, put it away, equip it again, exit the cave and reach camp. Real travel and camera direction determine progress. Holding a movement key against a wall does not count. Each stage checkpoints independently; reloading places the player at a safe location for that stage, including before the jump sill. Existing saves with opening/gathering progress skip the onboarding. Skip practice equips one borrowed basket and takes the player safely outside. The reveal briefly hides instructional and equipment overlays without taking the camera away.
+
+A centred, compact teaching card shows only the current action, progress and responsive keycaps. Show me opens a paused, keyboard-owned help panel with animated control symbols and an explicit return-to-step action. Touch text uses the stick, drag and tap controls. Short screens omit duplicate decorative keycaps to keep the world visible. Reduced motion disables decorative travel/pulsing; old NPC speech bubbles and unrelated HUD buttons stay hidden during practice. Cave fill lights and the sleeping mat exist before the wake sequence and remain for the rest of Scene A. Settings includes a Controls refresher.
+
+Q or the visible equipment button equips/puts away the selected carried tool. A selector appears when carrying multiple tools, and the carry panel also permits selection. Equipment state is saved separately from inventory ownership. Borrowing later tools retains the existing automatic selection, while the opening explicitly teaches manual equip/put-away. The control yields to modals, other acts and bow aiming. Both scripted and wild berry gathering require an equipped basket and give a contextual hint if it is put away. Gathering recognises the cave's basket, skips duplicate borrowing and still requires depositing food for everyone and returning the shared tool.
+
+Runtime additions: acts/onboarding.js and ui/equipment.js. Service-worker cache v12 includes both. Node regressions cover original terrain/river stability, cave headroom and actual jump physics. Browser integration covers save migration, movement intent, Q edge consumption, modal ownership, equipment toggling and item return, alongside the existing timeline/teaching/storage suite. An isolated real-game playthrough completed all twelve tutorial stages through the actual input/physics loop and reached the gathering introduction. Appearance checks cover desktop and 390/320-pixel phone widths; the world editor still opens with backtick. Timing with children and performance on physical low-end phones still need classroom/device playtesting.
+
+## 26. Consistent berry plants and aligned guidance
+
+Updated 19 September 2026, 15:20 IST (Asia/Kolkata).
+
+Gathering beacons, interaction targets and picking effects now use the actual berry prop's world position and ground height. This removes the half-cell offset between the light and the model. All harvestable wild berry plants use the same leafy, red-berry model as the task bushes. Wild plants share instanced foliage and fruit geometry in two draw calls; the shared lighting shader applies each instance's world transform for mist and cloud shading.
+
+Picking removes fruit while leaving the trunk and leaves. Existing wild-berry save keys still suppress harvested fruit after loading. The food-depletion scene also empties wild plants and removes their interaction targets. Service-worker cache is v13. Regression checks compare model geometry and colours, verify fruit-only removal/restoration and saved picked state, and check that beacons follow the true prop centre and height.

@@ -26,7 +26,7 @@
 import { S } from './strings.js';
 import { Save } from './save.js';
 import { SFX } from './audio.js';
-import { codexEntry, codexText, master } from './codex.js';
+import { codexEntry, codexText, codexList, master } from './codex.js';
 
 // Missed questions, waiting for a later slot. Deliberately module state and
 // deliberately NOT persisted: a re-ask is a within-session affordance, and
@@ -98,5 +98,20 @@ export async function flushRecall(G) {
   while (retryQueue.length) {
     const spec = retryQueue.shift();
     await ask(G, spec, true);
+  }
+}
+
+// Notebook practice hides the notebook before asking, so the answer is no
+// longer on screen. Missed entries remain available in future sessions.
+export async function practiceRecall(G, ids = null, count = 4) {
+  const met = codexList().filter(e => e.taught && (!ids || ids.includes(e.id)));
+  const pending = met.filter(e => !e.mastered);
+  const entries = (pending.length ? pending : met).slice(0, count);
+  for (const entry of entries) {
+    const authored = S.recall.q[entry.id] ?? S.reviewQuestions[entry.id];
+    const others = codexList().filter(e => e.id !== entry.id && e.text?.term !== entry.text?.term);
+    const alternatives = others.sort(() => Math.random() - 0.5).slice(0,2).map(e => e.text.term);
+    const spec = authored ?? { question:S.revision.practicePrompt(entry.text.tells), options:[entry.text.term, ...alternatives], answer:0 };
+    await ask(G, {id:entry.id, ...spec}, false);
   }
 }

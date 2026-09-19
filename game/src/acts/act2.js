@@ -10,11 +10,16 @@ import { buildStage, applyBandDrift, SITES } from '../world/states.js';
 import { Dial, yearToT } from '../sky/dial.js';
 import { ErosionPanel } from '../sky/erosion.js';
 import { tween } from '../sky/interstitial.js';
-import { countdownChallenge, numberPrompt } from '../ui/minigames.js';
 import { runBeats } from './beats.js';
 import { wait } from '../ui/hud.js';
 import * as P from '../world/props.js';
 import { FX } from '../fx/fx.js';
+import { LivingValley } from '../sky/livingValley.js';
+import { SkyInterface } from '../sky/interface.js';
+import { historyMarkers } from '../sky/discoveries.js';
+import { runTimeLesson } from '../sky/timeLessons.js';
+import { teachItems } from '../codex.js';
+import { practiceRecall } from '../recall.js';
 
 function stageFor(year) {
   if (year < YEARS.ICE_AGE_END_BCE) return 0;
@@ -33,6 +38,7 @@ export async function runAct2(G) {
   FX.clear(); // hard cut from act 1 — no lingering ground fx under the sky camera
 
   G.mode = 'sky';
+  document.body.classList.add('act-sky');
   // the whole act is an overhead diorama: the act 1 body would otherwise stand
   // in shot for all of it, on terrain every era swap rebuilds beneath it
   G.player.setModelHidden(true);
@@ -40,7 +46,7 @@ export async function runAct2(G) {
   G.hud.setObjective(null);
   G.hud.fadeIn(600); // act 1 ends faded out — the sky must be visible
 
-  await G.hud.card([S.act2.title, S.act2.card]);
+
 
   // overhead camera above the village site
   const cam = G.renderer.camera;
@@ -55,20 +61,8 @@ export async function runAct2(G) {
   };
 
   // markers (verified Fig 4.3 pairings — spec addendum §2)
-  const markers = [
-    { year: YEARS.ROCK_ART_BCE, icon: '🖐️', label: S.act2.eras.rockArt },
-    { year: YEARS.ICE_AGE_END_BCE, icon: '🧊', label: S.act2.eras.iceAgeEnd, note: S.act2.eraNote_iceAge },
-    { year: YEARS.SETTLEMENTS_BCE, icon: '🌾', label: S.act2.eras.settlements, note: yearsAgo(YEARS.SETTLEMENTS_BCE) },
-    { year: YEARS.POTTERY_BCE, icon: '🏺', label: S.act2.eras.pottery },
-    { year: YEARS.MESOPOTAMIA_BCE, icon: '🏙️', label: S.act2.eras.mesopotamia },
-    { year: YEARS.COPPER_BCE, icon: '🔶', label: S.act2.eras.copper },
-    { year: YEARS.INDUS_SARASVATI_BCE, icon: '🐂', label: S.act2.eras.indus },
-    { year: YEARS.SCENE_D_YEAR, icon: '👣', label: S.act2.youMarker },
-    { year: YEARS.BUDDHA_BCE, icon: '☸️', label: S.act2.eras.buddha, note: S.act2.eraNote_era },
-    { year: YEARS.ASHOKA_BCE, icon: '🦁', label: S.act2.eras.ashoka },
-    { year: YEARS.JESUS_CE, icon: '✶', label: S.act2.eras.jesus },
-    { year: YEARS.TODAY_CE, icon: '📍', label: S.act2.eras.today },
-  ];
+  const markers = historyMarkers();
+  markers.find(m=>m.id==='settlements').note=yearsAgo(YEARS.SETTLEMENTS_BCE);
 
   const dial = new Dial(G.hud.root, {
     minYear: YEARS.ROCK_ART_BCE - 4000,
@@ -77,9 +71,14 @@ export async function runAct2(G) {
     yearsPerPx: 4,
     markers,
     onYear: (y) => onYear(ctx, y),
-    onMarker: (m) => showEraCard(ctx, m),
+    onMarker: (m, selected) => showEraCard(ctx, m, selected),
   });
   ctx.dial = dial;
+  ctx.notebook = new SkyInterface(G, dial);
+  ctx.erosion = new ErosionPanel(ctx.notebook.evidence, {
+    potRecord: Save.getRecord('pot'), burialRecord: Save.getRecord('burial'),
+  });
+  ctx.erosion.setCaption(S.skyUI.soilCaption);
   ctx.year = dial.year;
   ctx.band = bandFor(dial.year);
   for (const m of dial.markers) m.suppressed = true;
@@ -106,7 +105,10 @@ export async function runAct2(G) {
   let lastBandSwap = 0;
   let askedStage = null, askedAt = 0;
 
-  G.tick = () => {
+  const life = new LivingValley(G);
+  G.tick = (dt) => {
+    ctx.notebook.tick(dt);
+    life.update(dt);
     const now = performance.now();
 
     // finish the rebuild in flight before considering another
@@ -114,10 +116,12 @@ export async function runAct2(G) {
       if (G.mesher.flush(DRAIN) === 0) {
         ctx.rebuilding = false;
         refreshSkirt(ctx);
+        life.setYear(ctx.year, ctx.stage);
       }
       return;
     }
 
+    if (ctx.stage >= 0) life.setYear(ctx.year, ctx.stage);
     if (ctx.pendingStage !== null) {
       const s = ctx.pendingStage;
       if (s !== askedStage) { askedStage = s; askedAt = now; }
@@ -161,6 +165,8 @@ export async function runAct2(G) {
         // the initial build so the intro card isn't upstaged)
         if (now - lastEraWave > 600) { lastEraWave = now; eraSweep(G, 30); }
       }
+      life.worldStage = -1;
+      life.setYear(ctx.year, ctx.stage);
       firstBuild = false;
     } else if (ctx.pendingBand !== null && ctx.pendingBand !== ctx.band &&
                now - lastBandSwap > 250) {
@@ -170,6 +176,7 @@ export async function runAct2(G) {
       ctx.band = ctx.pendingBand;
       ctx.pendingBand = null;
       applyBandDrift(G.world, ctx.band, ctx.stage, moundAge(ctx));
+      life.clearFootprints();
       if (!firstBuild && now - lastEraWave > 600) {
         lastEraWave = now;
         eraSweep(G, 20);
@@ -177,6 +184,7 @@ export async function runAct2(G) {
     }
   };
   onYear(ctx, dial.year); // initial world
+  await G.hud.card([S.act2.title]);
 
   const phases = [
     { id: 'a2.p1', run: () => p1_erosion(ctx) },
@@ -194,8 +202,24 @@ export async function runAct2(G) {
   if (resume && !preScrub.includes(resume)) {
     for (const m of dial.markers) m.suppressed = false;
   }
+  const coverage = {
+    'a2.p1': ['4.26'], 'a2.deeptime': ['4.31'], 'a2.scrub': ['4.8','4.40'],
+    'a2.p2': ['4.11','4.12','4.13'], 'a2.p3': ['4.14','4.15'],
+    'a2.p4': ['4.16','4.17','4.18','4.19','4.20','4.21'], 'a2.p5': ['4.9','4.10','4.22','4.23'],
+  };
+  for (const phase of phases) {
+    const original = phase.run;
+    phase.run = async () => { ctx.notebook.setPhase(phase.id); await original(); ctx.notebook.pause(true); teachItems(G, coverage[phase.id] ?? []); };
+  }
+  if (resume) for (const phase of phases.slice(0, phases.findIndex(p => p.id === resume))) teachItems(G, coverage[phase.id] ?? []);
   await runBeats(2, phases, resume);
 
+  life.dispose();
+  ctx.erosion.dispose();
+  ctx.notebook.dispose();
+  ctx.eraCard?.remove();
+  clearTimeout(ctx.eraTimer);
+  document.body.classList.remove('act-sky');
   dial.dispose();
   disposeSkirt(ctx);
   G.tick = null;
@@ -329,8 +353,9 @@ function yearsAgo(bceYear) {
 
 function onYear(ctx, year) {
   ctx.year = year;
+  ctx.notebook?.updateYear(year);
   const s = stageFor(year);
-  if (s !== ctx.stage) ctx.pendingStage = s;
+  ctx.pendingStage = s === ctx.stage ? null : s;
   ctx.pendingBand = bandFor(year);
   if (ctx.erosion) {
     const elapsed = Math.max(0, yearSpan(YEARS.SCENE_D_YEAR, year));
@@ -344,42 +369,30 @@ function yearSpan(a, b) {
   return b - a;
 }
 
-function showEraCard(ctx, m) {
-  ctx.eraCard?.remove();
-  const el = document.createElement('div');
-  el.className = 'era-card';
-  el.innerHTML = `<div class="era-date">${fmtYear(m.year)}</div><div class="era-label"></div>${m.note ? '<div class="era-note" style="font-size:12.5px;color:var(--ink-dim);margin-top:6px"></div>' : ''}`;
-  el.querySelector('.era-label').textContent = m.label;
-  if (m.note) el.querySelector('.era-note').textContent = m.note;
-  ctx.G.hud.root.appendChild(el);
-  ctx.eraCard = el;
-  clearTimeout(ctx.eraTimer);
-  ctx.eraTimer = setTimeout(() => { el.remove(); if (ctx.eraCard === el) ctx.eraCard = null; }, 3400);
+function showEraCard(ctx, m, selected = false) {
+  ctx.notebook?.showEra(m, selected);
 }
 
 // ---------- P1 — the erosion window ----------
 async function p1_erosion(ctx) {
   const { G, dial } = ctx;
-  await G.hud.card([S.act2.p1_card]);
+  const prediction = await G.hud.choice(S.revision.prediction, S.revision.predictionChoices);
+  Save.setChoice('preservationPrediction', prediction);
   beatRing(G);
   dial.setZoom(3);
   dial.setYear(YEARS.SCENE_D_YEAR, false);
-  ctx.erosion = new ErosionPanel(G.hud.root, {
-    potRecord: Save.getRecord('pot'),
-    burialRecord: Save.getRecord('burial'),
-  });
-  ctx.erosion.setCaption(S.act2.p1_intro);
-  G.hud.hint(S.act2.dialHint, 5000);
+  ctx.erosion.setCaption(S.skyUI.soilCaption);
+  G.hud.setObjective(S.act2.dialHint);
 
   // wait until scrubbed ~5,500 years forward (basket long gone)
-  await waitFor(() => yearSpan(YEARS.SCENE_D_YEAR, dial.year) > 5200);
+  await waitFor(() => yearSpan(YEARS.SCENE_D_YEAR, dial.year) > 5200 && !G.hud.root.dataset.modal);
   // the basket crumbles to dust — muted matte puff, kept serious (no sparkle)
   FX.puff(villageTop(G, 1), { color: 0xcfc4a8, count: 14, size: 0.9, life: 1.3, alpha: 0.35 });
   await G.hud.narrator(S.act2.p1_basketGone);
   if (Save.getRecord('burial')) await G.hud.narrator(S.act2.p1_grave);
+  await G.hud.narrator(S.revision.predictionReveal);
   await G.hud.narrator(S.act2.p1_note); // 4.26 — flagship line
-  ctx.erosion.dispose();
-  ctx.erosion = null;
+  G.hud.setObjective(null);
 }
 
 // ---------- deep-time prologue (Fig 4.1) ----------
@@ -397,7 +410,7 @@ function showDeepTimeStrip(G) {
       <canvas width="900" height="240"></canvas>
       <div style="font-family:var(--font);font-size:14.5px;max-width:640px;text-align:center;line-height:1.55"></div>
       <button class="btn primary">${S.ui.continue}</button>`;
-    el.querySelector('div').textContent = S.act2.deepTime_note;
+    el.querySelector('div').textContent = S.act2.deepTime_note + ' ' + S.textbook.deepStages;
     G.hud.root.appendChild(el);
     drawDeepTime(el.querySelector('canvas'));
     el.querySelector('button').addEventListener('click', () => { el.remove(); resolve(); });
@@ -411,22 +424,16 @@ function drawDeepTime(cv) {
   c.fillRect(0, 0, W, H);
   // log scale: 4.54 bya … now. x = position of log10(years ago)
   const L = (ya) => {
-    const lo = Math.log10(1000), hi = Math.log10(4.54e9);
+    const lo = Math.log10(1000), hi = Math.log10(YEARS.EARTH_BYA * 1e9);
     return W - 40 - ((Math.log10(Math.max(1000, ya)) - lo) / (hi - lo)) * (W - 80);
   };
   const events = [
-    [4.54e9, 'Earth', '#4d7dd8'],
-    [2.33e9, 'Atmospheric oxygen', '#4da8d8'],
-    [1.5e9, 'First cells · bacteria', '#4dd8c4'],
-    [7e8, 'Sponges · corals', '#66d88a'],
-    [5e8, 'Fish · vertebrates', '#8ad866'],
-    [3e8, 'Insects · amphibians', '#b8d84d'],
-    [2e8, 'Reptiles · dinosaurs', '#d8c44d'],
-    [1e8, 'Birds · mammals · flowers', '#d8964d'],
-    [YEARS.PRIMATES_YA, 'Primates', '#d8724d'],
-    [YEARS.FIRE_YA, 'Fire', '#e0533a'],
-    [YEARS.HOMO_SAPIENS_YA, 'HOMO SAPIENS', '#ff4d2e'],
-    [YEARS.WRITING_YA, 'Writing', '#ffd28a'],
+    [YEARS.EARTH_BYA * 1e9, S.textbook.deepLabels[0], '#4d7dd8'],
+    [YEARS.OXYGEN_BYA * 1e9, S.textbook.deepLabels[1], '#4da8d8'],
+    [YEARS.PRIMATES_YA, S.textbook.deepLabels[2], '#d8724d'],
+    [YEARS.FIRE_YA, S.textbook.deepLabels[3], '#e0533a'],
+    [YEARS.HOMO_SAPIENS_YA, S.textbook.deepLabels[4], '#ff4d2e'],
+    [YEARS.WRITING_YA, S.textbook.deepLabels[5], '#ffd28a'],
   ];
   // bar
   const barY = H / 2;
@@ -464,85 +471,45 @@ async function freeScrub(ctx) {
   dial.setYear(YEARS.SCENE_D_YEAR, false);
   beatRing(G); // new objective: scrub to today
   G.hud.setObjective(S.act2.dialHint);
-  await waitFor(() => dial.year >= YEARS.TODAY_CE - 200);
+  await waitFor(() => dial.year >= YEARS.TODAY_CE - 200 && !G.hud.root.dataset.modal);
   G.hud.setObjective(null);
 }
 
 // ---------- P2 — CE/BCE and the missing zero ----------
 async function p2_zero(ctx) {
   const { G, dial } = ctx;
-  await G.hud.card([S.act2.p2_card]);
   beatRing(G);
-  await dial.animateTo(-30, 900);
-  dial.setZoom(0.45);
-  await G.hud.narrator(S.act2.p2_ce);
-  await G.hud.narrator(S.act2.p2_bce);
-  const res = await countdownChallenge(G.hud.root, { text: S.act2.p2_challenge, seconds: 30 });
-  void res;
-  const { SFX } = await import('../audio.js');
-  SFX.trick();
-  // the missing-year-zero reveal — one bright flash + golden ring, no confetti
-  FX.flash(villageTop(G, 3), { color: 0xfff0c8, size: 3, life: 0.22 });
-  FX.ring(villageTop(G), { color: 0xffe9a8, radius: 5, life: 0.9 });
-  await G.hud.card([{ text: S.act2.p2_trick, big: true }]);
-  await G.hud.narrator(S.act2.p2_trickNote);
+  dial.setZoom(.45);
+  await runTimeLesson(G,dial,'labels');
+  teachItems(G, ['4.11', '4.12', '4.13']);
 }
 
-// ---------- P3 — the gap formula, earned ----------
+// Small visible journeys come before the long historical calculation.
 async function p3_gap(ctx) {
   const { G, dial } = ctx;
-  await G.hud.card([S.act2.p3_card]);
   beatRing(G);
-  dial.setZoom(6);
-  await dial.animateTo(YEARS.BUDDHA_BCE, 900);
-  // "Make it, and the reward is yours" used to be a bluff: there was no way to
-  // answer and the formula came out regardless. There is a box now, so the
-  // promise is real.
-  const res = await countdownChallenge(G.hud.root, {
-    text: S.act2.p3_challenge(fmtYear(YEARS.BUDDHA_BCE), fmtYear(YEARS.BOOK_EXAMPLE_CE)),
-    seconds: 30,
-    giveUpLabel: S.ui.skip,
-    answer: gapYears(YEARS.BUDDHA_BCE, YEARS.BOOK_EXAMPLE_CE),
-    answerLabel: S.act2.p3_answerLabel,
-  });
-  if (res.won) {
-    FX.confetti(villageTop(G, 6), { count: 30, size: 0.5, life: 1.5, speed: 3 });
-    await G.hud.narrator(S.act2.p3_beat);
-  } else {
-    await G.hud.narrator(S.act2.p3_slow);
-  }
-  // taught either way: beating the clock proves you can count, not that you
-  // know the shortcut, and 4.15 is the point of the whole phase
-  await G.hud.card([S.act2.p3_formula, S.act2.p3_bookExample]); // verbatim 4.15
-  // instantly-rewarding practice reps
-  const pairs = [
-    [YEARS.ASHOKA_BCE, YEARS.TODAY_CE],
-    [YEARS.SETTLEMENTS_BCE, YEARS.TODAY_CE],
-  ];
-  for (let i = 0; i < pairs.length; i++) {
-    const [a, b] = pairs[i];
-    const expect = gapYears(a, b);
-    const got = await numberPrompt(G.hud.root, { title: S.act2.p3_practice(fmtYear(a), fmtYear(b)) });
-    if (got === expect) {
-      // earned it — celebratory sprinkle over the village (sized for the sky cam)
-      FX.confetti(villageTop(G, 6), { count: 24, size: 0.5, life: 1.4, speed: 3 });
-      await G.hud.narrator(S.act2.p3_correct);
-      break;
-    }
-    await G.hud.narrator(S.act2.p3_wrong(fmtNum(expect)));
-  }
+  await runTimeLesson(G,dial,'gaps');
+  teachItems(G, ['4.14', '4.15']);
 }
 
 // ---------- P4 — step locks ----------
 async function p4_steps(ctx) {
   const { G, dial } = ctx;
+  const remaining = [0, 1, 2];
+  while (remaining.length) {
+    const options = [...remaining].reverse();
+    const answer = await G.hud.choice(S.revision.orderQuestion, options.map(i => S.revision.orderOptions[i]));
+    const right = options[answer] === remaining[0];
+    Save.recordRecall('4.21', right);
+    if (right) remaining.shift(); else await G.hud.narrator(S.revision.orderWrong);
+  }
   await G.hud.card([S.act2.p4_card]);
   beatRing(G);
   dial.setZoom(1.2);
   await dial.animateTo(YEARS.JESUS_CE, 800);
 
   // decade
-  dial.lock(UNITS.DECADE, { label: 'DECADE' });
+  dial.lock(UNITS.DECADE, { label: S.skyUI.decade });
   await G.hud.narrator(S.act2.p4_decade);
   await waitFor(() => dial.stepCount >= 3);
 
@@ -550,18 +517,24 @@ async function p4_steps(ctx) {
   await G.hud.card([{ text: '🏏' }, S.act2.p4_century_cricket]);
   dial.setZoom(3.2);
   dial.setYear(YEARS.JESUS_CE, false);
-  dial.lock(UNITS.CENTURY, { label: 'CENTURY' });
+  dial.lock(UNITS.CENTURY, { label: S.skyUI.century });
   G.hud.setObjective(S.act2.p4_centuryTask);
   await waitFor(() => dial.year <= YEARS.ASHOKA_BCE);
   G.hud.setObjective(null);
   beatRing(G, { color: 0xffd28a, radius: 4 }); // century objective done — golden
   await G.hud.narrator(S.act2.p4_centuryNote);
+  await G.hud.narrator(S.act2.p4_centuryBCE);
+  const centuryPick=await G.hud.choice(S.act2.p4_centuryQuestion,S.act2.p4_centuryOptions);
+  Save.recordRecall('4.18',centuryPick===0);
+  await G.hud.narrator(S.act2.p4_centuryFeedback);
 
   // millennium
   dial.setZoom(12);
-  dial.lock(UNITS.MILLENNIUM, { label: 'MILLENNIUM' });
+  dial.lock(UNITS.MILLENNIUM, { label: S.skyUI.millennium });
   await waitFor(() => dial.stepCount >= 5);
   await G.hud.narrator(S.act2.p4_millennium);
+  await G.hud.narrator(S.textbook.millennia);
+  teachItems(G, ['4.20']);
   dial.lock(null);
 
   // order without dates: two unlabeled flags
@@ -593,6 +566,7 @@ async function p5_faces(ctx) {
   // warm sweep as the calendar face changes — same world, another way to count
   eraSweep(G, 22, 0xffd28a);
   await G.hud.narrator(S.act2.p5_indian); // 4.22, 4.23 pañchānga, sun & moon
+  await G.hud.narrator(S.textbook.calendarDetail);
   await G.hud.narrator(S.act2.p5_worldSame);
   dial.setFace('gregorian');
 }
@@ -600,12 +574,20 @@ async function p5_faces(ctx) {
 // ---------- P6 — arrival at today ----------
 async function p6_arrival(ctx) {
   const { G, dial } = ctx;
+  await practiceRecall(G, ['4.13','4.26','4.16'], 3);
   dial.setZoom(30);
   await dial.animateTo(YEARS.TODAY_CE, 2200);
   await G.hud.card([S.act2.p6_card]);
   await G.hud.narrator(S.act2.p6_note);
 
   // camera descends toward the mound; survey flag plants
+  // Retire sky controls before moving the camera so a stray drag cannot
+  // rebuild a different era underneath the descent.
+  dial.disabled = true;
+  dial.show(false);
+  ctx.notebook.el.hidden = true;
+  G.hud.narrationRoot = null;
+  G.hud.root.classList.add('sky-descending');
   const cam = G.renderer.camera;
   const v = SITES.village;
   const from = cam.position.clone();

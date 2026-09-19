@@ -128,7 +128,11 @@ const VERT_BEGIN = /* glsl */ `
 
 const VERT_WORLD = /* glsl */ `
 #include <worldpos_vertex>
-vWPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
+vec4 shadePosition = vec4( transformed, 1.0 );
+#ifdef USE_INSTANCING
+  shadePosition = instanceMatrix * shadePosition;
+#endif
+vWPos = ( modelMatrix * shadePosition ).xyz;
 #ifdef USE_SUNMASK
   vSun = sun;
 #endif

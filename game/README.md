@@ -26,7 +26,7 @@ Touch: left joystick to move, drag right side to look, tap to interact, pinch to
 - Vertex-colored voxels, 16×16-chunk culled meshing, dirty-chunk remesh.
 - 30 fps frame limiter, capped pixel ratio, context-loss recovery, hidden-tab
   logic heartbeat — tuned for low-end Android.
-- `localStorage` saves; autosave at every beat; resume from the title screen.
+- Full localStorage and IndexedDB snapshots, activity checkpoints, import/export, and resume from the title screen.
 - All text in `src/strings.js`; all canonical dates in `src/constants.js`.
 
 ## Content lint
@@ -43,3 +43,18 @@ verbatim 2,583-years example, the "Perhaps they believed" hedge, and more).
 
 - `?fast` — 3-second countdown challenges instead of 30.
 - `?act=2` / `?act=3` — jump straight to an act with seeded stand-in records.
+
+
+## Study and recovery tools
+
+Settings includes a chapter practice notebook, downloadable printable field journal,
+full-story import/export, larger text, gentle camera, slower look controls and timing
+assistance. Act selection is **Alt+M** or Settings; **Tab** navigates controls normally.
+The notebook contains the supplied textbook's Chapter 4 date questions and project
+prompts. Real museum visits, interviews and classroom discussion remain teacher-led.
+
+## Checks
+
+Run `node game/tools/check.mjs` from the repository root. With the game server running,
+open `/tools/browser-tests.html` for browser integration tests; it uses its own save
+slot and restores the previous slot. See `COVERAGE.md` for the textbook audit.

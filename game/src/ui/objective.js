@@ -17,6 +17,13 @@ export function groundAnchor(G, x, z, dy = 0) {
   return { x, y: G.world.topAt(Math.round(x), Math.round(z)) + 1 + dy, z };
 }
 
+// Props can be centred within a cell or moved in the editor. Follow the model,
+// including its real floor height, rather than sampling a neighbouring column.
+export function propAnchor(prop, dy = 0.05) {
+  const p = prop.group.getWorldPosition(prop.group.position.clone());
+  return { x:p.x, y:p.y+dy, z:p.z };
+}
+
 // ONE persistent pulsing pillar marks the current objective site (the FX pillar
 // pool has 6 slots, and this module owns AT MOST one at a time). Planting a new
 // beacon retires the old; objectiveCue with no site (or no text) sweeps it, and

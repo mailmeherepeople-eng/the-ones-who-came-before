@@ -7,6 +7,13 @@ const { SIZE_X: SX, SIZE_Z: SZ, SIZE_Y: SY, WATER_LEVEL } = WORLD;
 
 // ---- named sites (single source of truth for act scripts) ----
 export const SITES = {
+  trainingStart: { x: 12, z: 8, y: 10.02 },
+  trainingLight: { x: 14, z: 14, y: 10.04 },
+  trainingJump: { x: 22, z: 14, y: 10.04 },
+  trainingBasket: { x: 27, z: 17, y: 10.04 },
+  trainingExit: { x: 27, z: 27 },
+  eastGrove: { x: 143, z: 76 },
+  southMeadow: { x: 97, z: 143 },
   shelter: { x: 42, z: 14 }, // rock shelter mouth (cave floor inside cliff)
   shelterWall: { x: 42, z: 9 }, // painting wall inside
   campA: { x: 40, z: 24 },
@@ -32,6 +39,9 @@ export const SITES = {
   modernVillage: { x: 24, z: 106 }, // act 3 present-day village
   fossilCliff: { x: 102, z: 12 }, // exposed rock face — well east of the river (riverX max ≈ 77)
   digCamp: { x: 66, z: 92 }, // act 3 excavation base camp
+  timelineHomes: { x: 89, z: 49 }, // visible in the portrait sky camera, away from the old mound
+  timelineMarket: { x: 86, z: 65 },
+  timelineFields: { x: 95, z: 83 },
 };
 
 // ---- tiny deterministic value noise ----
@@ -51,7 +61,7 @@ export function noise2(x, z) {
 
 // river centre x for a given z
 export function riverX(z) {
-  return 60 + 14 * Math.sin(z / SZ * Math.PI * 1.35 + 0.9) + 3 * noise2(z * 0.07, 3.7);
+  return 60 + 14 * Math.sin(z / WORLD.CORE_SIZE * Math.PI * 1.35 + 0.9) + 3 * noise2(z * 0.07, 3.7);
 }
 
 export function groundHeight(x, z) {
@@ -61,7 +71,10 @@ export function groundHeight(x, z) {
   const dr = Math.abs(x - riverX(z));
   h -= Math.max(0, 3.2 - dr * 0.35);
   // edge hills
-  const ex = Math.min(x, SX - 1 - x), ez = SZ - 1 - z;
+  // Old boundary ridges stay in place; their far slopes lead to the new land.
+  const core = WORLD.CORE_SIZE;
+  const ex = x < core ? Math.min(x, core - 1 - x) : Math.min(SX - 1 - x, x - core);
+  const ez = z < core ? core - 1 - z : Math.min(SZ - 1 - z, z - core);
   if (ex < 10) h += (10 - ex) * 0.55;
   if (ez < 10) h += (10 - ez) * 0.5;
   // north cliff
@@ -122,6 +135,58 @@ export function buildBase(world, opts = {}) {
   carveShelter(world);
   carveFossilCliff(world);
   scatterVegetation(world, lush, ice);
+  carveTrainingCave(world, ice);
+  dressOutlands(world, lush, ice);
+}
+
+// A bent, generously roofed route, separate from the original painted shelter.
+// Explicit floor coordinates are shared with the tutorial and resume checkpoints.
+export function carveTrainingCave(world, ice = false) {
+  for (let x = 4; x <= 33; x++) for (let z = 2; z <= 22; z++) {
+    const edge = Math.min(x - 4, 33 - x, z - 2, 22 - z);
+    const roof = Math.min(SY - 3, 15 + Math.min(4, edge));
+    for (let y = 7; y <= roof; y++) world.setRaw(x, y, z, y === roof && ice ? B.SNOWGRASS : B.ROCK_DARK);
+  }
+  const rooms = [[7,5,18,17], [17,11,29,17], [23,15,30,22]];
+  for (const [x0,z0,x1,z1] of rooms) for (let x=x0;x<=x1;x++) for (let z=z0;z<=z1;z++) {
+    world.setRaw(x,9,z,B.ROCK_DARK);
+    for (let y=10;y<=16;y++) world.setRaw(x,y,z,B.AIR);
+    // Continuous roof, even where the natural cliff was low.
+    world.setRaw(x,17,z,B.ROCK_DARK);
+    world.setRaw(x,18,z,ice ? B.SNOWGRASS : B.ROCK);
+  }
+  // Two-block sill: too tall for auto-step, within the real jump clearance.
+  for (let z=11;z<=17;z++) for (let y=10;y<=11;y++) world.setRaw(20,y,z,B.ROCK);
+  // Walkable approach, with no foliage in the exit sightline.
+  for (let z=23;z<=30;z++) for (let x=24;x<=30;x++) {
+    const target = groundHeight(x,z);
+    const h = Math.round(9 + (target-9)*Math.min(1,(z-23)/7));
+    setSurface(world,x,z,h,z<26 ? B.ROCK : B.PATH);
+  }
+}
+
+function dressOutlands(world, lush, ice) {
+  // New trees do not re-seed vegetation in the original valley.
+  for (let i=0;i<55;i++) {
+    const x=Math.floor(hash2(i+711,91)*(SX-12))+6;
+    const z=Math.floor(hash2(i+941,73)*(SZ-30))+24;
+    if (x<WORLD.CORE_SIZE+4 && z<WORLD.CORE_SIZE+4) continue;
+    if (Math.abs(x-riverX(z))<SOLID_RIVER_CLEARANCE || nearSite(x,z,5)) continue;
+    const h=grassTopAt(world,x,z);
+    if(h<0) continue;
+    if(ice) placeSnag(world,x,h+1,z,3);
+    else placeTree(world,x,h+1,z,3+Math.floor(lush*2));
+  }
+  // A readable grove and a forageable meadow reward leaving the main route.
+  for (const [dx,dz] of [[-7,-4],[0,-7],[7,-3],[-6,5],[6,6]]) {
+    const x=SITES.eastGrove.x+dx,z=SITES.eastGrove.z+dz,h=grassTopAt(world,x,z);
+    if(h>=0) { if(ice)placeSnag(world,x,h+1,z,4); else placeTree(world,x,h+1,z,4); }
+  }
+  for(let i=0;i<16;i++) {
+    const x=SITES.southMeadow.x-9+(i*7)%19,z=SITES.southMeadow.z-7+(i*11)%15;
+    const h=grassTopAt(world,x,z);
+    if(h>=0)world.setRaw(x,h+1,z,i%3===0?B.SHRUB_BERRY:ice?B.SNOWTUFT:B.FLOWER_YELLOW);
+  }
 }
 
 // set a column's surface to exactly h: clear above, fill below
@@ -307,8 +372,8 @@ function scatterVegetation(world, lush, ice) {
   // trees (solid — keep off the banks and away from sites)
   for (let i = 0; i < 90 * (0.5 + lush); i++) {
     // hash-jittered placement so failed spacing checks don't leave rows
-    let x = Math.floor(hash2(i, 11) * SX) + Math.floor(hash2(i, 71) * 3) - 1;
-    let z = Math.floor(hash2(i, 29) * SZ) + Math.floor(hash2(i, 83) * 3) - 1;
+    let x = Math.floor(hash2(i, 11) * WORLD.CORE_SIZE) + Math.floor(hash2(i, 71) * 3) - 1;
+    let z = Math.floor(hash2(i, 29) * WORLD.CORE_SIZE) + Math.floor(hash2(i, 83) * 3) - 1;
     x = Math.max(0, Math.min(SX - 1, x));
     z = Math.max(0, Math.min(SZ - 1, z));
     if (z < 24 && ice) continue;
@@ -331,7 +396,7 @@ function scatterVegetation(world, lush, ice) {
   // stumps and fallen logs (solid — same clearances as trees)
   if (!ice) {
     for (let i = 0; i < 22; i++) {
-      const x = Math.floor(hash2(i * 3 + 501, 17) * SX), z = Math.floor(hash2(i * 5 + 503, 37) * SZ);
+      const x = Math.floor(hash2(i * 3 + 501, 17) * WORLD.CORE_SIZE), z = Math.floor(hash2(i * 5 + 503, 37) * WORLD.CORE_SIZE);
       if (z < 22) continue;
       if (nearSite(x, z, 8)) continue;
       const h = grassTopAt(world, x, z);
@@ -360,7 +425,7 @@ function scatterVegetation(world, lush, ice) {
 
     // leafy bush blobs: rounded BUSH clusters + berry cross-tufts at the skirt
     for (let i = 0; i < 14 * (0.5 + lush); i++) {
-      const x = Math.floor(hash2(i * 7 + 901, 23) * SX), z = Math.floor(hash2(i * 11 + 907, 41) * SZ);
+      const x = Math.floor(hash2(i * 7 + 901, 23) * WORLD.CORE_SIZE), z = Math.floor(hash2(i * 11 + 907, 41) * WORLD.CORE_SIZE);
       if (z < 22) continue;
       if (Math.abs(x - riverX(z)) < SOLID_RIVER_CLEARANCE) continue;
       if (nearSite(x, z, 8)) continue;

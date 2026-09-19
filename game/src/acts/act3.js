@@ -16,6 +16,9 @@ import { wait } from '../ui/hud.js';
 import { collectCard, showSourceCard, claimBoard, labTray, siteReport, satchelPanel, potPortrait } from '../ui/report.js';
 import { SFX } from '../audio.js';
 import { FX } from '../fx/fx.js';
+import { teachItems } from '../codex.js';
+import { practiceRecall } from '../recall.js';
+import { activity } from '../ui/activity.js';
 
 export async function runAct3(G, resumeBeat = null) {
   const { clearStage } = await import('../main.js');
@@ -90,6 +93,9 @@ export async function runAct3(G, resumeBeat = null) {
     { id: 'a3.lab', run: () => lab(ctx) },
     { id: 'a3.report', run: () => finale(ctx) },
   ];
+  const coverage = {'a3.survey':['4.2'], 'a3.dig':['4.5','4.24'], 'a3.fossil':['4.3','4.7'], 'a3.epi':['4.6'], 'a3.talk':['4.4'], 'a3.claims':['4.27','4.28'], 'a3.lab':['4.29']};
+  for (const beat of beats) { const run=beat.run; beat.run=async()=>{await run();teachItems(G,coverage[beat.id] ?? []);}; }
+  if (resumeBeat) for (const beat of beats.slice(0, Math.max(0,beats.findIndex(b=>b.id===resumeBeat)))) teachItems(G,coverage[beat.id] ?? []);
   await runBeats(3, beats, resumeBeat?.startsWith('a3.') ? resumeBeat : null);
 
   for (const p of ctx.zonePillars) FX.removeHandle(p.h); // safety sweep
@@ -123,13 +129,19 @@ function buildSpecialistBar(ctx) {
   const { G } = ctx;
   const bar = document.createElement('div');
   bar.id = 'specialist-bar';
+  const selected=document.createElement('div'); selected.className='specialist-selected';
+  selected.textContent=S.act3.specialists[ctx.spec]; bar.appendChild(selected);
   for (const key of Object.keys(SPEC_ICONS)) {
     const b = document.createElement('button');
     b.className = 'spec-btn' + (key === ctx.spec ? ' sel' : '');
     b.dataset.spec = key;
+    b.setAttribute('aria-label',S.act3.specialists[key]+'. '+S.act3.specialistBlurbs[key]);
+    b.setAttribute('aria-pressed',key===ctx.spec);
     b.innerHTML = `${SPEC_ICONS[key]}<small>${S.act3.specialists[key]}</small>`;
     b.addEventListener('click', () => {
       ctx.spec = key;
+      selected.textContent=S.act3.specialists[key];
+      bar.querySelectorAll('.spec-btn').forEach(x=>x.setAttribute('aria-pressed',x===b));
       bar.querySelectorAll('.spec-btn').forEach((x) => x.classList.toggle('sel', x === b));
       // power-up tell: a big thick ring in the specialist's signature color,
       // seated on the CURRENT ground column (never a stale/buried y), plus
@@ -306,12 +318,19 @@ function dropZonePillar(ctx, x, z) {
 // layered dig spot: taps 1..3 deepen the pit; the final tap reveals the find
 function digSpot(ctx, { id, x, z, prompt = '⛏️', layers = 3, onFind }) {
   const { G } = ctx;
-  let depth = 0;
+  const saved = Save.activity(id);
+  let depth = Math.min(saved.depth ?? 0, saved.done ? layers : layers - 1);
+  for (let layer=0;layer<depth;layer++) {
+    const top=G.world.topAt(Math.round(x),Math.round(z));
+    for(const [dx,dz] of [[0,0],[1,0],[0,1],[1,1]]) G.world.set(Math.round(x)+dx,top,Math.round(z)+dz,B.AIR);
+  }
+  if (saved.done) { dropZonePillar(ctx, x, z); return Promise.resolve(); }
   return new Promise((resolve) => {
     G.interactables.push({
       id, x, z, r: 2.8, prompt, enabled: true,
       onInteract: gated(ctx, 'archaeologist', 'needArch', async (self) => {
         depth++;
+        Save.setActivity(id, {depth:Math.min(depth,layers-1)});
         const top = G.world.topAt(Math.round(x), Math.round(z));
         // carve one layer of a 2x2 pit
         for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
@@ -345,6 +364,7 @@ function digSpot(ctx, { id, x, z, prompt = '⛏️', layers = 3, onFind }) {
         FX.floaties(pit, { color: 0xffcf8a, count: 14, size: 0.13, life: 1.9, rise: 1.3 });
         dropZonePillar(ctx, x, z);
         await onFind({ x, z, y: top });
+        Save.setActivity(id, {done:true,depth:layers});
         // the source card is in the satchel — celebrate IN FRONT of the player
         // (the pit itself may be behind them once the card closes)
         const fp = G.player.pos;
@@ -445,6 +465,7 @@ async function digs(ctx) {
   const paintingReveal = new Promise((resolve) => {
     const rec = Save.getRecord('painting');
     const mesh = placeDarkPainting(G, rec?.data?.png);
+    if (Save.activity('lantern').done) { if(mesh) mesh.mat.color.setScalar(1); resolve(); return; }
     G.hud.hint(S.act3.lanternHint, 4200);
     G.interactables.push({
       id: 'lantern', x: SITES.shelterWall.x, z: SITES.shelterWall.z + 2, r: 3.4,
@@ -470,6 +491,7 @@ async function digs(ctx) {
         await G.hud.narrator(S.act3.paintingFound);
         if (rec?.data?.png) await flashback(G, rec.data.png, S.act3.flashback);
         await showSourceCard(G, collectCard(G, 'painting', { photo: rec?.data?.png ?? { emoji: '🖼️' } }));
+        Save.setActivity('lantern', {done:true});
         resolve();
       }),
     });
@@ -675,6 +697,7 @@ async function interviews(ctx) {
     });
     G.npcs.push(npc);
     done.push(new Promise((resolve) => {
+      if (Save.activity('talk-'+p.key).done) {resolve();return;}
       G.interactables.push({
         id: `talk-${p.key}`, x: p.x, z: p.z, r: 3, prompt: '💬', enabled: true,
         onInteract: gated(ctx, 'anthropologist', 'needAnth', async (self) => {
@@ -695,6 +718,7 @@ async function interviews(ctx) {
             { color: 0xf0a8b8, count: 10, size: 0.11, life: 1.6, rise: 0.9 },
           );
           if (p.cardKey) collectCard(G, p.cardKey, { photo: { emoji: '🗣️' } });
+          Save.setActivity('talk-'+p.key,{done:true});
           resolve();
         }),
       });
@@ -714,7 +738,9 @@ function talkLine(G, speaker, line) {
     el.querySelector('.speaker').textContent = speaker;
     el.querySelector('.line').textContent = line;
     G.hud.root.appendChild(el);
+    const scope=activity(G.hud.root,el,G.input);
     el.querySelector('button').addEventListener('click', () => {
+      scope.close();
       el.remove();
       G.input?.clearEdges?.();
       resolve();
@@ -725,17 +751,33 @@ function talkLine(G, speaker, line) {
 async function claims(ctx) {
   const { G } = ctx;
   await G.hud.narrator(S.act3.sourceDef); // 4.24
-  await claimBoard(G);
+  teachItems(G,['4.24','4.27','4.28']);
+  while (!await claimBoard(G)) {
+    G.hud.setObjective(S.revision.resumeBoard);
+    await interactOnceGated(ctx,{id:'resume-claims',...SITES.digCamp,prompt:'📋',spec:'archaeologist',hintKey:'needArch'});
+  }
+  G.hud.setObjective(null);
   await G.hud.narrator(S.act3.judgeNote); // 4.27/4.28 verbatim-adjacent
   await G.hud.narrator(S.act3.detectiveNote);
 }
 
 async function lab(ctx) {
-  await labTray(ctx.G);
+  while (!await labTray(ctx.G)) {
+    ctx.G.hud.setObjective(S.revision.resumeBoard);
+    await interactOnceGated(ctx,{id:'resume-lab',...SITES.digCamp,prompt:'🔬',spec:'archaeologist',hintKey:'needArch'});
+  }
+  ctx.G.hud.setObjective(null);
 }
 
 async function finale(ctx) {
   const { G } = ctx;
+  await G.hud.narrator(S.textbook.roles);
+  teachItems(G,['4.51']);
+  const roleAnswer = await G.hud.choice(S.textbook.rolesQuestion, S.textbook.rolesOptions);
+  Save.recordRecall('4.51',roleAnswer===0);
+  if(roleAnswer!==0) await G.hud.narrator(S.textbook.roles);
+  teachItems(G,['4.1','4.25','4.30']);
+  await practiceRecall(G,['4.2','4.3','4.5','4.6'],3);
   await siteReport(G);
   // the one big celebration: staggered confetti bursts around the player
   const pp = G.player.pos;

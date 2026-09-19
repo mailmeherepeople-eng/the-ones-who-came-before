@@ -11,6 +11,10 @@ const KEY = 'towcb-settings-v1';
 // The panel is built from this list, so adding a setting is one entry here
 // plus one string. `apply` runs on load and on every change.
 export const SETTINGS = [
+  ...['largeText', 'gentleCamera', 'assisted', 'sensitivity', 'autoAdvance'].map(id => ({
+    id, label: () => S.revision[id], note: () => S.revision[id + 'Note'],
+    def: id === 'gentleCamera' ? (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) : false,
+  })),
   {
     id: 'lockCamera',
     label: () => S.ui.setLockCamera,

@@ -17,9 +17,7 @@
 // to change when they are, because the ids come from the syllabus and not from
 // the beats.
 
-// untaught: 4.20 (the plural of millennium) is deliberately never taught, per
-// the design doc. It stays in the list so coverage arithmetic is honest, and is
-// excluded from every total.
+// Includes the textbook's vocabulary note and its caution about gender roles.
 export const SYLLABUS = [
   { id: '4.1', act: 3 },
   { id: '4.2', act: 3 },
@@ -40,7 +38,7 @@ export const SYLLABUS = [
   { id: '4.17', act: 2 },
   { id: '4.18', act: 2 },
   { id: '4.19', act: 2 },
-  { id: '4.20', act: 2, untaught: true },
+  { id: '4.20', act: 2 },
   { id: '4.21', act: 2 },
   { id: '4.22', act: 2 },
   { id: '4.23', act: 2 },
@@ -71,14 +69,14 @@ export const SYLLABUS = [
   { id: '4.48', act: 1 },
   { id: '4.49', act: 1 },
   { id: '4.50', act: 1 },
+  { id: '4.51', act: 3 },
 ];
 
 const BY_ID = new Map(SYLLABUS.map((it) => [it.id, it]));
 
 export function syllabusItem(id) { return BY_ID.get(id) ?? null; }
 
-// Every item the game intends to teach. 4.20 is excluded, so "38 of 49" can
-// never quietly become "38 of 50" and read as a gap that was never there.
+// Every concept taught and available for later retrieval.
 export const TEACHABLE = SYLLABUS.filter((it) => !it.untaught);
 
 export function teachableFor(act) { return TEACHABLE.filter((it) => it.act === act); }

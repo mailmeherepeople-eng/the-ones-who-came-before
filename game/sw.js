@@ -17,7 +17,7 @@
 //      (see the fetch handler below for why cache-first was wrong here).
 //
 // BUMP CACHE ON EVERY DEPLOY.
-const CACHE = 'towcb-v6';
+const CACHE = 'towcb-v13';
 
 // Enumerated rather than globbed: no build step here, so there is nothing to
 // generate a manifest, and an explicit list is greppable and diffable. Missing
@@ -34,6 +34,14 @@ const ASSETS = [
   './src/constants.js',
   './src/strings.js',
   './src/save.js',
+  './src/storage.js',
+  './src/ui/activity.js',
+  './src/ui/journal.js',
+  './src/ui/chapterNotebook.js',
+  './src/sky/livingValley.js',
+  './src/acts/gathering.js',
+  './src/acts/onboarding.js',
+  './src/ui/equipment.js',
   './src/settings.js',
   './src/audio.js',
   './src/syllabus.js',
@@ -61,6 +69,32 @@ const ASSETS = [
   './src/acts/act2.js',
   './src/acts/act3.js',
   './src/sky/dial.js',
+  './src/sky/interface.js',
+  './src/sky/discoveries.js',
+  './src/sky/timeLessons.js',
+  './assets/history/ashoka.svg',
+
+  './assets/history/buddha.svg',
+
+  './assets/history/copper.svg',
+
+  './assets/history/iceAgeEnd.svg',
+
+  './assets/history/indus.svg',
+
+  './assets/history/jesus.svg',
+
+  './assets/history/mesopotamia.svg',
+
+  './assets/history/pottery.svg',
+
+  './assets/history/rockArt.svg',
+
+  './assets/history/settlements.svg',
+
+  './assets/history/today.svg',
+
+  './assets/history/village.svg',
   './src/sky/erosion.js',
   './src/sky/interstitial.js',
   './src/inventory.js',

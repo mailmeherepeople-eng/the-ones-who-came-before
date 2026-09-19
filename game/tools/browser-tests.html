@@ -1,0 +1,189 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Game browser regressions</title>
+<link rel="stylesheet" href="../css/style.css"><style>#test-output{position:fixed;inset:0;z-index:1000;background:#fff;color:#222;padding:24px;overflow:auto;pointer-events:none;white-space:pre-wrap;font:16px monospace}#ui-root{position:fixed;inset:0}</style>
+<canvas id="gl"></canvas><div id="ui-root"></div><pre id="test-output">Running browser regressions...</pre>
+<script type="module">
+import { HUD } from '../src/ui/hud.js';
+import { Input } from '../src/engine/input.js';
+import { activity } from '../src/ui/activity.js';
+import { Dial } from '../src/sky/dial.js';
+import { SkyInterface, TIME_SPEEDS } from '../src/sky/interface.js';
+import { historyMarkers, openDiscovery, discoveryCount } from '../src/sky/discoveries.js';
+import { runTimeLesson } from '../src/sky/timeLessons.js';
+import { ErosionPanel } from '../src/sky/erosion.js';
+import { Settings } from '../src/settings.js';
+import { Save } from '../src/save.js';
+import { snapshotRead } from '../src/storage.js';
+import { S } from '../src/strings.js';
+import { claimBoard, claimSpecs } from '../src/ui/report.js';
+import { journalHTML } from '../src/ui/journal.js';
+import { buildResults, toCSV } from '../src/results.js';
+import { chapterNotebook, dateQuestions } from '../src/ui/chapterNotebook.js';
+import { Inv } from '../src/inventory.js';
+import { installEquipment } from '../src/ui/equipment.js';
+import { needsOnboarding, practiceMovement, tutorialCheckpoint } from '../src/acts/onboarding.js';
+const output=document.querySelector('#test-output'), lines=[];
+function assert(ok,message){if(!ok)throw Error(message);lines.push('PASS '+message);output.textContent=lines.join('\n');}
+const frame=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+const root=document.querySelector('#ui-root');
+const hud=new HUD(root),input=new Input(document.querySelector('#gl'),root); hud.input=input;root.gameInput=input;
+const G={hud,input};
+let prior;
+try {
+  await Save.ready;
+  prior=Save.currentSlot();
+  await Save.useSlot('browser-regression-only'); Save.reset(); await Save.lastWrite;
+  assert(needsOnboarding(),'Fresh players start in the tutorial');
+  Save.setActivity('campStock',{ready:true});
+  assert(!needsOnboarding(),'Existing players are not forced to replay the tutorial');
+  Save.setActivity('onboarding',{started:true,step:5});
+  assert(needsOnboarding() && tutorialCheckpoint(5).x<20,'An interrupted jump lesson resumes before the obstacle');
+  assert(practiceMovement('left',{move:{x:-1,y:0}},0)===0,'Pressing against a wall does not complete movement practice');
+  Save.data.act=1;G.mode='ground';G.player={equip(kind){this.equipped=kind;}};
+  Inv.stock('chest',{basket:2,bow:1});Inv.move('chest','player','basket',1);
+  Inv.selectTool('basket',false);
+  const equipment=installEquipment(G);equipment.update({});
+  assert(Inv.has('player','basket')&&!Inv.equippedTool(),'Carrying a basket and equipping it are distinct');
+  input.setEnabled(false);equipment.update({equip:true});
+  assert(!Inv.equippedTool(),'Equipment cannot toggle while a lesson modal owns input');
+  input.setEnabled(true);window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyQ'}));
+  const equipEdge=input.poll();equipment.update(equipEdge);
+  assert(equipEdge.equip&&Inv.equippedTool()==='basket'&&G.player.equipped==='basket','Q equips the selected inventory item and updates the character');
+  assert(!input.poll().equip,'Equip is a one-shot action');
+  window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyQ'}));
+  root.querySelector('.equipment-toggle').click();
+  assert(!Inv.equippedTool()&&Inv.count('player','basket')===1,'Touch/mouse put-away preserves the carried item');
+  Inv.selectTool('basket');Inv.move('player','chest','basket',1);equipment.update({});
+  assert(!Inv.equippedTool()&&root.querySelector('#equipment-control').hidden,'Returning the tool clears the equipment control');
+  root.querySelector('#equipment-control').remove();
+  Save.setActivity('onboarding',{done:true});assert(!needsOnboarding(),'Completed tutorials stay completed');
+  Save.data.act=0;Inv.resetAll();
+  Save.addRecord({id:'painting',type:'painting',data:{png:'data:image/png;base64,AAAA'}}); await Save.lastWrite;
+  assert((await snapshotRead(Save.key)).records[0].data.png==='data:image/png;base64,AAAA','IndexedDB writes the original art');
+  input.setEnabled(false);
+  const one=document.createElement('div'),two=document.createElement('div');root.append(one,two);
+  const a=activity(root,one,input),b=activity(root,two,input); b.close();a.close();one.remove();two.remove();
+  assert(input.enabled===false,'Nested dialogs restore disabled input');
+  input.setEnabled(true);
+  const choice=hud.choice('Test choice',['One','Two']); await frame();
+  const box=root.querySelector('.choice-box');
+  assert(document.activeElement===box.querySelector('button'),'Choice receives keyboard focus');
+  document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',code:'Tab',bubbles:true,cancelable:true}));
+  assert(document.activeElement===box.querySelectorAll('button')[1],'Tab navigates the choice');
+  box.querySelectorAll('button')[1].click();assert(await choice===1 && input.enabled,'Closing a choice restores input');
+  let worldYear=1;
+  const dial=new Dial(root,{minYear:-100,maxYear:100,year:1,yearsPerPx:1,markers:[{year:-20,icon:'★',label:'Test landmark'}],onYear:y=>worldYear=y});
+  dial.setYear(-30,false);assert(worldYear===-30,'Scripted timeline moves update the world without marker popups');dial.setYear(1,false);
+  dial.trackEl.style.width='600px';await frame();await frame();
+  dial.trackEl.style.width='300px';await frame();await frame();
+  const label=[...dial.ticksEl.querySelectorAll('.dial-tick-label')].find(e=>e.textContent==='1 CE');
+  assert(label && Math.abs(parseFloat(label.style.left)-150)<1,'Timeline recentres after resize');
+  dial.trackEl.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));
+  assert(dial.year<1,'Timeline supports arrow keys');
+  G.mode='sky';
+  const sky=new SkyInterface(G,dial);sky.setPhase('a2.p1');
+  let yearTicks=0;G.audio={timelineTicks:count=>yearTicks+=count};
+  let tickEvents=0;const soundHook=dial.onYearTick;dial.onYearTick=(count,seconds)=>{tickEvents+=count;soundHook(count,seconds)};
+  dial.markers[0].suppressed=true;dial.render();dial.ticksEl.querySelector('[data-year]').click();
+  assert(dial.year===-20&&worldYear===-20,'Clicking a landmark jumps to its year even when automatic notes are suppressed');
+  assert(dial.el.classList.contains('dial-engaged'),'Timeline visibly engages when selecting a landmark');
+  const stableMarker=dial.ticksEl.querySelector('[data-year]');dial.render();assert(stableMarker===dial.ticksEl.querySelector('[data-year]'),'Marker rendering preserves focus and hover targets');
+  const ticksBeforeWheel=tickEvents;
+  dial.trackEl.dispatchEvent(new WheelEvent('wheel',{deltaY:20,bubbles:true,cancelable:true}));
+  assert(dial.year===-13&&tickEvents-ticksBeforeWheel===7,'Wheel scrubbing moves time and ticks for each crossed year');
+  dial.setYear(-1,false);dial.laterEl.click();assert(dial.year===1,'Date arrows cross directly from 1 BCE to 1 CE');
+  dial.earlierEl.click();assert(dial.year===-1,'Date arrows reverse without a year zero');
+  dial.setT(-1.4,false);dial.settle();assert(dial.t===-1,'Release settles on a whole year');
+  dial.yearEl.click();sky.editor.querySelector('input').value='0';sky.editor.requestSubmit();
+  assert(!sky.editor.hidden&&sky.editor.querySelector('p').textContent===S.skyUI.invalidYear,'Exact date entry rejects year zero');
+  sky.editor.querySelector('input').value='20';sky.editor.querySelector('select').value='ce';sky.editor.requestSubmit();
+  assert(dial.year===20&&sky.editor.hidden,'Exact date entry updates and closes');
+  dial.lock(10,{label:S.skyUI.decade});dial.laterEl.click();
+  assert(dial.year===30&&dial.stepCount===1,'Date arrows satisfy counted lesson steps');
+  dial.yearEl.click();sky.playButton.click();assert(sky.editor.hidden&&!sky.playing,'Step lessons cannot be bypassed with exact dates or playback');
+  const lockedYear=dial.year;dial.ticksEl.querySelector('[data-year]').click();
+  dial.trackEl.dispatchEvent(new WheelEvent('wheel',{deltaY:20,bubbles:true,cancelable:true}));
+  assert(dial.year===lockedYear,'Landmarks and wheel scrolling respect teaching step locks');
+  dial.lock(null);dial.setYear(-50,false);sky.watch.querySelector('[data-speed="100"]').click();sky.playButton.click();sky.tick(.05);
+  assert(dial.year===-45&&sky.playing&&!sky.speedPanel.hidden,'Playback uses the compact persistent speed slider');
+  sky.rewindButton.click();sky.tick(.05);assert(dial.year===-50&&sky.playing,'Rewind reverses active playback');
+  sky.pause();dial.setYear(1,false);sky.playButton.click();sky.tick(.01);assert(dial.year===-1,'Reverse playback crosses CE to BCE without year zero');
+  sky.forwardButton.click();sky.tick(.01);assert(dial.year===1,'Forward playback crosses BCE to CE without year zero');
+  sky.pause();
+  for(const rate of TIME_SPEEDS){dial.setYear(-50,false);sky.watch.querySelector(`[data-speed="${rate}"]`).click();sky.playButton.click();sky.tick(.02);assert(Math.abs(dial.t-(-50+.02*rate))<.0001,`${rate}x playback advances at its specified rate`);sky.pause();}
+  dial.setYear(-50,false);sky.playButton.click();dial.earlierEl.click();assert(!sky.playing&&dial.year===-51,'Manual date arrows stop playback');
+  assert(tickEvents>10,'Year crossings emit tick events in both directions');
+  assert(Settings.get('sound')?yearTicks>10:yearTicks===0,'Timeline ticks respect the sound preference');
+  dial.setYear(100,false);sky.direction=1;sky.playing=true;sky.tick(.02);assert(!sky.playing&&dial.year===100,'Forward playback stops at the last year');
+  sky.rewindButton.click();sky.playButton.click();sky.tick(.02);assert(dial.year<100,'Rewind works from the last year');sky.pause();
+  sky.playButton.click();const modal=document.createElement('div');root.append(modal);const scope=activity(root,modal,input);await frame();
+  assert(!sky.playing&&!sky.speedPanel.hidden,'Teaching pauses time while keeping the speed control visible');scope.close();modal.remove();
+  const soil=new ErosionPanel(sky.evidence,{potRecord:null,burialRecord:null});
+  assert(!sky.el.contains(soil.el)&&sky.evidence.parentElement===root,'The soil view remains outside the notebook in its own panel');soil.dispose();
+  const teaching=hud.narrator('Centered teaching test');await frame();
+  assert(root.querySelector(':scope > .narrator')&&!sky.el.querySelector('.narrator'),'Continue teaching is mounted at the screen level, never inside the notebook');
+  await new Promise(resolve=>setTimeout(resolve,360));root.querySelector(':scope > .narrator').click();await teaching;
+  const landmarks=historyMarkers();assert(landmarks.length===12,'All twelve historical landmarks have illustrated discoveries');
+  for(const marker of landmarks){const image=new Image();image.src=marker.image;await image.decode();assert(image.naturalWidth>0,`Illustration loads: ${marker.id}`);}
+  const card=openDiscovery(G,landmarks.find(m=>m.id==='pottery'));
+  assert(root.dataset.modal==='true'&&card.el.querySelector('img').alt.length>20,'Discovery cards own focus and provide descriptive image text');
+  card.el.querySelector('[data-answer="0"]').click();assert(discoveryCount()===0,'Trying a wrong clue does not award an unseen discovery');
+  card.el.querySelector('[data-answer="1"]').click();assert(discoveryCount()===1,'A revealed clue adds one persistent discovery');
+  card.close();assert(!root.dataset.modal,'Closing a discovery restores exploration');
+  const replay=openDiscovery(G,landmarks.find(m=>m.id==='pottery'));replay.el.querySelector('.discovery-reveal').click();replay.close();assert(discoveryCount()===1,'Revisiting does not duplicate the discovery reward');
+  for(const kind of ['labels','gaps','reduced']){
+    const originalMatchMedia=window.matchMedia;
+    if(kind==='reduced')window.matchMedia=query=>query==='(prefers-reduced-motion: reduce)'?{matches:true,addEventListener(){},removeEventListener(){}}:originalMatchMedia.call(window,query);
+    const lesson=runTimeLesson(G,dial,kind==='reduced'?'labels':kind);await frame();let pages=0;
+    while(root.querySelector('.time-lesson')){
+      const panel=root.querySelector('.time-lesson');const next=panel.querySelector('.lesson-next');
+      if(panel.querySelector('.bridge-jump')){
+        assert(next.disabled,'A bridge asks the player to make the jumps before continuing');
+        assert(panel.querySelector('.bridge-traveller svg'),'The bridge includes its animated traveller');
+        for(let i=0;i<4;i++)panel.querySelector('.bridge-jump').click();
+        if(kind==='reduced')assert(panel.querySelector('.bridge-traveller svg').getAnimations().length===0,'Reduced motion shows the destination without a hopping animation');
+        assert(!next.disabled&&!panel.querySelector('.bridge-stone').textContent.includes('0'),'Bridge completion unlocks the explanation without adding year zero');
+      }
+      if(panel.querySelector('.worked-history')){for(let i=0;i<3;i++)panel.querySelector('.lesson-content > button').click();assert(panel.querySelectorAll('.worked-parts p').length===3,'The historical calculation unfolds in three separate steps');assert(panel.querySelector('.worked-sum strong').textContent.includes('2,583'),'The animated calculation lands on the exact historical total');}
+      if(panel.querySelector('.lesson-choices')){
+        const copy=panel.querySelector('.lesson-intro').textContent;
+        const right=copy===S.timeLearning.orderQ||copy===S.timeLearning.sameQ?1:0;
+        panel.querySelectorAll('.lesson-choices button')[1-right].click();
+        assert(next.disabled&&panel.querySelector('.lesson-feedback').textContent.includes(S.timeLearning.retry),'Wrong ideas receive an explanation and a retry without a timer');
+        panel.querySelectorAll('.lesson-choices button')[right].click();
+      }
+      if(panel.querySelector('.lesson-answer')){const input=panel.querySelector('input');input.value='0';panel.querySelector('form').requestSubmit();assert(next.disabled,'An incorrect numeric journey remains retryable');panel.querySelector('.lesson-help').click();assert(!next.disabled,'Show me how provides an explanation and a way forward');}
+      const leavingAnimations=[...panel.querySelectorAll('*')].flatMap(node=>node.getAnimations());
+      assert(!next.disabled,'Completed lesson stop can advance');next.click();assert(leavingAnimations.every(animation=>animation.playState==='idle'||animation.playState==='finished'),'Changing a teaching page cancels its active motion');pages++;if(pages>8)throw Error('Lesson failed to finish');
+    }
+    await lesson;window.matchMedia=originalMatchMedia;assert(!root.dataset.modal,`${kind} expedition releases modal ownership`);
+  }
+  sky.dispose();dial.dispose();
+  assert(hud.objectiveEl.parentElement===root&&!hud.narrationRoot&&!root.querySelector('#sky-notebook'),'Act exit restores HUD ownership and removes the notebook');
+  for(const [id,text] of Object.entries(S.act3.cards))Save.addCard({recordId:id,...text,category:'archaeological',specialist:'Test',photo:null});
+  const board=claimBoard(G);await frame();
+  const specs=claimSpecs();
+  for(const [i,section] of [...root.querySelectorAll('.evidence-board .claim')].entries()) {
+    const spec=specs[i];
+    for(const label of section.querySelectorAll('label')) {
+      if(spec.evidence.some(id=>label.textContent===S.act3.cards[id].title))label.querySelector('input').click();
+    }
+    [...section.querySelectorAll('.c-verdicts button')].find(b=>b.textContent===S.act3.verdicts[spec.correct]).click();
+  }
+  const done=root.querySelector('.evidence-board > .btn.primary');
+  assert(!done.disabled,'Evidence-backed verdicts complete every claim, including uncertainty');done.click();assert(await board,'Claim board reports completion');
+  const html=journalHTML();assert(html.includes(S.revision.journalTitle)&&html.includes(S.revision.beliefClaim),'Field journal includes original art and conclusions');
+  Save.data.activeMs=123000;Save.data.beatTimes={a:1,b:999999999};
+  const results=buildResults();assert(results.elapsedMs===123000,'Results use active time, not days between sessions');
+  results.session.label='=1+1';assert(toCSV(results).includes("'=1+1"),'Spreadsheet export escapes formula-like names');
+  const notebook=chapterNotebook(root);await frame();
+  const questions=[...root.querySelectorAll('.chapter-notebook .num-input')];
+  for(const [i,input] of questions.entries()){input.value=String(dateQuestions()[i].answer);input.closest('section').querySelector('button').click();}
+  assert(dateQuestions().every(q=>Save.activity('book-'+q.id).done),'Every textbook date exercise accepts its correct answer');
+  const notes=root.querySelector('.chapter-notebook textarea');notes.value='A family story compared with a photograph.';notes.dispatchEvent(new Event('input'));
+  root.querySelector('.chapter-notebook > button').click();await notebook;
+  assert(journalHTML().includes('A family story compared with a photograph.'),'Project notes survive closing and enter the printable journal');
+  await Save.useSlot(prior);
+  output.textContent=lines.join('\n')+'\n\nALL BROWSER REGRESSIONS PASSED';
+} catch(error){output.textContent=lines.join('\n')+'\nFAIL '+error.stack;console.error(error);}
+finally {if(prior!==undefined)await Save.useSlot(prior);}
+</script></html>

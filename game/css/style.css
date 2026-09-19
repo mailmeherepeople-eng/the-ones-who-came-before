@@ -193,6 +193,80 @@ body { font-family: var(--font-ui); color: var(--ink); -webkit-user-select: none
   color: #8a6236; letter-spacing: 1px; animation: tap-pulse 1.6s ease-in-out infinite;
 }
 
+/* The first journey: warm stone, restrained keycap feedback, clear sightline. */
+.training-card {
+  position:absolute; top:max(58px,env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+  width:min(440px,calc(100vw - 32px)); padding:15px 22px 10px; z-index:22;
+  border:1px solid #a8855266; border-radius:16px;
+  background:linear-gradient(145deg,#30291fec,#181a18ed); color:#f3e5cb;
+  box-shadow:inset 0 1px #ffe5b21c,0 12px 35px #0004; text-align:center;
+}
+.training-card header { display:flex; justify-content:space-between; gap:12px; font-size:11px; letter-spacing:.09em; color:#d5b783; }
+.training-track { height:2px; background:#eed9ae18; margin:10px 0 12px; }
+.training-track i { display:block; height:100%; background:#e6ba73; transition:width .35s ease; }
+.training-card h2 { font:600 clamp(18px,2vw,23px)/1.2 var(--font); margin:0 0 7px; }
+.training-instruction { margin:0; font-size:14px; line-height:1.5; color:#e0d5c3; }
+.training-keys { display:flex; justify-content:center; gap:7px; margin:12px 0 5px; }
+.training-card kbd,.training-demo kbd,#equipment-control kbd {
+  display:inline-grid; place-items:center; min-width:32px; height:31px; padding:0 8px;
+  background:linear-gradient(#625039,#352b20); border:1px solid #b6935b80; border-bottom:3px solid #15130e;
+  border-radius:7px; color:#ffe4b1; font:600 13px var(--font-ui); box-shadow:inset 0 1px #fff2;
+}
+.training-press .training-keys kbd { border-bottom-width:1px; transform:translateY(2px); background:#786143; }
+.training-card footer { display:flex; justify-content:space-between; gap:12px; }
+.training-card footer button { min-height:44px; padding:5px 8px; border:0; background:none; color:#d2bea1; font-size:12px; cursor:pointer; }
+.training-card footer button:hover { color:#fff1d3; text-decoration:underline; }
+.training-nudge .training-help { color:#ffcf80; box-shadow:inset 0 -2px #e6ba73; }
+.training-help-panel { max-width:480px; max-height:85dvh; overflow:auto; }
+.training-help-panel p { line-height:1.6; }
+.training-help-panel button { min-height:44px; margin:8px 4px; }
+.training-demo { display:flex; gap:8px; justify-content:center; padding:18px; }
+.training-demo kbd { animation:training-demo 1.7s ease-in-out infinite; }
+@keyframes training-demo { 50% { transform:translateY(5px); background:#9c7c4b; } }
+#ui-root.training-active #hud-codex,#ui-root.training-active #hud-satchel,#ui-root.training-active #hud-objective,#ui-root.training-active #hud-hint,#ui-root.training-active #hud-zoom { display:none; }
+#ui-root.training-active .bubble { display:none; }
+#ui-root.training-active #hud-settings { top:10px; }
+#ui-root.training-active #hud-prompt { bottom:24%; }
+#ui-root.training-reveal #equipment-control,#ui-root.training-reveal #hud-prompt { visibility:hidden; }
+#equipment-control { position:absolute; left:20px; bottom:32px; z-index:21; max-width:240px; }
+#equipment-control[hidden],.training-card[hidden] { display:none; }
+#equipment-control kbd[hidden],#equipment-control select[hidden] { display:none; }
+.equipment-toggle { display:flex; align-items:center; gap:12px; min-height:58px; width:100%; padding:8px 12px; color:#f3e5cb; background:linear-gradient(145deg,#3a3024f5,#1c211cf5); border:1px solid #b5945c88; border-radius:13px; box-shadow:0 6px 20px #0004,inset 0 1px #fff1; cursor:pointer; text-align:left; }
+.equipment-toggle[aria-pressed=true] { border-color:#d7b879; }
+.equipment-toggle:hover { background:#4b402e; }
+.equipment-icon { font-size:27px; }
+.equipment-icon .icon { width:28px; height:28px; color:#e4c58f; }
+.equipment-toggle strong { display:block; font-size:13px; }
+.equipment-toggle small { display:block; color:#dbbc85; font-size:12px; margin-top:3px; }
+#equipment-control select { margin-top:6px; min-height:44px; width:100%; background:#30291f; color:#f3e5cb; border:1px solid #b5945c88; border-radius:8px; padding:6px; }
+.training-card button:focus-visible,.equipment-toggle:focus-visible { outline:2px solid #ffe0a3; outline-offset:3px; }
+body:not(.no-touch) #equipment-control { left:auto; right:18px; bottom:155px; }
+#ui-root[data-modal] .training-card { visibility:hidden; }
+@media(max-width:600px) {
+  .training-card { padding:12px 14px 4px; top:58px; }
+  .training-card h2 { font-size:18px; }
+  .training-instruction { font-size:13px; }
+  .training-keys { margin:8px 0 0; }
+  #equipment-control { left:12px; bottom:20px; }
+}
+@media(max-height:560px) and (min-width:601px) {
+  .training-card { top:10px; width:390px; padding:9px 14px 2px; }
+  .training-track { margin:5px 0 7px; }
+  .training-keys { margin:5px 0 0; }
+}
+@media(max-height:650px) {
+  .training-card { padding:10px 12px 2px; }
+  .training-card header { font-size:10px; }
+  .training-track { margin:6px 0 8px; }
+  .training-card h2 { font-size:17px; margin-bottom:5px; }
+  .training-instruction { font-size:12.5px; }
+  .training-keys { display:none; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .training-demo kbd { animation:none; }
+  .training-track i { transition:none; }
+}
+
 /* ---------- HUD ---------- */
 #hud-objective {
   position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
@@ -1277,3 +1351,328 @@ body.no-touch #hud-actions { bottom: max(30px, calc(env(safe-area-inset-bottom) 
    all. This gives it to them without touching the report's own rules. */
 .bigpanel .rep-body { font-size: 13.5px; line-height: 1.55; color: var(--ink-dim); }
 /* ===================== end results table ===================== */
+
+/* Readable study surfaces, with separate space for events and instructions. */
+body.act-sky .era-card { top:70px; bottom:auto; z-index:45; pointer-events:none; width:min(440px,82vw); max-height:24vh; overflow:auto; }
+#valley-life { position:absolute; left:18px; bottom:184px; max-width:285px; z-index:18; padding:12px 16px; border-left:3px solid var(--accent); border-radius:4px 12px 12px 4px; color:var(--ink); background:rgba(30,22,12,.88); pointer-events:none; }
+#valley-life strong { display:block; font:17px/1.35 var(--font); color:var(--accent); }
+#valley-life small { display:block; margin-top:6px; font:12px/1.45 var(--font-ui); }
+.settings-panel { max-height:84vh; overflow:auto; }
+.settings-panel > .btn { margin:5px; }
+.specialist-selected { position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); border:1px solid var(--panel-line); border-radius:20px; background:var(--card); color:var(--ink); padding:7px 16px; font-size:16px; white-space:nowrap; }
+.evidence-item { padding:10px; border:1px solid var(--panel-line); border-radius:8px; margin:8px 0; }
+.evidence-item label { display:flex; gap:10px; align-items:center; min-height:44px; cursor:pointer; font-size:16px; }
+.evidence-item input { width:22px; height:22px; accent-color:var(--accent); }
+.evidence-item summary { cursor:pointer; padding:8px 0; color:var(--accent); }
+.evidence-item p { line-height:1.6; }
+.evidence-board .c-verdicts { display:flex; gap:8px; flex-wrap:wrap; }
+.evidence-board button:disabled { opacity:.55; }
+#dial-track:focus-visible, .spec-btn:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+body.large-text .card-text, body.large-text .narrator, body.large-text .rep-body, body.large-text .cx-tells, body.large-text .talk-box .line, body.large-text .choice-box h3 { font-size:clamp(20px,3.8vw,25px); line-height:1.55; }
+body.large-text #hud-objective { font-size:18px; }
+@media(max-width:600px) {
+  #specialist-bar { display:flex; width:calc(100vw - 28px); box-sizing:border-box; justify-content:space-around; padding:8px; gap:4px; }
+  .spec-btn { min-width:44px; min-height:48px; flex:1; font-size:25px; }
+  .spec-btn small { display:none; }
+  #valley-life { left:12px; right:12px; bottom:190px; max-width:none; padding:8px 12px; }
+  #valley-life small { display:none; }
+  body.act-sky .era-card { top:64px; padding:10px 12px; font-size:15px; max-height:22vh; }
+  .dial-tick-label { font-size:12px; }
+  #dial-face { font-size:12px; letter-spacing:.4px; }
+  #erosion-panel { top:150px !important; }
+  #erosion-panel canvas { width:min(42vw,190px) !important; }
+  #erosion-caption { max-width:190px !important; }
+  .settings-panel { width:min(90vw,480px); box-sizing:border-box; }
+}
+@media(max-height:520px) {
+  #valley-life { display:none; }
+  body.act-sky .era-card { top:12px; max-height:22vh; font-size:13px; padding:6px 12px; }
+}
+.chapter-notebook input, .chapter-notebook textarea { display:block; width:100%; box-sizing:border-box; margin:10px 0; font:inherit; color:var(--ink); background:var(--card); border:1px solid #9d8153; border-radius:8px; padding:10px; }
+.chapter-notebook .btn { margin:4px; }
+.chapter-notebook section { margin-block:18px; }
+.chapter-notebook > button { position:sticky; top:0; z-index:1; }
+#deeptime { overflow:auto; }
+#deeptime canvas { flex-shrink:0; }
+@media(max-height:600px) { #deeptime { justify-content:flex-start; } }
+
+/* Act 2: fixed reference panels, central teaching, and a tactile time ruler. */
+body.act-sky { --sky-notebook-width:clamp(220px,20vw,280px); --sky-soil-width:clamp(190px,20vw,280px); }
+body.act-sky .hud-bar { display:none; }
+#sky-notebook[hidden],.sky-descending #valley-life,.sky-descending #sky-evidence { display:none; }
+#sky-notebook { position:absolute; left:14px; top:58px; width:var(--sky-notebook-width); padding:18px; border:1px solid #97734699; border-radius:10px; background:var(--grain),linear-gradient(125deg,#302417f5,#1a130cf5 70%); z-index:24; box-shadow:0 8px 28px #0004; }
+.sky-eyebrow { color:var(--accent); font:10px var(--font-ui); letter-spacing:1.1px; }
+#sky-notebook h2 { font:25px/1.15 var(--font); margin:8px 0 12px; }
+.sky-pages { overflow:visible; }
+.sky-pages p { font:14px/1.45 var(--font); }
+.sky-pages:has(#hud-objective:not(.fade-out)) .sky-intro { display:none; }
+#sky-notebook #hud-objective { position:static; width:auto; max-width:none; transform:none; padding:0; border:0; background:none; box-shadow:none; font:15px/1.4 var(--font); text-align:left; animation:none; }
+#sky-notebook #hud-objective.fade-out { display:none; }
+.sky-context { padding-top:12px; border-top:1px solid #705634; margin-top:12px; }
+.sky-context small { display:block; color:var(--accent); font:10px/1.4 var(--font-ui); letter-spacing:.5px; }
+.sky-context h3 { font:19px/1.25 var(--font); margin:6px 0; }
+.sky-context p { color:#decea9; }
+.sky-context p:empty { display:none; }
+#sky-evidence { position:absolute; top:58px; right:14px; width:var(--sky-soil-width); padding:12px; background:var(--grain),linear-gradient(135deg,#302417f5,#1a130ced); border:1px solid #97734699; border-radius:10px; z-index:24; box-shadow:0 8px 28px #0004; }
+#sky-evidence #erosion-panel { position:static!important; transform:none!important; padding:0!important; border:0; background:none; box-shadow:none; margin-top:8px; }
+#sky-evidence #erosion-panel canvas { width:100%!important; height:auto; border:1px solid #b18a5055; border-radius:6px; }
+#sky-evidence #erosion-caption { max-width:none!important; font:13px/1.35 var(--font); color:var(--ink); margin-top:7px; }
+/* Continue/teaching always occupies the visual centre, independently of the reference panels. */
+body.act-sky #ui-root > .narrator,body.act-sky #dial-wrap ~ .narrator { top:50%; bottom:auto; left:50%; transform:translate(-50%,-50%); width:min(570px,90vw); max-height:75dvh; overflow:auto; padding:24px 28px; font:clamp(18px,2vw,22px)/1.55 var(--font); z-index:55; animation:sky-teaching-in .22s ease-out; }
+body.act-sky .cd-wrap { top:50%; left:50%; transform:translate(-50%,-50%); width:min(510px,90vw); z-index:55; }
+body.act-sky .cd-card { width:100%; padding:22px; }
+body.act-sky .cd-text { font:20px/1.5 var(--font); }
+body.act-sky #valley-life { left:calc(var(--sky-notebook-width) + 32px); bottom:calc(var(--sky-dial-height,260px) + 22px); max-width:min(370px,45vw); padding:13px 17px 14px 20px; border:1px solid #d2ad6860; border-left:3px solid #e0a458; border-radius:4px 12px 12px 4px; background:linear-gradient(110deg,#1d170bed,#292414b3); box-shadow:0 5px 20px #0004; backdrop-filter:blur(8px); text-shadow:0 1px 2px #000; z-index:23; }
+body.act-sky #valley-life strong { font:21px/1.3 var(--font); color:#ffe7af; }
+body.act-sky #valley-life small { font:11px/1.4 var(--font-ui); color:#ecdfc3; margin-top:5px; }
+body.act-sky #dial-wrap { padding:18px 0 max(14px,env(safe-area-inset-bottom)); background:linear-gradient(transparent,rgba(17,12,7,.20) 50%,rgba(17,12,7,.65)); }
+.dial-date-row { display:flex; width:max-content; max-width:100%; margin:0 auto; justify-content:center; align-items:center; gap:12px; }
+#dial-year.dial-year-skin { animation:none; cursor:pointer; border:0; background:none; min-width:150px; padding:0 8px; margin:0; line-height:1.3; }
+.dial-step { display:flex; flex-direction:column; align-items:center; justify-content:center; width:50px; min-height:52px; border:1px solid #b08a4b80; border-radius:9px; background:#251a10bd; color:var(--accent); cursor:pointer; transition:background .15s,transform .15s; }
+.dial-step span { font:26px/1 var(--font-ui); }
+.dial-step small { font:10px var(--font-ui); margin-top:3px; }
+.dial-step:hover { background:#594022; }
+.dial-step:active { transform:translateY(1px) scale(.97); }
+.dial-step:disabled { opacity:.45; cursor:default; }
+#dial-status { text-align:center; font:11px/1.4 var(--font-ui); color:#efdbb5; margin:5px auto 7px; min-height:16px; text-shadow:0 1px 4px #000; }
+body.act-sky #dial-face { margin-bottom:22px; }
+body.act-sky #dial-track { height:var(--dial-track-height,84px); background:rgba(30,22,12,.40); margin:0 20px; transform-origin:50% 100%; transition:transform .22s cubic-bezier(.2,.8,.2,1),background .22s,box-shadow .22s,border-color .22s; }
+body.act-sky .dial-engaged #dial-track { transform:translateY(-7px) scale(1.012,1.07); background:rgba(49,34,17,.76); border-color:#e8ba6c; box-shadow:0 8px 28px #0007,0 0 0 1px #e0a45855,0 0 22px #e0a45818; }
+#dial-track.scrubbing { cursor:grabbing; }
+#dial-track.scrubbing #dial-cursor { box-shadow:0 0 18px 2px #e0a458; }
+#dial-lock:empty { display:none; }
+#dial-lock { color:var(--accent); font:12px var(--font-ui); }
+.dial-marker { border:1px solid transparent; padding:0; width:32px; height:28px; color:var(--ink); background:transparent; border-radius:6px; font:17px var(--font-ui); transition:background .15s,border-color .15s; }
+.dial-marker:hover,.dial-marker:focus-visible { background:#573d24; border-color:var(--accent); outline:none; }
+.dial-marker:disabled { opacity:.45; cursor:default; }
+.dial-marker.lit { transform:translateX(-50%); background:#6d482752; }
+#sky-watch { position:absolute; right:20px; top:0; width:222px; text-align:center; padding:0 4px; }
+.sky-watch-title { font:13px var(--font); color:#ffe4b2; margin-bottom:3px; text-shadow:0 1px 4px #000; }
+.sky-transport { display:flex; align-items:center; justify-content:center; gap:7px; }
+.sky-transport button { cursor:pointer; width:44px; height:36px; border:1px solid #a87e4399; background:#2b1f13e6; border-radius:8px; color:var(--accent); font:17px var(--font-ui); }
+.sky-transport #sky-play { width:52px; height:40px; background:#e0a458; color:#24170c; border-color:#f1c78a; }
+.sky-transport button[aria-pressed=true]:not(#sky-play) { background:#654821; border-color:#edc27c; }
+.sky-transport button:disabled { opacity:.45; cursor:default; }
+#sky-speeds { position:static; background:none; border:0; padding:0; box-shadow:none; margin-top:5px; }
+#sky-speed { width:calc(100% - 22px); height:18px; accent-color:#e0a458; cursor:pointer; }
+.sky-speed-labels { display:flex; justify-content:space-between; gap:0; }
+.sky-speed-labels button { font:10px var(--font-ui); min-height:22px; flex:1; border:0; border-radius:4px; padding:0; color:#e2c89c; background:transparent; cursor:pointer; }
+.sky-speed-labels button[aria-pressed=true] { color:#ffe2a8; background:#674725b5; }
+.sky-rate { font:10px/1.2 var(--font-ui); color:#e8d1aa; margin-top:3px; text-shadow:0 1px 3px #000; }
+#sky-date-editor { position:absolute; width:min(310px,calc(100vw - 24px)); left:50%; bottom:10px; transform:translateX(-50%); z-index:5; background:linear-gradient(145deg,#3b2b1bfa,#1b140dfa); border:1px solid #b18a50; border-radius:12px; box-shadow:0 10px 30px #0007; padding:12px; }
+#ui-root.sky-date-open #dial-track,#ui-root.sky-date-open #dial-face,#ui-root.sky-date-open #dial-status { visibility:hidden; }
+.sky-panel-heading { display:flex; align-items:center; justify-content:space-between; font:10px var(--font-ui); letter-spacing:1px; color:#e5c083; margin-bottom:8px; }
+.sky-close { color:#dec08a; font:22px var(--font-ui); background:transparent; border:0; cursor:pointer; min-width:32px; min-height:32px; }
+.sky-date-fields { display:flex; gap:6px; }
+.sky-date-fields input { width:90px; min-width:0; flex:1; background:#15100a; color:var(--ink); border:1px solid #8c7144; border-radius:6px; padding:8px; font:17px var(--font-ui); }
+.sky-date-fields select { background:#24190f; color:var(--ink); border:1px solid #8c7144; border-radius:6px; padding:7px; }
+#sky-date-editor p { font:12px/1.4 var(--font-ui); color:#dac69e; margin-top:10px; }
+#sky-date-editor[hidden] { display:none; }
+#dial-wrap button:focus-visible,#sky-speed:focus-visible,#sky-date-editor input:focus-visible,#sky-date-editor select:focus-visible { outline:2px solid #ffdb97; outline-offset:3px; }
+body.large-text #sky-notebook p,body.large-text #sky-notebook #hud-objective { font-size:17px; }
+@keyframes sky-teaching-in { from { opacity:0; scale:.98; } to { opacity:1; scale:1; } }
+@media(max-width:1000px) {
+  body.act-sky { --sky-notebook-width:220px; --sky-soil-width:210px; }
+  #sky-notebook { padding:14px; }
+  #sky-notebook h2 { font-size:22px; }
+  #sky-watch { width:200px; right:14px; }
+  .dial-date-row { gap:8px; }
+  #dial-year.dial-year-skin { min-width:125px; font-size:28px; }
+  body.act-sky #valley-life { max-width:310px; }
+}
+@media(max-width:760px) {
+  body.act-sky { --sky-notebook-width:200px; --sky-soil-width:185px; }
+  body.act-sky #dial-wrap { padding-top:116px; }
+  #sky-watch { top:0; width:210px; }
+  .sky-watch-title { font-size:12px; }
+  #sky-watch .sky-rate { display:none; }
+  body.act-sky #valley-life { bottom:calc(var(--sky-dial-height,300px) + 12px); padding:10px 12px; max-width:270px; }
+  body.act-sky #valley-life strong { font-size:17px; }
+  #ui-root.sky-date-open #sky-watch { visibility:hidden; }
+}
+@media(max-width:480px) {
+  body.act-sky #dial-wrap { padding-top:18px; }
+  #sky-watch { position:fixed; top:var(--sky-soil-bottom,245px); right:10px; width:var(--sky-soil-width); }
+  .sky-transport { gap:3px; }
+  .sky-transport button { width:35px; height:35px; }
+  .sky-transport #sky-play { width:42px; height:38px; }
+  body.act-sky { --sky-notebook-width:calc(51vw - 16px); --sky-soil-width:calc(49vw - 16px); }
+  #sky-notebook { left:10px; top:54px; padding:10px; }
+  #sky-evidence { right:10px; top:54px; padding:8px; }
+  .sky-eyebrow { font-size:8px; letter-spacing:.5px; }
+  #sky-notebook h2 { font-size:18px; margin:6px 0 8px; }
+  .sky-pages p,#sky-notebook #hud-objective { font-size:12px; line-height:1.35; }
+  .sky-context { margin-top:8px; padding-top:8px; }
+  .sky-context small { font-size:8px; letter-spacing:0; }
+  .sky-context h3 { font-size:15px; margin:4px 0; }
+  #sky-evidence #erosion-caption { font-size:11px; }
+  body.act-sky #valley-life { left:10px; max-width:var(--sky-notebook-width); padding:8px 11px; }
+  body.act-sky #valley-life strong { font-size:15px; }
+  body.act-sky #valley-life small { font-size:9px; margin-top:3px; }
+  body.act-sky #dial-face { font-size:9px; letter-spacing:0; margin-bottom:18px; }
+  #dial-status { font-size:9px; }
+  #dial-year.dial-year-skin { font-size:25px; min-width:120px; }
+  .dial-step { min-height:44px; width:42px; }
+  body.act-sky #dial-track { margin:0 12px; }
+  body.large-text #sky-notebook p,body.large-text #sky-notebook #hud-objective { font-size:14px; }
+}
+@media(max-height:600px) {
+  #sky-notebook,#sky-evidence { top:48px; }
+  #sky-notebook { padding:10px; }
+  #sky-notebook h2 { font-size:19px; }
+  .sky-pages p,#sky-notebook #hud-objective { font-size:12px; line-height:1.3; }
+  .sky-context { padding-top:7px; margin-top:7px; }
+  .sky-context h3 { font-size:16px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .dial-step,body.act-sky #dial-track { transition:none; }
+  body.act-sky .dial-engaged #dial-track { transform:none; border-color:#ffe1a1; }
+  body.act-sky #ui-root > .narrator { animation:none; }
+}
+
+/* Illustrated discoveries and user-paced time expeditions. */
+#dial-ruler,#dial-markers { position:absolute; inset:0; }
+#dial-markers { pointer-events:none; }
+#dial-markers .dial-marker { pointer-events:auto; width:42px; height:42px; border:1px solid #caa46d88; border-radius:50%; background:#26332d; box-shadow:0 3px 8px #0008; transition:scale .18s ease-out,border-color .18s,box-shadow .18s; }
+#dial-markers .dial-marker img { width:100%;height:100%;object-fit:cover;border-radius:50%;pointer-events:none; }
+#dial-markers .dial-marker:hover,#dial-markers .dial-marker:focus-visible { scale:1.13; border-color:#ffe2a3; box-shadow:0 0 0 3px #e0a45833,0 5px 16px #0009; z-index:4; }
+#dial-markers .dial-marker.lit { border-color:#ffe4ab; box-shadow:0 0 0 2px #e0a45855,0 0 20px #e0a45844; }
+#dial-markers .dial-marker.discovered::after { content:'✓';position:absolute;right:-4px;bottom:-1px;width:15px;height:15px;border-radius:50%;background:#cce0b1;color:#274638;font:11px/15px var(--font-ui); }
+#dial-track::after { content:'';position:absolute;inset:auto 0 0;height:3px;pointer-events:none;opacity:0;background:repeating-linear-gradient(90deg,transparent 0 42px,#e7ba6b 68px,transparent 94px); }
+.time-running #dial-track::after { opacity:.75;animation:time-flow var(--flow-speed,1s) linear infinite; }
+.time-running[data-direction=backward] #dial-track::after { animation-direction:reverse; }
+@keyframes time-flow { to { background-position:-94px 0; } }
+.sky-collection { border:1px solid #b08a4b66;background:#392b19;color:#efcf94;font:11px var(--font-ui);border-radius:6px;padding:8px 10px;margin-top:12px;cursor:pointer;width:100%; }
+.sky-collection::after { content:' ↗'; }
+.sky-collection:disabled { cursor:default;opacity:.6; }
+.sky-discovery-open { display:flex;align-items:center;gap:8px;width:100%;padding:0;text-align:left;background:#19241e;border:1px solid #8d835c88;border-radius:6px;margin-top:8px;color:#ffe0a7;cursor:pointer;font:12px/1.3 var(--font-ui);overflow:hidden; }
+.sky-discovery-open img { width:56px;height:44px;object-fit:cover;flex-shrink:0; }
+.sky-discovery-open span { padding-right:4px; }
+.history-discovery,.time-lesson { position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:75;border:1px solid #c6a577;border-radius:16px;background:var(--grain),linear-gradient(125deg,#30281c,#171d18);color:#f3e5c6;box-shadow:0 24px 80px #0009,0 0 0 100vmax #090e0cc7;pointer-events:auto;animation:discovery-enter .32s cubic-bezier(.16,1,.3,1); }
+.history-discovery { width:min(850px,94vw);max-height:calc(100dvh - 32px);display:grid;grid-template-columns:.85fr 1.15fr;overflow:auto; }
+.discovery-art { position:relative;background:linear-gradient(145deg,#45615a,#172c29);display:flex;align-items:center;padding:18px;min-width:0;border-radius:15px 0 0 15px; }
+.discovery-art img { width:100%;height:auto;aspect-ratio:1.8;border:1px solid #ebd4a277;box-shadow:0 12px 26px #0004; }
+.discovery-year { position:absolute;top:22px;left:22px;font:28px var(--font);color:#ffe0a1;text-shadow:0 2px 10px #000; }
+.discovery-body { padding:25px;min-width:0; }
+.discovery-body h2,.time-lesson h2 { font:29px/1.12 var(--font);margin:10px 0 13px;color:#ffe4b2; }
+.discovery-body>p,.lesson-intro { font:17px/1.5 var(--font); }
+.discovery-question { border-top:1px solid #9c875244;margin-top:17px;padding-top:14px; }
+.discovery-question h3 { font:11px var(--font-ui);text-transform:uppercase;letter-spacing:1px;color:#dfb96f;margin-bottom:8px; }
+.discovery-question>p { font:16px/1.4 var(--font); }
+.discovery-answers,.lesson-choices { display:grid;gap:8px;margin:12px 0; }
+.discovery-answers .btn,.lesson-choices .btn { text-align:left;white-space:normal;min-height:44px;font:15px/1.4 var(--font);padding:10px 13px; }
+.discovery-answers .correct,.lesson-choices .correct { border-color:#b9d3a2;background:#314738; }
+.discovery-feedback:empty,.lesson-feedback:empty { display:none; }
+.discovery-feedback,.lesson-feedback { padding:12px 14px;background:#102b2377;border-left:2px solid #b7d39d;color:#e1edcf;font:16px/1.5 var(--font);margin-top:12px; }
+.discovery-reveal,.lesson-help { border:0;background:transparent;color:#e7c68f;text-decoration:underline;text-underline-offset:4px;padding:8px 0;font:13px var(--font-ui);cursor:pointer; }
+.discovery-footer { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-top:18px; }
+.discovery-stamp { font:11px var(--font-ui);text-transform:uppercase;letter-spacing:.8px;color:#c6dfad; }
+.discovery-stamp.stamped { animation:stamp-in .32s ease-out; }
+.discovery-body .discovery-art-note { font:10px/1.45 var(--font-ui);color:#b9b297;margin-top:15px; }
+.time-lesson { width:min(680px,94vw);max-height:calc(100dvh - 32px);padding:26px;display:flex;flex-direction:column; }
+.time-lesson header { display:flex;justify-content:space-between;gap:12px;align-items:center; }
+.lesson-position { font:11px var(--font-ui);color:#d1c2a2; }
+.lesson-dots { display:flex;gap:5px;margin:12px 0 8px; }
+.lesson-dots i { height:3px;flex:1;background:#76674666;border-radius:3px; }
+.lesson-dots i.filled { background:#ddb879; }
+.lesson-content { overflow:auto;min-height:0;overscroll-behavior:contain;padding:0 3px 3px; }
+.time-lesson footer { display:flex;justify-content:space-between;gap:15px;margin-top:20px;padding-top:15px;border-top:1px solid #987b4d55; }
+.time-lesson footer button { min-height:44px; }
+.lesson-note { font:15px/1.5 var(--font);color:#d9c9a8;margin:16px 0; }
+.date-passports { display:flex;gap:16px;margin:20px 0; }
+.date-passports span { flex:1;padding:16px;border:1px solid #9da97766;background:#253930;border-radius:9px;text-align:center; }
+.date-passports b { display:block;font:29px var(--font);color:#edd5a5; }
+.date-passports small { display:block;font:17px var(--font-ui);color:#bacaaa;margin-top:6px; }
+.time-bridge { display:flex;align-items:center;justify-content:space-between;gap:18px;margin:28px 4px 17px; }
+.bridge-stone { flex:1;position:relative;border:1px solid #b59e6a88;border-radius:10px;background:#283b34;text-align:center;padding:12px 3px;transition:transform .22s,background .22s,box-shadow .22s; }
+.bridge-stone b { display:block;font:32px/1 var(--font); }
+.bridge-stone small { font:11px var(--font-ui); }
+.bridge-stone:has(+ .bridge-stone)::after { content:'→';position:absolute;right:-17px;top:37%;font:16px var(--font-ui);color:#ceb178; }
+.bridge-stone.current { background:#dfb276;color:#241b10;transform:translateY(-6px);box-shadow:0 8px 0 #8b6133,0 12px 28px #e0a45833; }
+.bridge-stone.crossed { border-color:#a8c593;background:#3c5440; }
+.bridge-count { font:12px var(--font-ui);color:#ccdbb5;margin:12px 0; }
+.lesson-formula { font:clamp(24px,4vw,38px)/1.4 var(--font);padding:22px 14px;border:1px solid #bfa27555;background:#142c2499;color:#ffe0a3;text-align:center;border-radius:10px;margin:24px 0; }
+.worked-history { display:flex;gap:16px;align-items:center;margin:18px 0; }
+.worked-history img { width:150px;aspect-ratio:1.25;object-fit:cover;border-radius:8px; }
+.worked-parts p { font:16px/1.4 var(--font);margin:10px 0;animation:stamp-in .24s ease-out; }
+.worked-parts b { display:inline-grid;place-items:center;width:24px;height:24px;margin-right:7px;background:#605338;border-radius:50%;color:#ffdda5;font:12px var(--font-ui); }
+.lesson-answer { display:flex;align-items:end;gap:12px;margin:18px 0; }
+.lesson-answer label { flex:1;min-width:0;font:12px var(--font-ui);color:#e3c995; }
+.lesson-answer input { display:block;width:100%;min-width:0;margin-top:7px;padding:12px;border:1px solid #b2996c;border-radius:6px;background:#17241f;color:#ffe4b3;font:23px var(--font); }
+.history-discovery button:focus-visible,.time-lesson button:focus-visible,.sky-discovery-open:focus-visible,.sky-collection:focus-visible { outline:2px solid #ffdf9a;outline-offset:3px; }
+body.large-text .discovery-body>p,body.large-text .lesson-intro,body.large-text .lesson-feedback { font-size:20px; }
+@keyframes stamp-in { from { opacity:0;transform:translateY(6px) scale(.97); } to { opacity:1;transform:none; } }
+@keyframes discovery-enter { from { opacity:0;translate:0 12px;scale:.98; } to { opacity:1;translate:0;scale:1; } }
+@media(max-width:620px) {
+ .history-discovery { width:min(450px,94vw);display:block; }
+ .discovery-art { padding:0;border-radius:15px 15px 0 0;height:150px;overflow:hidden; }
+ .discovery-art img { width:100%;height:100%;object-fit:cover;border:0; }
+ .discovery-year { top:12px;left:15px;font-size:23px;background:#192c24dd;border-radius:5px;padding:4px 9px; }
+ .discovery-body { padding:18px; }
+ .discovery-body h2,.time-lesson h2 { font-size:25px; }
+ .discovery-body>p,.lesson-intro { font-size:16px; }
+ .time-lesson { padding:18px; }
+ .worked-history { display:block; }
+ .worked-history img { width:100%;height:100px;object-fit:cover; }
+ .time-bridge { gap:12px;margin-left:0;margin-right:0; }
+ .bridge-stone:has(+ .bridge-stone)::after { right:-12px;font-size:12px; }
+ .bridge-stone b { font-size:26px; }
+ .bridge-stone small { font-size:10px; }
+ .sky-collection { font-size:10px;padding:7px 3px;margin-top:8px; }
+ .sky-discovery-open { font-size:10px;gap:5px; }
+ .sky-discovery-open img { width:35px;height:35px; }
+}
+@media(prefers-reduced-motion:reduce) {
+ .history-discovery,.time-lesson,.discovery-stamp.stamped,.worked-parts p,.time-running #dial-track::after { animation:none; }
+ .bridge-stone,#dial-markers .dial-marker { transition:none; }
+ .bridge-stone.current { transform:none; }
+ #dial-markers .dial-marker:hover { scale:1; }
+}
+
+.sky-context:has(.sky-discovery-open) h3 { display:none; }
+@media(max-width:480px) and (max-height:650px) {
+ body.act-sky #dial-wrap { padding-top:8px;padding-bottom:8px; }
+ body.act-sky #dial-face { margin-bottom:8px;font-size:8px; }
+ body.act-sky #dial-status { margin:2px auto;min-height:12px;font-size:8px; }
+ #sky-watch .sky-transport button { height:30px; }
+ #sky-watch .sky-transport #sky-play { height:32px; }
+ #sky-speed { height:12px; }
+ .sky-speed-labels button { min-height:18px; }
+ .sky-watch-title { font-size:11px;margin-bottom:2px; }
+ body.act-sky #valley-life { max-width:none;right:10px;padding:6px 10px; }
+ body.act-sky #valley-life strong { font-size:12px;line-height:1.3; }
+}
+
+.discovery-dismiss { position:absolute;right:10px;top:10px;z-index:2;width:36px;height:36px;border-radius:50%;border:1px solid #c8af81;background:#172720ee;color:#ffdc9d;font:24px var(--font-ui);cursor:pointer; }
+@media(max-width:480px) and (max-height:650px) {
+ #sky-date-editor { padding:8px; }
+ #sky-date-editor .sky-panel-heading { margin-bottom:3px; }
+ #sky-date-editor .sky-close { min-height:28px; }
+ #sky-date-editor p { font-size:10px;line-height:1.3;margin-top:6px; }
+}
+
+@media(min-width:481px) and (max-width:760px) {
+ body.act-sky #dial-wrap { padding-top:18px; }
+ #sky-watch { position:fixed;top:var(--sky-soil-bottom,260px);right:14px;width:var(--sky-soil-width); }
+ body.act-sky #valley-life { left:14px;max-width:var(--sky-notebook-width); }
+}
+
+/* Teaching motion follows the learner's actions; there are no looping rewards. */
+.time-bridge { position:relative;margin-top:60px; }
+.bridge-traveller { position:absolute;top:-37px;width:28px;height:34px;transform:translateX(-50%);pointer-events:none;z-index:2; }
+.bridge-traveller svg { display:block;width:28px;height:34px;overflow:visible;filter:drop-shadow(0 2px 4px #0007); }
+.bridge-crossing-note { min-height:22px;margin:0 0 10px;color:#ead7a2;font:13px/1.5 var(--font-ui); }
+.bridge-count { transform-origin:left center;width:max-content;max-width:100%; }
+.lesson-formula span { display:inline-block;margin:0 .13em; }
+.lesson-formula span:nth-child(3) { color:#c1dba5; }
+.worked-sum { display:flex;flex-wrap:wrap;align-items:center;gap:7px;min-height:36px;margin:12px 0;color:#e2c98f;font:21px/1.4 var(--font); }
+.worked-sum span,.worked-sum strong { display:inline-block; }
+.worked-sum strong { color:#c7dfa7; }
+.worked-parts p { animation:none; }
+.date-passports { perspective:700px; }
+.date-passports small::before { content:'= ';color:#c6d8aa; }
+.lesson-dots i.current { transform-origin:left;animation:lesson-progress-in .4s ease-out; }
+@keyframes lesson-progress-in { from { transform:scaleX(.1);opacity:.4; } to { transform:scaleX(1);opacity:1; } }
+@media(prefers-reduced-motion:reduce) { .lesson-dots i.current { animation:none; } }
+
+.time-lesson .lesson-content { overflow-x:hidden;padding:3px 6px 6px; }

@@ -122,6 +122,26 @@ export class GameAudio {
   }
   step() { this._tone(880, { dur: 0.05, gain: 0.02, type: 'triangle' }); }
 
+  // A single short buffer carries all crossed-year ticks. Dense fast scrubs
+  // become a quiet ratchet without queuing hundreds of oscillator nodes.
+  timelineTicks(count, seconds = .04) {
+    if (!this.ctx || this.ctx.state !== 'running' || count < 1) return;
+    const ctx = this.ctx, duration = Math.max(.025,Math.min(.1,seconds));
+    const length = Math.ceil(ctx.sampleRate * (duration + .007));
+    const buffer = ctx.createBuffer(1,length,ctx.sampleRate), data = buffer.getChannelData(0);
+    const ticks = Math.min(count,512), pulse = Math.floor(ctx.sampleRate*.006);
+    const amplitude = .045 / Math.max(1,Math.sqrt(ticks*.006/duration));
+    for(let i=0;i<ticks;i++) {
+      const start = Math.floor(i*duration*ctx.sampleRate/ticks);
+      for(let j=0;j<pulse && start+j<length;j++) {
+        const envelope = Math.exp(-j/(ctx.sampleRate*.0014));
+        data[start+j] += amplitude*envelope*(Math.sin(j/ctx.sampleRate*2*Math.PI*1700)+.35*Math.sin(j/ctx.sampleRate*2*Math.PI*530));
+      }
+    }
+    const source = ctx.createBufferSource(); source.buffer = buffer; source.connect(this.master);
+    source.onended = () => source.disconnect(); source.start();
+  }
+
   // UI: a 40 ms wooden tick for every button press. Two short partials, no
   // sustain, quiet enough to disappear under narration.
   click() {

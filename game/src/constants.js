@@ -39,11 +39,25 @@ export const YEARS = {
   SCENE_D_YEAR: -5400, // village with pottery, after 6000 BCE
 };
 
+// Small invented journeys used to learn the calendar, not historical dates.
+export const TIME_PRACTICE = { labels: [-3,-2,-1,1,2], gaps: [-2,-1,1,2,3] };
+
 export const UNITS = {
   DECADE: 10,
   CENTURY: 100,
   MILLENNIUM: 1000,
 };
+
+// Chapter 4, pages 65 and 74. The questions use the book's reference year.
+export const BOOK_PRACTICE = {
+  ORDER: [323, -323, 100, -100, -1900, 1090, 2024],
+  CHANDRAGUPTA: 320, RANI: 1828, INDEPENDENCE: 1947,
+  YEARS_AGO: 12000, REFERENCE_CE: 2024, EIGHTH_MILLENNIUM_START: -8000,
+  TWENTIETH_START: 1901, TWENTIETH_END: 2000,
+};
+
+// Illustration keyframes, not claims that these events occurred at this site.
+export const VALLEY_YEARS = [-12000, -8000, -6000, -4500, -3000, -1500, 1, 800, 1500, 1950];
 
 // Gap across the BCE/CE boundary: add both, subtract 1 (4.14).
 export function gapYears(bce, ce) {
@@ -63,8 +77,9 @@ export function fmtNum(n) {
 }
 
 export const WORLD = {
-  SIZE_X: 128,
-  SIZE_Z: 128,
+  SIZE_X: 160,
+  SIZE_Z: 160,
+  CORE_SIZE: 128, // preserve the original valley's river and terrain seed
   SIZE_Y: 24,
   CHUNK: 16,
   WATER_LEVEL: 5,

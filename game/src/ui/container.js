@@ -90,16 +90,19 @@ export function openContainer(G, which, { onMove = null } = {}) {
       <h3 class="inv-sub">${esc(S.container.youTitle)}</h3>`}
       <div class="inv-you-grid"></div>
       <p class="inv-empty inv-you-empty">${esc(S.container.carryNothing)}</p>
-      ${carryOnly ? '' : `<p class="inv-hint">${esc(S.container.takeHint)}</p>`}
+      ${carryOnly ? `<p class="inv-hint">${esc(S.onboarding.selectTool)}</p>` : `<p class="inv-hint">${esc(S.container.takeHint)}</p>`}
       <button class="btn primary chip-btn inv-done">${esc(S.ui.done)}</button>`;
 
     // One delegated listener on the panel, so re-rendering the grids after a
     // move never has to re-wire anything.
     el.addEventListener('click', (e) => {
-      if (carryOnly) return; // nothing to move it to
       const slot = e.target.closest?.('.inv-slot[data-id]');
       if (!slot || !el.contains(slot)) return;
       const id = slot.dataset.id;
+      if (carryOnly) {
+        if (Inv.selectTool(id)) { G.player.equip(ITEMS[id].equip); G.audio?.blip?.(); }
+        return;
+      }
       const fromYou = !!slot.closest('.inv-you-grid');
       const from = fromYou ? 'player' : which;
       const to = fromYou ? which : 'player';
@@ -115,7 +118,7 @@ export function openContainer(G, which, { onMove = null } = {}) {
       // The world was frozen while the panel was up; hand it back before the
       // caller's continuation runs, and swallow the closing tap so it cannot
       // land as an interact on the next frame.
-      G.input?.setEnabled?.(true);
+      // Shared modal scope restores the previous input state.
       G.input?.clearEdges?.();
       Inv.flush();
       resolve();
@@ -128,7 +131,7 @@ export function openContainer(G, which, { onMove = null } = {}) {
     // others are read-only and it does not matter if you wander while they are
     // open; here you are reaching into a box two feet away, and walking off
     // mid-transfer reads as a bug.
-    G.input?.setEnabled?.(false);
+    // Input is owned by wirePanelClose's shared scope.
     G.hud.hidePrompt();
     G.hud.root.appendChild(el);
     render();

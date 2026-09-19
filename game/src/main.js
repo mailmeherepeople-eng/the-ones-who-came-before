@@ -14,6 +14,7 @@ import { FX } from './fx/fx.js';
 import { Settings } from './settings.js';
 import { SITES } from './world/terrain.js';
 import { buildSceneB } from './world/states.js';
+import { installEquipment } from './ui/equipment.js';
 
 const canvas = document.getElementById('gl');
 const uiRoot = document.getElementById('ui-root');
@@ -77,12 +78,17 @@ G.player = new Player(G.world, G.renderer.camera, G.renderer.scene); // scene â†
 G.mesher = new ChunkMesher(G.world, G.renderer.scene);
 G.renderer.onContextRestored = () => G.mesher.remeshAll();
 G.hud.input = G.input;
+uiRoot.gameInput = G.input;
 G.audio = SFX;
+const equipment = installEquipment(G);
 
 // settings -> live game state. subscribe() fires once immediately, so the
 // saved preference is applied at boot without duplicating the logic here.
 Settings.subscribe(() => {
   G.player.lockCamera = Settings.get('lockCamera');
+  G.player.gentleCamera = Settings.get('gentleCamera');
+  G.player.lookScale = Settings.get('sensitivity') ? 0.55 : 1;
+  document.body.classList.toggle('large-text', Settings.get('largeText'));
   G.renderer.setRich(Settings.get('rich'));
 });
 
@@ -139,6 +145,7 @@ function nearestInteract() {
   let best = null, bestD = 1e9;
   for (const o of G.interactables) {
     if (!o.enabled) continue;
+    if (G.tutorialActive && o.id !== 'training-basket') continue;
     if (o.follow && (o.follow.downed || o.follow.dead)) continue;
     const at = interactAt(o);
     const d = Math.hypot(G.player.pos.x - at.x, G.player.pos.z - at.z);
@@ -153,6 +160,8 @@ let interactBusy = false;
 let devTp = new URLSearchParams(location.search).get('tp');
 G.renderer.onFrame = (dt) => {
   const inp = G.input.poll();
+  equipment.update(inp);
+  if (!document.hidden && !['boot', 'title'].includes(G.mode)) Save.data.activeMs += dt * 1000;
   if (G.mode === 'ground') {
     if (devTp !== null) {
       const [tx, tz] = devTp.split(',').map(Number);
@@ -161,8 +170,9 @@ G.renderer.onFrame = (dt) => {
     }
     G.player.update(dt, inp);
     G.player.resolveCharacters(G.npcs); // people and animals are solid bodies
+    G.tutorialUpdate?.(dt, inp);
     const target = nearestInteract();
-    if (target && !interactBusy) {
+    if (target && !interactBusy && !uiRoot.dataset.modal) {
       // icon + verb. An interactable with no label falls back to the generic
       // "tap/press E to interact", which is what every one of them used to say.
       G.hud.showPrompt(target.prompt, target.label
@@ -265,8 +275,8 @@ async function openActMenu() {
   }
 }
 window.addEventListener('keydown', (e) => {
-  if (e.key !== 'Tab') return;
-  e.preventDefault(); // keep focus from cycling through HUD buttons
+  if (e.code !== 'KeyM' || !e.altKey || uiRoot.dataset.modal) return;
+  e.preventDefault();
   const a = document.activeElement;
   if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
   openActMenu();
@@ -287,6 +297,7 @@ G.hud.onCodex = async () => {
 
 // ---------- boot ----------
 async function boot() {
+  await Save.ready;
   const q = new URLSearchParams(location.search);
 
   // Teacher route. Shows what this device has recorded and stops there: no
@@ -359,10 +370,10 @@ async function boot() {
     // replace an evening with the textbook, and a student who is not told that
     // will treat it as a cartoon and revise from the book anyway. It runs
     // before the promise cards, and only on a genuinely new game.
-    await G.hud.card([S.howTo.card1, S.howTo.card2, S.howTo.card3]);
-    await G.hud.card([{ text: S.openingCard }, S.openingCard2]);
+    await G.hud.card([S.openingCard]);
     await playFrom(1, null);
   } else {
+    if (Save.data.objective) G.hud.toast(S.revision.resume(Save.data.objective), 6500);
     await playFrom(Math.max(1, Save.data.act), Save.data.beat);
   }
 }
@@ -412,3 +423,12 @@ function startTitleWorld(titleEl) {
 boot().catch((e) => {
   console.error('fatal', e);
 });
+
+let saveWarning = false;
+window.addEventListener('save-status', e => {
+  if (!e.detail.ok && !saveWarning) { saveWarning = true; G.hud.toast(S.revision.saveFailed, 15000); }
+  if (e.detail.ok) saveWarning = false;
+});
+window.addEventListener('pagehide', () => Save.persist());
+setInterval(() => { if (Save.hasProgress && !document.hidden) Save.persist(); }, 15000);
+G.hud.onActMenu = openActMenu;

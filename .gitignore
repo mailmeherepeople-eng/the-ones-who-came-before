@@ -79,11 +79,16 @@ shot-*.png
 *reference*.png
 *reference*.jpg
 mockup*.png
+/cahnges to be added.jpg
+/changes needed.jpg
+/newer changes.png
+/not aligned.jpg
 
 # --- Large source material (exceeds GitHub's 100 MB per-file limit) ---
 # "social science textbooks/class 6.zip" is the ~201 MB NCERT Class 6 textbook
 # bundle used as the content source. Reference input, not project output.
 social science textbooks/
+fees1dd/
 
 # --- OS / editor cruft ---
 Thumbs.db

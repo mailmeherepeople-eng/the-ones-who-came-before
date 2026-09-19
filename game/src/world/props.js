@@ -624,6 +624,52 @@ export function makeBerryBush(x, y, z) {
   return api;
 }
 
+// Reuse the exact bush geometry for every wild plant, in two draw calls total.
+// Picking hides one instance's fruit; its trunk and leaves remain in place.
+export function makeBerryPatch(placements) {
+  const group = new THREE.Group(); group.name = 'wildBerryBushes';
+  const template = makeBerryBush(0,0,0);
+  template.group.updateMatrixWorld(true);
+  const batches = [];
+  template.group.traverse(mesh => {
+    if (!mesh.isMesh) return;
+    const fruit = mesh.parent.name === 'berries';
+    const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+    const instances = new THREE.InstancedMesh(geometry,mesh.material,placements.length);
+    instances.name = fruit ? 'berryFruit' : 'berryFoliage';
+    instances.castShadow = true; instances.receiveShadow = true;
+    if (fruit) instances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    group.add(instances); batches.push({instances,fruit});
+  });
+  template.group.traverse(mesh => { if (mesh.isMesh) mesh.geometry.dispose(); });
+  const matrix = new THREE.Matrix4(), dummy = new THREE.Object3D();
+  const transforms = placements.map(p => {
+    dummy.position.set(p.x,p.y,p.z);
+    dummy.rotation.y = (p.x*7+p.z*13)%6.28;
+    dummy.updateMatrix(); return dummy.matrix.clone();
+  });
+  for (const {instances} of batches) {
+    transforms.forEach((m,i)=>instances.setMatrixAt(i,m));
+    instances.computeBoundingSphere(); // full bounds remain valid when fruit hides
+  }
+  const plants = placements.map((p,i) => {
+    const plant = {
+      position: new THREE.Vector3(p.x,p.y,p.z), hasBerries:true,
+      setBerries(value) {
+        plant.hasBerries=!!value;
+        matrix.copy(transforms[i]);
+        if(!plant.hasBerries) matrix.scale(new THREE.Vector3(0,0,0));
+        for (const {instances,fruit} of batches) if(fruit) {
+          instances.setMatrixAt(i,matrix); instances.instanceMatrix.needsUpdate=true;
+        }
+      },
+    };
+    if(p.hasBerries===false) plant.setBerries(false);
+    return plant;
+  });
+  return {group,plants,setBerries(value){for(const plant of plants)plant.setBerries(value);}};
+}
+
 // The band's shared store: a real lidded chest (~1.1 × 0.6 × 0.75) with TWO
 // states — closed (lid down, contents hidden) and open (lid swung back on its
 // hinge, the shared tools visible inside). Front face is +z; a spear stays
@@ -809,6 +855,7 @@ const SHARED_MATS = new Set([...Object.values(MAT), MERGED_MAT]);
 export function disposeGroup(scene, group) {
   scene.remove(group);
   group.traverse?.((o) => {
+    if (o.isInstancedMesh) o.dispose();
     o.geometry?.dispose?.();
     const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
     for (const m of mats) {

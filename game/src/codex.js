@@ -27,6 +27,7 @@
 
 import { S } from './strings.js';
 import { Save } from './save.js';
+import { teachableFor } from './syllabus.js';
 
 // { id, syllabus, icon } — text lives in strings.js under S.codex[id], per the
 // house rule that every user-visible string is in one file.
@@ -51,13 +52,10 @@ export const CODEX_ACT1 = [
   { id: 'hamlet', syllabus: '4.50', icon: '🏡' },
 ];
 
-// Filled by the act 2 rework. Empty is correct today, not an oversight: act 2
-// currently teaches a third of the syllabus through 32 text screens and none of
-// it is retrievable, which is the single biggest gap in the game.
-export const CODEX_ACT2 = [];
+// Later acts use syllabus IDs directly so every taught term is reviewable.
+export const CODEX_ACT2 = teachableFor(2).map(item => ({ id:item.id, syllabus:item.id, icon:'◷' }));
 
-// Filled by the act 3 rework.
-export const CODEX_ACT3 = [];
+export const CODEX_ACT3 = teachableFor(3).map(item => ({ id:item.id, syllabus:item.id, icon:'⌕' }));
 
 export const CODEX = [...CODEX_ACT1, ...CODEX_ACT2, ...CODEX_ACT3];
 
@@ -130,4 +128,8 @@ export function master(G, id) {
   if (!isMastered(id)) Save.setCodex(id, { mastered: Date.now() });
   refreshCodexBadge(G);
   return entry;
+}
+
+export function teachItems(G, ids) {
+  for (const id of ids) teach(G, id);
 }

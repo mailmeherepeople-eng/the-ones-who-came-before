@@ -5,6 +5,8 @@ import { Settings, SETTINGS } from '../settings.js';
 import { Sound, voiceIdFor } from '../sound.js';
 import { iconFor } from './icons.js';
 import { SFX } from '../audio.js';
+import { Save } from '../save.js';
+import { activity } from './activity.js';
 
 export class HUD {
   constructor(uiRoot) {
@@ -112,7 +114,9 @@ export class HUD {
       box.addEventListener('change', () => Settings.set(s.id, box.checked));
       list.appendChild(row);
     }
+    const scope = activity(this.root, el, this.input);
     const close = () => {
+      scope.close();
       el.remove();
       this._settingsPanel = null;
       this.input?.clearEdges(); // the closing tap must not also interact
@@ -120,13 +124,36 @@ export class HUD {
     el.querySelector('.set-close').addEventListener('click', close);
     // click the dimmed backdrop (but not the panel) to dismiss
     el.addEventListener('pointerdown', (e) => { if (e.target === el) close(); });
-    addEventListener('keydown', function onEsc(e) {
-      if (e.code !== 'Escape') return;
-      removeEventListener('keydown', onEsc);
-      close();
-    });
+    const onEsc = e => { if (e.code === 'Escape') { e.stopImmediatePropagation(); close(); } };
+    el.addEventListener('keydown', onEsc);
+    scope.cleanup(() => el.removeEventListener('keydown', onEsc));
     this.root.appendChild(el);
     this._settingsPanel = el;
+    const action = (label, fn) => {
+      const b = document.createElement('button'); b.className = 'btn small'; b.textContent = label;
+      b.addEventListener('click', fn); el.querySelector('.settings-panel').appendChild(b);
+    };
+    action(S.onboarding.controls, async () => { close(); await this.card([this.input?.isTouch ? S.onboarding.controlsTouch : S.onboarding.controlsBody]); });
+    action(S.revision.journal, async () => { const { downloadJournal } = await import('./journal.js'); downloadJournal(); });
+    action(S.textbook.title, async () => { close(); const { chapterNotebook } = await import('./chapterNotebook.js'); await chapterNotebook(this.root); });
+    action(S.revision.actMenu, () => { close(); this.onActMenu?.(); });
+    action(S.revision.exportSave, () => {
+      const url = URL.createObjectURL(new Blob([Save.export()], {type:'application/json'}));
+      const a = document.createElement('a'); a.href = url; a.download = 'my-history-story.json'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    });
+    action(S.revision.importSave, () => {
+      const file = document.createElement('input'); file.type = 'file'; file.accept = '.json,application/json';
+      file.addEventListener('change', async () => {
+        if (!file.files[0]) return;
+        const selected = file.files[0];
+        close();
+        if (await this.choice(S.revision.importConfirm, [S.newGameNo, S.newGameYes]) !== 1) return;
+        try { await Save.import(await selected.text()); location.reload(); }
+        catch { this.toast(S.revision.importFailed, 8000); }
+      });
+      file.click();
+    });
   }
 
   setObjective(text) {
@@ -134,6 +161,7 @@ export class HUD {
     // nothing like the dial hint can linger into a later act
     this.hideHint();
     if (!text) { this.objectiveEl.classList.add('fade-out'); return; }
+    if (Save.data.objective !== text) { Save.data.objective = text; Save.persist(); }
     this.objectiveEl.textContent = text;
     this.objectiveEl.classList.remove('fade-out');
   }
@@ -256,14 +284,15 @@ export class HUD {
           requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
-        clip.ended.then(() => done());
+        if (Settings.get('autoAdvance')) clip.ended.then(() => done());
       }
       // announce and activate as a button for assistive tech. Kept a div on
       // purpose: `.narrator .tap` is styled for a span, and a real <button>
       // would drag in a UA background/border reset for no behavioural gain.
       el.setAttribute('role', 'button');
       el.tabIndex = 0;
-      this.root.appendChild(el);
+      (this.narrationRoot ?? this.root).appendChild(el);
+      if (this.narrationRoot) el.scrollIntoView({ block: 'nearest' });
       this._letterbox(true);
       SFX.page();
       let closed = false;
@@ -288,6 +317,7 @@ export class HUD {
       };
       const onKey = (e) => {
         if (e.repeat) return;
+        if (e.target.closest?.('input,select,textarea,button') && !el.contains(e.target)) return;
         if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') done(e);
       };
       // pointerdown is the real-finger path (no 300 ms tap delay); click also
@@ -333,6 +363,7 @@ export class HUD {
     const el = document.createElement('div');
     el.className = 'card-overlay';
     this.root.appendChild(el);
+    const scope = activity(this.root, el, this.input);
     SFX.page();
     for (let i = 0; i < list.length; i++) {
       const entry = list[i];
@@ -372,16 +403,18 @@ export class HUD {
             this.input?.clearEdges();
             res();
           };
+          btn.focus();
           btn.addEventListener('click', finish, { once: true });
           const onKey = (e) => {
             if (e.repeat) return;
             if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyE') finish();
           };
           addEventListener('keydown', onKey);
-          clip?.ended.then(finish); // the clip has finished reading: move on
+          if (Settings.get('autoAdvance')) clip?.ended.then(finish); // the clip has finished reading: move on
         });
       }
     }
+    scope.close();
     el.remove();
   }
 
@@ -392,11 +425,12 @@ export class HUD {
       el.className = 'choice-box';
       el.innerHTML = `<h3></h3>`;
       el.querySelector('h3').textContent = title;
+      const scope = activity(this.root, el, this.input);
       options.forEach((opt, i) => {
         const b = document.createElement('button');
         b.className = 'btn';
         b.textContent = opt;
-        b.addEventListener('click', () => { el.remove(); resolve(i); });
+        b.addEventListener('click', () => { scope.close(); el.remove(); resolve(i); });
         el.appendChild(b);
       });
       this.root.appendChild(el);

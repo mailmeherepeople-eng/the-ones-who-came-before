@@ -23,6 +23,7 @@ import { S } from './strings.js';
 import { Save, SLOT_KEY } from './save.js';
 import { SAVE_KEY } from './constants.js';
 import { TEACHABLE } from './syllabus.js';
+import { snapshotList } from './storage.js';
 import { wirePanelClose } from './ui/report.js';
 
 export const RESULTS_SCHEMA = 1;
@@ -89,7 +90,7 @@ export function buildResults(data = Save.data, slotId = currentSlot()) {
     },
     // beatTimes has been recorded since the save system was written and read by
     // nothing until now. Time on task, free.
-    elapsedMs: stamps.length > 1 ? Math.max(...stamps) - Math.min(...stamps) : 0,
+    elapsedMs: data?.activeMs ?? 0,
     beatTimes,
     items,
   };
@@ -98,7 +99,8 @@ export function buildResults(data = Save.data, slotId = currentSlot()) {
 // ---------- csv ----------
 
 function csvCell(v) {
-  const s = v === null || v === undefined ? '' : String(v);
+  const raw = v === null || v === undefined ? '' : String(v);
+  const s = /^[=+@\-]/.test(raw) ? "'" + raw : raw;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -180,7 +182,7 @@ export async function askIdentity(G) {
   el.querySelector('.rep-body').textContent = S.pilot.note;
   el.querySelector('#pilot-go').textContent = S.pilot.start;
   const input = el.querySelector('#pilot-name');
-  input.value = existing ?? '';
+  input.value = Save.data.session?.label ?? existing ?? '';
   G.hud.root.appendChild(el);
   input.focus();
 
@@ -194,25 +196,31 @@ export async function askIdentity(G) {
 
   // Anything unusable falls back to the ordinary single save rather than
   // creating a slot called "" that nobody can find again.
-  const slot = label.replace(/[^\w\- ]+/g, '').replace(/\s+/g, '-').slice(0, 40);
-  if (!slot) return null;
-  Save.useSlot(slot); // also remembers the slot across reloads
+  if (!label) { await Save.useSlot(null); return null; }
+  const matches = listSlots().filter(id => readSlot(id)?.session?.label === label);
+  const durable = await snapshotList().catch(()=>[]);
+  for(const [key,data] of durable) if(key.startsWith(SAVE_KEY+':') && data.session?.label===label) matches.push(key.slice(SAVE_KEY.length+1));
+  const slot = matches[0] ?? (Save.data.session?.label === label ? existing : null) ?? crypto.randomUUID();
+  await Save.useSlot(slot); // also remembers the slot across reloads
   Save.setSession({ id: slot, label, startedAt: Save.data.session.startedAt ?? Date.now() });
   return slot;
 }
 
 // ---------- the on-screen summary ----------
 
-export function resultsPanel(G) {
+export async function resultsPanel(G) {
+  const durable = new Map(await snapshotList().catch(() => []));
   return new Promise((resolve) => {
     // Every save on the device, sloted or not. The unsloted one is included
     // whenever it holds real progress, because a tablet that was played on
     // BEFORE the teacher switched pilot mode on still has a child's session in
     // it, and silently dropping that row would lose data nobody could recover.
-    const plain = readSlot(null);
+    const newest = (a,b) => (a?.updatedAt ?? 0) >= (b?.updatedAt ?? 0) ? a : b;
+    const plain = newest(readSlot(null), durable.get(SAVE_KEY));
+    const slotIds = new Set([...listSlots(), ...[...durable.keys()].filter(k=>k.startsWith(SAVE_KEY+':')).map(k=>k.slice(SAVE_KEY.length+1))]);
     const payloads = [
       ...(plain && plain.beat !== 'start' ? [buildResults(plain, null)] : []),
-      ...listSlots().map((s) => buildResults(readSlot(s), s)),
+      ...[...slotIds].map(s => buildResults(newest(readSlot(s),durable.get(SAVE_KEY+':'+s)),s)),
     ];
     // Nothing played yet: still show the (empty) live session rather than an
     // empty table, so a teacher checking setup sees the report working.

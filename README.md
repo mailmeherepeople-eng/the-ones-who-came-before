@@ -38,9 +38,9 @@ Then open <http://localhost:8321>.
 
 Vanilla JavaScript ES modules with Three.js v0.185 vendored into `game/vendor/` — the game
 runs offline after first load and has no toolchain at all. Vertex-coloured voxel chunks
-(128×24×128) with culled meshing and per-vertex ambient occlusion, a 30 fps limiter, a
+(160×24×160) with culled meshing and per-vertex ambient occlusion, a 30 fps limiter, a
 capped pixel ratio, WebGL context-loss recovery and a hidden-tab logic heartbeat.
-`localStorage` saves with a checkpoint at every beat.
+Full story snapshots in `localStorage` and IndexedDB, including original artwork, plus activity checkpoints and save import/export.
 
 There is also a full in-game **world editor** (`?edit` or **F2**) — flight, click-select,
 terrain brush, `.glb`/`.vox` import, a 16×16 per-face block painter — written against a
@@ -77,7 +77,7 @@ repo (see CLAUDE.md rule 1). They live on the author's disk and in the vault.
 
 `?fast` (3-second countdowns) · `?act=2` / `?act=3` (jump with seeded records) ·
 `?dev` (expose `window.G`) · `?tp=x,z` (teleport) · `?edit` (world editor) ·
-**Tab** (act menu) · **F2** (editor)
+**Alt+M** (act menu; also in Settings) · **F2** (editor)
 
 ## Not in this repo
 
