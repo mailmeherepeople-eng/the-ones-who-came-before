@@ -1562,3 +1562,46 @@ numbers) darkened every folded mesh a second time, since Vivid existed.
 `enhance(mat, { linearColors: true })` skips the decode (own program cache
 key), and `MERGED_MAT` passes it. Every folded prop and NPC is brighter in
 Vivid now, at its authored colour.
+
+## 32. No hair flicker, a face for everyone, a running river, a taller waterfall
+
+Updated 28 October 2026, 01:40 IST (Asia/Kolkata).
+
+Asks of 28 October: "there is some sort of Z fighting going on in the hair of the player character", "the other
+tribe members need similar revamp to their appearance; make each one look distinct", "water should be flowing
+regardless of the act", "make the waterfall higher; how much can the map be changed without causing issues in the
+performance and playability in phones?". Service worker cache `towcb-v17`.
+
+### 32.1 The hairline flicker
+
+Z-fighting: the hair cap's front face sat exactly on the forehead's plane (z 0.19) and the back hair matched the
+cap's width, so skin and hair fought over the same pixels as the camera moved. Every overlapping box on the player
+now clears its neighbours by at least 0.01 (cap 0.43 x 0.42, fringe in front of it, side locks behind the ears),
+and three smaller coincidences went the same way (hem, foot soles, beads). Rule for any character: no two
+overlapping boxes share a face plane.
+
+### 32.2 A look for every character (`npc/npc.js`)
+
+A look is plain data: hair (short, long, topknot, braids, shaved, bun), face paint (stripes, dots, chin), dress
+(kilt, long, apron), a fur mantle, a necklace (beads, shells, teeth), arm bands, a headband and feather, a beard,
+a bag. The band are hand-picked (`LOOKS`): the elder (grey bun, fur shawl, long dress, beads, staff), the hunter
+(feathered headband, ochre stripes, fur on one shoulder), the fire-keeper (braids, red dress, shells, dots), the
+knapper (shaved, beard, apron, broad), the child (topknot, bead bracelet), plus the chief and the trader. Anyone
+else gets a hashed mix. Act 3's villagers pass `modern: true`: shirts, kurtas, saris and trousers, never fur, paint
+or bone. Every face has eyes with whites, brows, nose, mouth and ears. Details fold into their moving part, so a
+character is still about eight draw calls.
+
+### 32.3 The river runs from Act 1; the waterfall is 15 blocks tall
+
+- `buildBase` no longer freezes the river surface in the cold scenes: thin shore ice at the edges only (z < 26),
+  the middle runs. The waterfall flows in every era; in the ice age the glacier feeds the upper river.
+- `carveWaterfall`: the upper river now sits at y 20 in a rock headwall (banks 21, walls 22, shoulders stepping
+  down to the natural cliff), so the drop is 15 blocks (was 9). Cost: a few hundred rock faces in the chunks the
+  falls already used, no new draw calls.
+- How far the map can go: the world is 24 blocks tall, so about 15 blocks of drop is the ceiling for local
+  reshaping. Higher needs `WORLD.SIZE_Y` raised (24 to 32 is a third more work in every remesh, which is exactly
+  the Act 2 era-flip stall on phones). Reshaping is safe where nobody walks (the fenced gorge); near paths, banks,
+  the camp or beat sites it would undo the hand-verified walkability.
+- Scene A crossings: with the northern river no longer frozen, crossing near the camp means the log crossing at
+  z 37 or swimming (banks are climbable everywhere). `regression.mjs` passes, including the walkers-on-valid-ground
+  check.

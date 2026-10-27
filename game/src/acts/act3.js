@@ -76,10 +76,10 @@ export async function runAct3(G, resumeBeat = null) {
   const mv = SITES.modernVillage;
   ctx.ambients = [
     new Npc(G.renderer.scene, G.hud.root, G.renderer.camera, {
-      x: mv.x + 6, z: mv.z - 2, world: G.world, wander: 2, wrap: 0x8a6a3d, name: 'ambient-a',
+      x: mv.x + 6, z: mv.z - 2, world: G.world, wander: 2, wrap: 0x8a6a3d, name: 'ambient-a', modern: true,
     }),
     new Npc(G.renderer.scene, G.hud.root, G.renderer.camera, {
-      x: mv.x - 6, z: mv.z + 4, world: G.world, wander: 2, wrap: 0x6d5a70, name: 'ambient-b',
+      x: mv.x - 6, z: mv.z + 4, world: G.world, wander: 2, wrap: 0x6d5a70, name: 'ambient-b', modern: true,
     }),
   ];
   G.npcs.push(...ctx.ambients);
@@ -694,7 +694,7 @@ async function interviews(ctx) {
   const done = [];
   for (const p of people) {
     const npc = new Npc(G.renderer.scene, G.hud.root, G.renderer.camera, {
-      x: p.x, z: p.z, world: G.world, wander: 2, wrap: p.wrap, name: p.key, elder: p.key === 'gm',
+      x: p.x, z: p.z, world: G.world, wander: 2, wrap: p.wrap, name: p.key, elder: p.key === 'gm', modern: true,
     });
     G.npcs.push(npc);
     done.push(new Promise((resolve) => {

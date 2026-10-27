@@ -57,7 +57,7 @@ systems; `acts/beats.js` checkpoints each beat, and a beat whose record exists i
 | `world/shade.js` | `enhance()` for every material: sun mask, mist, clouds, sway, water, Vivid light model, dark zone, glows |
 | `world/props.js`, `merge.js`, `atlas.js` | ~25 prop factories; `foldStatic` mesh folding; the painted-block texture atlas |
 | `player/player.js` | AABB physics, jump, swim and breach, camera boom, model (face, topknot, fur, beads, hide wrap; each moving part folded, CL §31.3), equip, trauma shake, character collision |
-| `npc/npc.js`, `npc/ambient.js` | `Npc` and `Animal`: movement, carry, poses, bubbles, talk voice; the working-day scheduler |
+| `npc/npc.js`, `npc/ambient.js` | `Npc` and `Animal`: movement, carry, poses, bubbles, talk voice, looks (`LOOKS` per named character, a hashed mix otherwise, `modern: true` for Act 3; CL §32.2); the working-day scheduler |
 | `fx/fx.js` | pooled particles (2 draw calls), rings, pillars, waves, motes |
 | `acts/act1.js` | Act 1 scenes A to D (1,673 lines: frozen, split it before it grows) |
 | `acts/onboarding.js`, `gathering.js` | the 12-stage cave tutorial and valley reveal call; the resumable first gathering task |
@@ -128,11 +128,14 @@ Engine details worth knowing:
   sunlit cracks from y 14 up. The rock mass is x 1..36, z 1..22. `regression.mjs` walks it (CL §29.4). Twelve wall
   torches (`TRAINING_CAVE.torches`, `props.makeTorch`, no scene lights) for all of Scene A; the practice rooms have
   pale sandstone walls, the passage out stays dark (CL §31.1).
-- **Waterfall:** the river begins at `WATERFALL` (`world/terrain.js`): the gorge floor behind the gorge mouth is raised
-  to y 14 and ends in a lip at z 12; `props.makeWaterfall` (made once in `main.js`, ticked every frame) shows while
-  the lip holds water. In ice scenes it is a frozen curtain; it flows from Scene B, after the thaw (CL §31.2).
+- **Waterfall:** the river begins at `WATERFALL` (`world/terrain.js`): a rock headwall (y 22) behind the gorge mouth
+  holds the upper river at y 20, which falls 15 blocks off a lip at z 12 into the plunge pool. `props.makeWaterfall`
+  (made once in `main.js`, ticked every frame) shows while the lip holds water, which is every era: it flows from
+  Act 1, fed by the glacier in the ice age. The world is 24 tall; going higher means raising `WORLD.SIZE_Y`, which
+  costs every remesh on a phone (CL §31.2, §32.3).
 - Eras come from `world/states.js` stages: ice camp, thaw, hamlet, village, ruins, grassed mound, present day.
-  Ice-age Scene A is pale and frozen; settled eras warm; Act 3 has a light morning mist (0.22).
+  Ice-age Scene A is pale and cold, but its river runs (only thin shore ice at the edges, z < 26); settled eras warm;
+  Act 3 has a light morning mist (0.22).
 - Not done: the world edge is a flat wall into fog; the lit style was not retuned for the new palette.
 
 ## 5. The playthrough, beat by beat

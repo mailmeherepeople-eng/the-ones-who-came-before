@@ -3,15 +3,14 @@
 Cap 6 KB, only what is current. Read `AGENTS.md` first. When something here is done, take it out (the record goes
 in `docs/CHANGELOG.md`).
 
-## Resume here (2026-10-28 01:30 IST)
+## Resume here (2026-10-28 01:40 IST)
 
-- Live on Pages: 65b544d, service worker `towcb-v15`. Slice 1 of the 27 Oct visual plan has shipped:
-  Vivid is the default look on every device, a central-Indian palette and trees, a ~90-block training cave, and a
-  wordless valley reveal when the player steps out of it (CHANGELOG §29).
-- Committed on `main`, not pushed (cache `towcb-v16`): this docs layout and the size gate (§30); twelve torches in
-  the training cave, a waterfall where the river starts (frozen until the thaw), a better player model, and folded
-  props and NPCs no longer too dark in Vivid (§31). Push when the user says.
-- Waiting for the user's play: slice 1 and §31 on a real phone (not measured on one yet).
+- Live on Pages: 573c546, service worker `towcb-v16`: slice 1 (CHANGELOG §29), this docs layout and size gate (§30),
+  cave torches, the waterfall, the new player model, true Vivid colours for folded meshes (§31).
+- Committed on `main`, not pushed (cache `towcb-v17`): the player's hairline flicker fixed, every tribe member a
+  distinct look (Act 3 villagers in modern clothes), the river running in the ice age, a 15-block waterfall (§32).
+  Push when the user says.
+- Waiting for the user's play: all of it on a real phone (not measured on one yet).
 
 ## Where things stand
 

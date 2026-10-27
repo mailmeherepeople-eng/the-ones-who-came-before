@@ -17,7 +17,7 @@
 //      (see the fetch handler below for why cache-first was wrong here).
 //
 // BUMP CACHE ON EVERY DEPLOY.
-const CACHE = 'towcb-v16';
+const CACHE = 'towcb-v17';
 
 // Enumerated rather than globbed: no build step here, so there is nothing to
 // generate a manifest, and an explicit list is greppable and diffable. Missing

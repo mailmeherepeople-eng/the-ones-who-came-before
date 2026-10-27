@@ -477,36 +477,132 @@ export class Npc {
     this._r = 0.3 * s;
     this._shR = 0.42 * s;
     const h = hashStr(this.name);
-    const skin = opts.skin ?? SKIN[h % SKIN.length];
-    const wrap = opts.wrap ?? WRAP[(h >> 3) % WRAP.length];
-    const hairC = opts.elder ? 0xd8d3c8 : HAIR[(h >> 5) % HAIR.length];
+    // ---- the look ----
+    // 2026-10-28: "the other tribe members need a similar revamp to their
+    // appearance; make each one look distinct". A look is plain data (see
+    // LOOKS and lookFor below the class): hair, paint, dress, ornaments. The
+    // band have hand-picked looks; everyone else gets a hashed mix; `modern`
+    // (Act 3) draws from present-day clothes only. Same parts, joints and
+    // names as before (the update loop moves body, head, legs, arms; carried
+    // items attach to the arms). No two overlapping boxes share a face plane
+    // (a shared plane flickers): every piece clears its neighbour by >= 0.01.
+    const look = lookFor(this.name, opts, h);
+    const skin = opts.skin ?? look.skin ?? SKIN[h % SKIN.length];
+    const wrap = opts.wrap ?? look.wrap ?? WRAP[(h >> 3) % WRAP.length];
+    const hairC = look.hairC ?? (opts.elder ? 0xd8d3c8 : HAIR[(h >> 5) % HAIR.length]);
+    const legC = look.legs ?? skin; // trousers for modern looks
+    const k = s * (look.wide ? 1.08 : 1);
 
     const g = new THREE.Group();
     const fig = this.fig = new THREE.Group();
 
-    // torso: two-tone wrap with belt + shoulder drape
-    this.body = box(0.5 * s, 0.6 * s, 0.32 * s, wrap, 0, 0.88 * s, 0);
+    // torso; the dress and ornaments hang on it or on the figure
+    this.body = box(0.5 * k, 0.6 * s, 0.32 * s, wrap, 0, 0.88 * s, 0);
     fig.add(this.body);
-    fig.add(box(0.54 * s, 0.09 * s, 0.36 * s, shade(wrap, 1.35), 0, 0.62 * s, 0)); // belt
-    fig.add(box(0.3 * s, 0.26 * s, 0.4 * s, shade(wrap, 0.7), -0.12 * s, 1.1 * s, 0)); // drape
+    fig.add(box(0.54 * k, 0.09 * s, 0.36 * s, look.belt ?? shade(wrap, 1.35), 0, 0.62 * s, 0)); // belt
+    const dressC = look.dressC ?? (look.dress === 'kilt' ? 0x9a6a3c : wrap);
+    if (look.dress === 'kilt') {
+      fig.add(box(0.56 * k, 0.2 * s, 0.38 * s, dressC, 0, 0.5 * s, 0));
+      for (const fz of [0.195, -0.195]) for (let i = 0; i < 4; i++) {
+        fig.add(box(0.07 * s, 0.1 * s, 0.02 * s, shade(dressC, 0.75), (-0.18 + i * 0.12) * k, 0.36 * s, fz * s));
+      }
+    } else if (look.dress === 'long') {
+      fig.add(box(0.56 * k, 0.4 * s, 0.38 * s, dressC, 0, 0.42 * s, 0));
+      fig.add(box(0.58 * k, 0.05 * s, 0.4 * s, shade(dressC, 0.72), 0, 0.235 * s, 0)); // hem
+    } else if (look.dress === 'apron') {
+      fig.add(box(0.36 * k, 0.42 * s, 0.03 * s, 0x6a4a30, 0, 0.62 * s, 0.195 * s));
+    } else if (look.dress === 'kurta') {
+      fig.add(box(0.53 * k, 0.24 * s, 0.35 * s, wrap, 0, 0.5 * s, 0));
+    } else if (look.dress === 'sari') {
+      fig.add(box(0.56 * k, 0.5 * s, 0.38 * s, dressC, 0, 0.37 * s, 0));
+      const sash = box(0.12 * s, 0.72 * s, 0.03 * s, shade(dressC, 1.25), 0.04 * s, 0, 0.175 * s);
+      sash.rotation.z = 0.6;
+      this.body.add(sash);
+    }
+    if (look.mantle === 'full') {
+      fig.add(box(0.62 * k, 0.13 * s, 0.4 * s, look.mantleC ?? 0x6e4f33, 0, 1.15 * s, 0));
+      fig.add(box(0.34 * k, 0.1 * s, 0.04 * s, 0x9b7a52, 0, 1.08 * s, 0.215 * s));
+    } else if (look.mantle === 'shoulder') {
+      fig.add(box(0.3 * k, 0.26 * s, 0.4 * s, look.mantleC ?? 0x6e4f33, -0.12 * k, 1.1 * s, 0)); // over one shoulder
+    }
+    if (look.neck) {
+      const cols = look.neck === 'shells' ? [0xf1e6cf, 0xe8dcc2]
+        : look.neck === 'teeth' ? [0xefe6d2, 0xd9cdb5]
+          : [0xf1e6cf, 0xc0532f, 0xd49a3a];
+      const n = look.neck === 'shells' ? 5 : 7;
+      const sz = look.neck === 'shells' ? 0.07 : 0.05;
+      for (let i = 0; i < n; i++) {
+        const u = i / (n - 1) - 0.5;
+        this.body.add(box(sz * s, sz * s, 0.04 * s, cols[i % cols.length], u * 0.3 * k, (0.17 - (0.25 - u * u) * 0.3) * s, 0.182 * s));
+      }
+    }
+    if (look.bag) fig.add(box(0.2 * s, 0.22 * s, 0.1 * s, 0x6d5433, -0.3 * k, 0.66 * s, -0.12 * s));
 
-    // head: kid-friendly big, with a real face (eyes + brow) and hair by name hash
+    // head: kid-friendly big, with a face. Box 0.42: faces at +-0.21.
+    const hd = 0.21;
     this.head = box(0.42 * s, 0.4 * s, 0.42 * s, skin, 0, 1.42 * s, 0);
-    this.head.add(box(0.07 * s, 0.08 * s, 0.03 * s, 0x1a120c, -0.1 * s, 0.02 * s, 0.21 * s));
-    this.head.add(box(0.07 * s, 0.08 * s, 0.03 * s, 0x1a120c, 0.1 * s, 0.02 * s, 0.21 * s));
-    this.head.add(box(0.27 * s, 0.04 * s, 0.03 * s, hairC, 0, 0.11 * s, 0.21 * s)); // brow
-    this.head.add(box(0.46 * s, 0.12 * s, 0.46 * s, hairC, 0, 0.23 * s, 0)); // cap of hair
-    const style = opts.elder ? 0 : h % 3;
-    if (style === 1) this.head.add(box(0.13 * s, 0.14 * s, 0.13 * s, hairC, 0, 0.34 * s, 0)); // top knot
-    if (style === 2) this.head.add(box(0.1 * s, 0.34 * s, 0.09 * s, hairC, 0, -0.02 * s, -0.26 * s)); // back braid
+    const H = (w, hh, d, c, x, y, z) => this.head.add(box(w * s, hh * s, d * s, c, x * s, y * s, z * s));
+    for (const sx of [-1, 1]) {
+      H(0.09, 0.075, 0.02, 0xf4efe6, sx * 0.1, 0.02, hd + 0.005);          // eye white
+      H(0.05, 0.065, 0.02, 0x1a120c, sx * 0.095, 0.015, hd + 0.015);       // pupil
+      H(0.1, 0.03, 0.02, look.brows ?? hairC, sx * 0.1, 0.09, hd + 0.012); // brow
+      H(0.04, 0.09, 0.07, skin, sx * (hd + 0.012), -0.02, 0.03);            // ear
+    }
+    H(0.05, 0.07, 0.05, shade(skin, 0.85), 0, -0.03, hd + 0.025);           // nose
+    H(0.1, 0.022, 0.02, 0x4a2418, 0, -0.11, hd + (look.beard ? 0.045 : 0.005)); // mouth
+    const paint = look.paint ?? 'none';
+    if (paint === 'stripes') {
+      for (const sx of [-1, 1]) for (const yy of [-0.04, -0.075]) H(0.08, 0.02, 0.02, 0xc0532f, sx * 0.14, yy, hd + 0.005);
+    }
+    if (paint === 'dots') {
+      for (const sx of [-1, 1]) for (const [dx, dy] of [[0.12, -0.05], [0.16, -0.08]]) H(0.03, 0.03, 0.02, 0xf1e6cf, sx * dx, dy, hd + 0.005);
+    }
+    if (paint === 'chin') H(0.03, 0.08, 0.02, 0xf1e6cf, 0, -0.165, hd + 0.005);
+    if (look.beard) {
+      H(0.36, 0.13, 0.06, hairC, 0, -0.145, hd + 0.02);                     // beard
+      H(0.2, 0.04, 0.03, hairC, 0, -0.075, hd + 0.035);                     // moustache
+    }
+    const hair = look.hair ?? 'short';
+    if (hair !== 'shaved') {
+      H(0.45, 0.12, 0.45, hairC, 0, 0.23, 0);                               // cap: x and z +-0.225
+      if (look.fringe !== false) H(0.4, 0.05, 0.03, hairC, 0, 0.165, 0.24); // fringe
+    }
+    if (hair === 'long' || hair === 'braids') H(0.47, 0.4, 0.05, hairC, 0, -0.01, -0.247); // down the back
+    if (hair === 'long') for (const sx of [-1, 1]) H(0.03, 0.26, 0.15, hairC, sx * 0.236, 0.03, -0.12);
+    if (hair === 'braids') {
+      for (const sx of [-1, 1]) {
+        H(0.08, 0.36, 0.08, hairC, sx * 0.185, -0.13, -0.2);
+        H(0.09, 0.04, 0.09, 0xc0532f, sx * 0.185, -0.3, -0.2);              // braid tie
+      }
+    }
+    if (hair === 'topknot') {
+      H(0.15, 0.13, 0.15, hairC, 0, 0.355, -0.04);
+      H(0.17, 0.035, 0.17, look.tie ?? 0xc0532f, 0, 0.305, -0.04);
+    }
+    if (look.bun) H(0.18, 0.16, 0.12, hairC, 0, 0.12, -0.3);
+    if (look.headband) {
+      H(0.47, 0.05, 0.47, look.headband, 0, 0.18, 0);                       // over the cap: +-0.235
+      if (look.feather) {
+        const f = box(0.03 * s, 0.26 * s, 0.07 * s, 0xf2efe6, 0.2 * s, 0.33 * s, -0.12 * s);
+        f.rotation.z = -0.25;
+        this.head.add(f);
+        const tip = box(0.034 * s, 0.07 * s, 0.074 * s, 0x2a211b, 0.24 * s, 0.45 * s, -0.12 * s);
+        tip.rotation.z = -0.25;
+        this.head.add(tip);
+      }
+    }
     fig.add(this.head);
 
     // limbs pivot at hip/shoulder; feet stubs ride the legs
-    this.legL = box(0.17 * s, 0.5 * s, 0.2 * s, skin, -0.13 * s, 0.58 * s, 0, true);
-    this.legL.add(box(0.19 * s, 0.09 * s, 0.27 * s, shade(skin, 0.78), 0, -0.47 * s, 0.04 * s));
+    this.legL = box(0.17 * s, 0.5 * s, 0.2 * s, legC, -0.13 * s, 0.58 * s, 0, true);
+    this.legL.add(box(0.19 * s, 0.09 * s, 0.27 * s, look.feet ?? shade(skin, 0.78), 0, -0.47 * s, 0.04 * s));
     this.legR = this.legL.clone(); this.legR.position.x = 0.13 * s;
-    this.armL = box(0.13 * s, 0.52 * s, 0.17 * s, skin, -0.33 * s, 1.16 * s, 0, true);
-    this.armR = this.armL.clone(); this.armR.position.x = 0.33 * s;
+    this.armL = box(0.13 * s, 0.52 * s, 0.17 * s, look.sleeves ?? skin, -0.33 * k, 1.16 * s, 0, true);
+    if (look.sleeves) this.armL.add(box(0.135 * s, 0.14 * s, 0.175 * s, skin, 0, -0.45 * s, 0)); // hand below a sleeve
+    if (look.arms === 'bands') this.armL.add(box(0.15 * s, 0.05 * s, 0.19 * s, 0xd49a3a, 0, -0.14 * s, 0));
+    if (look.arms === 'wraps') this.armL.add(box(0.15 * s, 0.12 * s, 0.19 * s, 0x7a5230, 0, -0.38 * s, 0));
+    if (look.arms === 'bead') this.armL.add(box(0.15 * s, 0.04 * s, 0.19 * s, 0xf1e6cf, 0, -0.4 * s, 0));
+    this.armR = this.armL.clone(); this.armR.position.x = 0.33 * k;
     fig.add(this.legL, this.legR, this.armL, this.armR);
     if (opts.elder) {
       // staff is a child of the right arm so it inherits arm swing/sway and
@@ -516,6 +612,7 @@ export class Npc {
       staff.rotation.x = 0.1;
       this.armR.add(staff);
     }
+    if (look.tall) fig.scale.set(1, look.tall, 1);
 
     this.shadow = makeShadow(this._shR);
     this.shadow.position.y = 0.02;
@@ -529,9 +626,11 @@ export class Npc {
     // relative to the torso group. The blob shadow is transparent so foldStatic
     // skips it on its own. Carried items attach after this and are unaffected.
     foldStatic(this.head);
+    foldStatic(this.body);  // necklace, sash
     foldStatic(this.legL);
     foldStatic(this.legR);
-    foldStatic(this.armR); // the elder's staff, when there is one
+    foldStatic(this.armL);  // bands, wraps, hands below sleeves
+    foldStatic(this.armR);  // the same, plus the elder's staff
     foldStatic(fig, [this.body, this.head, this.legL, this.legR, this.armL, this.armR]);
 
     this.group = g;
@@ -898,6 +997,57 @@ export class Npc {
 }
 
 // ---- Animal -------------------------------------------------------------------
+// ---- looks (Npc constructor) ----------------------------------------------
+// Hand-picked for the band so each one reads apart at a glance: the elder
+// (grey hair in a bun, fur shawl, long dress, white beads, her staff), the
+// hunter (headband and feather, ochre stripes, fur on one shoulder), the
+// fire-keeper (braids, red wrap dress, shells, white dots), the knapper
+// (shaved head, beard, leather apron, wide), the child (topknot, bead
+// bracelet). Other named characters too. Anyone else gets a hashed mix from
+// the same pieces, so a village of five is five people.
+const LOOKS = {
+  elder: { hair: 'long', bun: true, fringe: false, hairC: 0xd8d3c8, brows: 0xc9c3b6, mantle: 'full', dress: 'long', dressC: 0x7a5a3c, neck: 'beads', skin: 0x74492e, tall: 0.96 },
+  band0: { hair: 'short', headband: 0x7a5230, feather: true, paint: 'stripes', mantle: 'shoulder', dress: 'kilt', arms: 'bands', bag: true, wrap: 0x8a6a3d, skin: 0x8a5a3a },
+  band1: { hair: 'braids', paint: 'dots', dress: 'long', dressC: 0xa0563c, neck: 'shells', wrap: 0xa0563c, skin: 0x9c6b45 },
+  band2: { hair: 'shaved', beard: true, hairC: 0x14100c, dress: 'apron', arms: 'wraps', wide: true, tall: 1.04, wrap: 0x767d4a, skin: 0x684026 },
+  band3: { hair: 'topknot', paint: 'chin', dress: 'kilt', arms: 'bead', wrap: 0x557080, skin: 0x8a5a3a },
+  chief: { hair: 'long', headband: 0xb5733a, feather: true, mantle: 'shoulder', mantleC: 0x8a3e2c, neck: 'beads', dress: 'long', dressC: 0x764a62 },
+  trader: { hair: 'topknot', tie: 0x557080, headband: 0x557080, neck: 'teeth', dress: 'kilt', bag: true, arms: 'bands' },
+};
+const POOL = {
+  hair: ['short', 'long', 'topknot', 'braids', 'short', 'long'],
+  paint: ['none', 'none', 'stripes', 'dots', 'chin'],
+  dress: ['kilt', 'long', 'apron', 'kilt'],
+  mantle: [null, 'shoulder', null, 'full'],
+  neck: [null, 'beads', 'shells', 'teeth', null],
+  arms: [null, 'bands', 'wraps', 'bead'],
+  headband: [null, null, 0x7a5230, 0xc0532f, null],
+};
+// Act 3's people are present-day villagers: shirts, kurtas, saris and
+// trousers, never fur, face paint or bone ornaments.
+const MODERN = {
+  hair: ['short', 'long', 'short', 'braids'],
+  dress: [null, 'kurta', 'sari', null],
+  legs: [0x3c3a44, 0x5a4a3c, 0xe6dfcf, 0x2f3b4a],
+};
+function lookFor(name, opts, h) {
+  const pick = (arr, shift) => arr[(h >> shift) % arr.length];
+  if (opts.modern) {
+    const dress = pick(MODERN.dress, 2);
+    const look = { hair: pick(MODERN.hair, 4), dress, legs: pick(MODERN.legs, 6), feet: 0x3a2a1e, paint: 'none' };
+    if (!dress && ((h >> 8) & 1)) look.sleeves = opts.wrap ?? WRAP[(h >> 3) % WRAP.length];
+    if (dress === 'sari') look.legs = undefined; // under the sari
+    if (opts.elder) { look.hair = 'long'; look.bun = true; look.fringe = false; look.hairC = 0xd8d3c8; look.brows = 0xc9c3b6; }
+    return look;
+  }
+  if (LOOKS[name]) return LOOKS[name];
+  return {
+    hair: pick(POOL.hair, 2), paint: pick(POOL.paint, 4), dress: pick(POOL.dress, 6), mantle: pick(POOL.mantle, 8),
+    neck: pick(POOL.neck, 10), arms: pick(POOL.arms, 12), headband: pick(POOL.headband, 1),
+    feather: ((h >> 14) & 1) === 1, beard: !opts.child && ((h >> 13) & 3) === 0, bag: ((h >> 9) & 3) === 0,
+  };
+}
+
 export class Animal {
   constructor(scene, opts = {}) {
     this.scene = scene;

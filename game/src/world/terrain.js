@@ -121,7 +121,10 @@ export function buildBase(world, opts = {}) {
       // water fill
       if (inRiver) {
         for (let y = h + 1; y <= WATER_LEVEL; y++) world.setRaw(x, y, z, B.WATER);
-        if (ice && z < 26) world.setRaw(x, WATER_LEVEL, z, B.ICE);
+        // the cold scenes: thin shelves of shore ice along the edges, never
+        // the whole river (2026-10-28: "even though it is ice age, there is
+        // still water in the river"). The middle runs from Act 1 on.
+        if (ice && z < 26 && dr > riverWidth * 0.55 && hash2(x * 3 + 1, z * 7 + 2) < 0.6) world.setRaw(x, WATER_LEVEL, z, B.ICE);
       }
       // ice sheet at the far north during the cold scenes
       if (ice && z < 7) {
@@ -134,7 +137,7 @@ export function buildBase(world, opts = {}) {
 
   carveShelter(world);
   carveFossilCliff(world);
-  carveWaterfall(world, ice);
+  carveWaterfall(world);
   scatterVegetation(world, lush, ice);
   carveTrainingCave(world, ice);
   dressOutlands(world, lush, ice);
@@ -152,32 +155,36 @@ export function buildBase(world, opts = {}) {
 // cliffs already fence.
 // The lip sits where the gorge opens into the valley (z 12), not deep in the
 // slot: from anywhere else the slot walls hid it. Behind the lip the upper
-// river runs on the gorge floor raised to y 14, below the slot walls on both
-// sides, back to the world's edge.
+// river runs on the gorge floor raised to y 20, in a headwall of rock that
+// stands two blocks over the north cliff (y 22), back to the world's edge,
+// where the glacier feeds it in the ice age. The drop is 15 blocks
+// (2026-10-28: "make the waterfall higher"). The world is 24 blocks tall, so
+// this is about the most the falls can grow without raising WORLD.SIZE_Y,
+// which would cost every remesh (the Act 2 era flips) on a phone.
 const FALLS_Z = 11; // the last row of the raised gorge floor
 const FALLS_RX = Math.round(riverX(FALLS_Z));
-const FALLS_POOL = 14; // the upper river's water cell height
+const FALLS_POOL = 20; // the upper river's water cell height
 export const WATERFALL = {
   x0: FALLS_RX - 3, x1: FALLS_RX + 4,      // the sheet spans these x (cells x0..x1-1)
   face: FALLS_Z + 1,                       // the lip's south face, where the water leaves it
   top: FALLS_POOL + 0.85, bottom: WATER_LEVEL + 0.85, // water surface on the lip, and in the pool
   lip: { x: FALLS_RX, y: FALLS_POOL, z: FALLS_Z }, // main.js shows the sheet while this cell is water
 };
-function carveWaterfall(world, ice) {
+function carveWaterfall(world) {
   for (let z = 0; z <= FALLS_Z; z++) {
-    for (let x = FALLS_RX - 7; x <= FALLS_RX + 7; x++) {
-      if (world.topAt(x, z) > FALLS_POOL) continue; // slot wall: already higher
+    for (let x = FALLS_RX - 8; x <= FALLS_RX + 8; x++) {
+      const dx = Math.abs(x - (FALLS_RX + 0.5));
       const channel = x >= WATERFALL.x0 && x < WATERFALL.x1;
-      const top = channel ? FALLS_POOL - 1 : FALLS_POOL + 1; // banks stand above the water
+      // channel bed, a bank either side, then the headwall, its shoulders
+      // stepping back down to the natural cliff (20) at the edges
+      const top = channel ? FALLS_POOL - 1
+        : dx < 5.5 ? FALLS_POOL + 1
+          : dx < 7 ? FALLS_POOL + 2
+            : FALLS_POOL + 1 - Math.round(hash2(x * 5, z * 3));
+      if (!channel && world.topAt(x, z) >= top) continue;
       for (let y = 0; y <= top; y++) world.setRaw(x, y, z, y >= top - 1 ? B.ROCK : B.STONE);
       for (let y = top + 1; y < SY; y++) world.setRaw(x, y, z, B.AIR);
-      if (channel) world.setRaw(x, FALLS_POOL, z, ice ? B.ICE : B.WATER);
-    }
-  }
-  if (ice) {
-    // the frozen curtain, one block proud of the lip
-    for (let x = WATERFALL.x0 + 1; x < WATERFALL.x1 - 1; x++) {
-      for (let y = WATER_LEVEL; y <= FALLS_POOL; y++) world.setRaw(x, y, WATERFALL.face, B.ICE);
+      if (channel) world.setRaw(x, FALLS_POOL, z, B.WATER);
     }
   }
 }

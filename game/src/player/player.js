@@ -143,12 +143,12 @@ export class Player {
     this._legL = box(0.17, 0.6, 0.2, skin, -0.13, 0.6, 0, true);
     this._legR = box(0.17, 0.6, 0.2, skin, 0.13, 0.6, 0, true);
     for (const leg of [this._legL, this._legR]) {
-      leg.add(box(0.19, 0.09, 0.25, C.leather, 0, -0.555, 0.03)); // wrapped foot
+      leg.add(box(0.19, 0.09, 0.25, C.leather, 0, -0.56, 0.03));  // wrapped foot (sole below the leg's)
       leg.add(box(0.185, 0.04, 0.21, C.furLight, 0, -0.47, 0));   // ankle tie
     }
     this._torso = box(0.52, 0.62, 0.3, wrap, 0, 0.92, 0);
     const t = this._torso;
-    t.add(box(0.54, 0.06, 0.32, C.hideDark, 0, -0.28, 0));          // hem
+    t.add(box(0.54, 0.07, 0.32, C.hideDark, 0, -0.28, 0));          // hem (bottom clears the torso's)
     t.add(box(0.6, 0.12, 0.36, C.fur, 0, 0.27, 0));                 // fur on the shoulders
     t.add(box(0.32, 0.1, 0.04, C.furLight, 0, 0.2, 0.17));          // its front edge
     t.add(box(0.06, 0.72, 0.03, C.leather, 0.04, -0.02, 0.165));    // satchel strap, front...
@@ -158,7 +158,7 @@ export class Player {
     const beads = [C.bone, C.redOchre, C.ochre, C.bone, C.ochre, C.redOchre, C.bone];
     beads.forEach((c, i) => {                                       // the necklace
       const u = i / (beads.length - 1) - 0.5;
-      t.add(box(0.055, 0.055, 0.04, c, u * 0.3, 0.13 - (0.25 - u * u) * 0.3, 0.17)); // hangs in a U
+      t.add(box(0.055, 0.055, 0.04, c, u * 0.3, 0.13 - (0.25 - u * u) * 0.3, 0.182)); // hangs in a U
     });
     t.add(box(0.07, 0.08, 0.04, C.bone, 0, -0.01, 0.175));          // a shell pendant
     this._armL = box(0.13, 0.5, 0.17, skin, -0.34, 1.2, 0, true);
@@ -167,19 +167,25 @@ export class Player {
       arm.add(box(0.15, 0.05, 0.19, C.ochre, 0, -0.14, 0));         // armband
       arm.add(box(0.15, 0.035, 0.19, C.furLight, 0, -0.4, 0));      // wrist cord
     }
+    // The head is 0.4 x 0.38 x 0.38 (faces at x 0.2, y 0.19, z 0.19). No two
+    // overlapping boxes may share a face plane: the first hair cap's front
+    // sat exactly on the forehead (z 0.19) and the back hair matched the
+    // cap's width, so skin and hair fought over the same pixels and the
+    // hairline flickered as the camera moved. Every piece below clears its
+    // neighbours by at least 0.01.
     const head = box(0.4, 0.38, 0.38, skin, 0, 1.45, 0);
-    head.add(box(0.42, 0.12, 0.4, hair, 0, 0.16, -0.01));           // hair cap
-    head.add(box(0.4, 0.07, 0.04, hair, 0, 0.12, 0.19));            // fringe
-    head.add(box(0.42, 0.3, 0.06, hair, 0, 0.02, -0.2));            // hair down the back
-    for (const sx of [-1, 1]) head.add(box(0.04, 0.22, 0.3, hair, sx * 0.205, 0.05, -0.04));
+    head.add(box(0.43, 0.12, 0.42, hair, 0, 0.16, 0));              // hair cap: x 0.215, z 0.21
+    head.add(box(0.38, 0.06, 0.03, hair, 0, 0.12, 0.224));          // fringe, in front of the cap
+    head.add(box(0.45, 0.3, 0.05, hair, 0, 0.02, -0.23));           // hair down the back: x 0.225
+    for (const sx of [-1, 1]) head.add(box(0.03, 0.22, 0.16, hair, sx * 0.217, 0.04, -0.12)); // side locks, behind the ears
     head.add(box(0.16, 0.12, 0.16, hair, 0, 0.27, -0.06));          // topknot...
-    head.add(box(0.17, 0.035, 0.17, C.redOchre, 0, 0.225, -0.06));  // ...and its tie
+    head.add(box(0.18, 0.035, 0.18, C.redOchre, 0, 0.237, -0.06));  // ...and its tie
     for (const sx of [-1, 1]) {                                     // eyes: front = +z
       head.add(box(0.085, 0.07, 0.02, C.eye, sx * 0.09, 0.0, 0.195));
       head.add(box(0.045, 0.06, 0.02, C.dark, sx * 0.085, -0.005, 0.205));
       head.add(box(0.1, 0.025, 0.02, hair, sx * 0.09, 0.065, 0.2));          // brow
       head.add(box(0.07, 0.022, 0.02, C.redOchre, sx * 0.13, -0.06, 0.195)); // ochre on the cheek
-      head.add(box(0.04, 0.09, 0.07, skin, sx * 0.215, -0.01, 0));           // ear
+      head.add(box(0.04, 0.09, 0.07, skin, sx * 0.212, -0.02, 0.03));        // ear, clear of the side locks
     }
     head.add(box(0.05, 0.07, 0.05, C.skinDark, 0, -0.04, 0.21));    // nose
     head.add(box(0.1, 0.022, 0.02, C.lip, 0, -0.115, 0.195));       // mouth
