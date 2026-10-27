@@ -1743,3 +1743,30 @@ while vivid is already on inherit the current state.
 - The Rich shadow box texel-snap written alongside this landed upstream
   first (section 21, `_shadowRight`/`_shadowUp` in `renderer.js`), so the
   local duplicate was dropped at merge time.
+
+## 28. Two live bugs fixed: the hunt and the first era label
+
+Updated 27 October 2026, 23:04 IST (Asia/Kolkata).
+
+**The Act 1 hunt could not be finished (live from 19 September to 27 October
+2026).** Commit 13f4508 deleted the five bow constants in `acts/act1.js`
+(`ARROW_SPEED`, `ARROW_UPBIAS`, `ARROW_GRAV`, `ARROW_LIFE`, `ARROW_HIT_R`)
+but kept the code that reads them. Pressing Fire threw `ReferenceError:
+ARROW_SPEED is not defined` inside the hunt tick. The frame loop survived, so
+nothing looked crashed, but no arrow ever spawned and the three-deer hunt
+could never complete: every new player stopped there. The constants are back,
+unchanged, above `HUNT_TARGET`. Checked by seeding a save at the hunt, taking
+the bow, aiming and firing: the arrow group is added to the scene with no
+error.
+
+`check.mjs` stayed green throughout, because nothing in it plays a beat and
+`node --check` does not catch an undeclared name (only a run does). A
+scope-aware scan of every module (acorn, undeclared identifiers and import
+targets) found these five names and nothing else, in HEAD or the working
+tree. Adding that scan to `check.mjs` is the open follow-up.
+
+**The Site Report's first era label was blank (since 10 August 2026).** The
+tribe-wording pass (6dd12a3) renamed `eraLabels.band` to `eraLabels.tribe` in
+`strings.js`, but `ui/report.js` still read `E.band`, so the first marker on
+the report's timeline had no label. It reads `E.tribe` now. This is the same
+one-line fix that sat unmerged on `claude/infallible-almeida-b0bbe1`.

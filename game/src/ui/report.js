@@ -338,7 +338,7 @@ export function siteReport(G) {
 
     const E = S.act3.eraLabels;
     const eras = [
-      [YEARS.SCENE_A_YEAR, E.band],
+      [YEARS.SCENE_A_YEAR, E.tribe],
       [YEARS.ICE_AGE_END_BCE, E.iceEnd],
       [YEARS.SETTLEMENTS_BCE, E.settle],
       [YEARS.POTTERY_BCE, E.pottery],

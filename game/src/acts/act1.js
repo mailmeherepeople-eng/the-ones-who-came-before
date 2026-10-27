@@ -496,6 +496,15 @@ async function wakeSequence(G) {
   }
 }
 
+// ---------- bow hunting (real arrows — replaces the old timing minigame) ----------
+const ARROW_SPEED = 22;   // blocks/s along the camera ray
+const ARROW_UPBIAS = 1.5; // blocks/s added to vy at launch
+const ARROW_GRAV = 12;    // blocks/s² downward
+const ARROW_LIFE = 3;     // seconds in flight before despawn
+const ARROW_HIT_R = 0.9;  // hit radius against a deer's body centre
+// One kill fed nobody. The tribe is six people, so the hunt asks for three
+// animals: enough that the player has to re-stalk a spooked herd rather than
+// land one lucky shot, and it makes the store box beat below carry real weight.
 const HUNT_TARGET = 3;
 const _arrowDir = new THREE.Vector3(); // scratch — synchronous use only
 const _ARROW_Z = new THREE.Vector3(0, 0, 1);
