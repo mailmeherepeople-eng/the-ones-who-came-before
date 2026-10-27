@@ -42,6 +42,15 @@ export const SETTINGS = [
     note: () => S.ui.setRichNote,
     def: QUALITY_TIER === 'high',
   },
+  {
+    // Vivid style (world/shade.js setVivid): flat storybook shading in place
+    // of the lit look. A style choice, not a performance tier, so it defaults
+    // off on every device.
+    id: 'vivid',
+    label: () => S.ui.setVivid,
+    note: () => S.ui.setVividNote,
+    def: false,
+  },
 ];
 
 const DEFAULTS = Object.fromEntries(SETTINGS.map((s) => [s.id, s.def]));

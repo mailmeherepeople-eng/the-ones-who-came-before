@@ -17,6 +17,14 @@
 //   clouds  a scrolling noise texture darkening the direct light (moving cloud
 //           shadows). Define-gated because it is a texture fetch per fragment:
 //           only the Rich tier pays for it.
+//   vivid   Settings style switch (setVivid): replaces the lit result with the
+//           raw palette times a fixed per-face shade (top 1.0, bottom 0.55,
+//           x sides 0.76, z sides 0.86), the flat storybook look. Driven by a
+//           shared uniform so the toggle itself is free; the toggle also flips
+//           material.toneMapped, because ACES compresses exactly the
+//           saturation this style exists to show, and THAT flip is the reason
+//           setVivid recompiles like setClouds does. Mist and scene fog still
+//           apply on top, so depth reads the same in both styles.
 //
 // The mist, cloud and time uniforms are shared objects: the renderer writes
 // them once per frame and every enhanced material reads them for free.
@@ -39,10 +47,12 @@ export const SHADE = {
   wind: { value: 1 },
   sunDir: { value: new THREE.Vector3(40, 60, 20).normalize() },
   sunColor: { value: new THREE.Color(0xffe4b8) },
+  vivid: { value: 0 },
 };
 
 const ENHANCED = new Set();
 let cloudsOn = false;
+let vividOn = false;
 
 // 128x128 tiling value-noise, three octaves, built once and only on demand.
 function cloudTexture() {
@@ -144,6 +154,7 @@ uniform vec4 uMist;
 uniform vec3 uMistColor;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
+uniform float uVivid;
 varying vec3 vWPos;
 #ifdef USE_SUNMASK
   varying float vSun;
@@ -184,6 +195,35 @@ const FRAG_COLOR = /* glsl */ `
 #ifdef USE_WATER
   diffuseColor.rgb *= 0.93 + 0.07 * sin( uTime * 2.0 + vWPos.x * 2.1 + vWPos.z * 1.7 );
 #endif
+vec3 towcbAlbedo = diffuseColor.rgb;
+`;
+
+// Vivid: discard the lit result and paint the palette with fixed face shades.
+// `normal` (view space, water wobble included) and `outgoingLight` are both
+// main()-scope locals and still live here; the transpose multiply undoes the
+// view rotation. Runs before tonemapping/fog, so mist and scene fog stay.
+//
+// SRGBFIX: vertex colours are written by the mesher as raw hex/255 (sRGB
+// numbers) but the shader treats attributes as linear, so the final sRGB
+// encode would lift the palette. Decoding here (pow 2.2) makes the screen
+// show the authored hex exactly, which is what the Godot reference build
+// shows. Only vertex-coloured materials need it: THREE.Color uniforms are
+// already converted to linear on the CPU.
+const FRAG_VIVID = /* glsl */ `
+if ( uVivid > 0.5 ) {
+  vec3 towcbWN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
+  vec3 towcbAN = abs( towcbWN );
+  float towcbUp = towcbWN.y > 0.0 ? 1.0 : 0.55;
+  float towcbShade = towcbAN.y * towcbUp + towcbAN.x * 0.76 + towcbAN.z * 0.86;
+  #ifdef USE_VIVID_FULL
+    towcbShade = 1.0;
+  #endif
+  #ifdef USE_VIVID_SRGBFIX
+    towcbAlbedo = pow( towcbAlbedo, vec3( 2.2 ) );
+  #endif
+  outgoingLight = towcbAlbedo * towcbShade;
+}
+#include <opaque_fragment>
 `;
 
 const FRAG_LIGHTS_END = /* glsl */ `
@@ -212,7 +252,9 @@ const FRAG_FOG = /* glsl */ `
 /**
  * Splice the game's shading features into a Lambert material.
  * @param {THREE.Material} mat
- * @param {{sun?:boolean, sway?:boolean, water?:boolean}} opts
+ * @param {{sun?:boolean, sway?:boolean, water?:boolean, vividFull?:boolean}} opts
+ * vividFull: in the vivid style this material skips face shading and renders
+ * at full palette brightness (cross flora, which has no meaningful faces).
  */
 export function enhance(mat, opts = {}) {
   if (!mat || mat.userData.towcb) return mat;
@@ -221,7 +263,10 @@ export function enhance(mat, opts = {}) {
   if (opts.sun) mat.defines.USE_SUNMASK = '';
   if (opts.sway) mat.defines.USE_SWAY = '';
   if (opts.water) mat.defines.USE_WATER = '';
+  if (opts.vividFull) mat.defines.USE_VIVID_FULL = '';
+  if (mat.vertexColors) mat.defines.USE_VIVID_SRGBFIX = '';
   if (cloudsOn) mat.defines.USE_CLOUDS = '';
+  mat.toneMapped = !vividOn; // materials born while vivid is on match the set
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = SHADE.time;
     shader.uniforms.uWind = SHADE.wind;
@@ -231,6 +276,7 @@ export function enhance(mat, opts = {}) {
     shader.uniforms.uSunColor = SHADE.sunColor;
     shader.uniforms.uCloudTex = SHADE.cloudTex;
     shader.uniforms.uCloudAmt = SHADE.cloudAmt;
+    shader.uniforms.uVivid = SHADE.vivid;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\n' + VERT_PARS)
       .replace('#include <begin_vertex>', VERT_BEGIN)
@@ -241,11 +287,12 @@ export function enhance(mat, opts = {}) {
       .replace('#include <color_fragment>', FRAG_COLOR)
       .replace('#include <lights_fragment_begin>', FRAG_MASK + LIGHT_LOOP)
       .replace('#include <lights_fragment_end>', FRAG_LIGHTS_END)
+      .replace('#include <opaque_fragment>', FRAG_VIVID)
       .replace('#include <fog_fragment>', FRAG_FOG);
   };
   // three caches programs by this key; without it two materials with
   // different defines could be handed the same compiled program
-  const tag = `towcb:${opts.sun ? 's' : ''}${opts.sway ? 'w' : ''}${opts.water ? 'a' : ''}`;
+  const tag = `towcb:${opts.sun ? 's' : ''}${opts.sway ? 'w' : ''}${opts.water ? 'a' : ''}${opts.vividFull ? 'f' : ''}${mat.vertexColors ? 'v' : ''}`;
   mat.customProgramCacheKey = () => tag + (mat.defines.USE_CLOUDS !== undefined ? ':c' : '');
   ENHANCED.add(mat);
   return mat;
@@ -262,6 +309,20 @@ export function setClouds(on) {
   for (const m of ENHANCED) {
     if (on) m.defines.USE_CLOUDS = '';
     else delete m.defines.USE_CLOUDS;
+    m.needsUpdate = true;
+  }
+}
+
+// Vivid style on or off for every enhanced material. The uniform alone would
+// be free, but the toneMapped flip (ACES would mute the whole point of the
+// style) needs a recompile, so call on a settings change, never per frame.
+export function setVivid(on) {
+  on = !!on;
+  if (on === vividOn) return;
+  vividOn = on;
+  SHADE.vivid.value = on ? 1 : 0;
+  for (const m of ENHANCED) {
+    m.toneMapped = !on;
     m.needsUpdate = true;
   }
 }

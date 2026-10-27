@@ -12,6 +12,7 @@ import { runAct1 } from './acts/act1.js';
 import { SFX } from './audio.js';
 import { FX } from './fx/fx.js';
 import { Settings } from './settings.js';
+import { setVivid } from './world/shade.js';
 import { SITES } from './world/terrain.js';
 import { buildSceneB } from './world/states.js';
 import { installEquipment } from './ui/equipment.js';
@@ -90,6 +91,7 @@ Settings.subscribe(() => {
   G.player.lookScale = Settings.get('sensitivity') ? 0.55 : 1;
   document.body.classList.toggle('large-text', Settings.get('largeText'));
   G.renderer.setRich(Settings.get('rich'));
+  setVivid(Settings.get('vivid'));
 });
 
 // visual FX layer: init once on the persistent scene; wire player juice hooks

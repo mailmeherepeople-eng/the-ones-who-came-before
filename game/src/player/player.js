@@ -138,10 +138,18 @@ export class Player {
     const satchel = box(0.2, 0.24, 0.1, 0x6d5433, -0.3, 0.68, -0.12); // evidence bag
     const belt = box(0.54, 0.08, 0.32, 0x6d5433, 0, 0.66, 0);
     g.add(this._legL, this._legR, this._torso, this._armL, this._armR, head, satchel, belt);
-    // blob shadow, same language as the NPCs
+    // Blob shadow, same language as the NPCs, with one difference: NO depth
+    // test. The model Y is eased after an auto-step (_stepLift), so for a
+    // third of a second after every 1-block climb a depth-tested disc sits
+    // under the new step's surface: it strobed (buried) on every terrace, and
+    // gluing it to the ground instead made it pop a full block ahead of the
+    // eased body. Skipping the depth test ends the whole class: the disc
+    // rides the visual body and simply draws over whatever ground is behind
+    // it. The camera boom keeps the player unoccluded, so the ghost-through-
+    // walls case a depth-free decal risks does not arise in practice.
     const sh = new THREE.Mesh(
       new THREE.CircleGeometry(0.42, 12),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false, depthTest: false }),
     );
     sh.rotation.x = -Math.PI / 2;
     sh.position.y = 0.03;
@@ -275,7 +283,7 @@ export class Player {
     } else { // waterskin: plump dark pouch slung at the hip (model-root local)
       const pouch = new THREE.Mesh(
         new THREE.SphereGeometry(0.13, 7, 6),
-        new THREE.MeshLambertMaterial({ color: 0x4a3524 }),
+        enhance(new THREE.MeshLambertMaterial({ color: 0x4a3524 })),
       );
       pouch.scale.set(1, 1.25, 0.72);
       g.add(pouch);

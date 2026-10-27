@@ -69,7 +69,7 @@ export class ChunkMesher {
     }), { water: true });
     this.crossMat = enhance(new THREE.MeshLambertMaterial({
       vertexColors: true, side: THREE.DoubleSide,
-    }), { sun: true, sway: true });
+    }), { sun: true, sway: true, vividFull: true });
     this.texMat = null; // built on first sight of a painted block (see atlas.js)
     this.chunks = new Map(); // key -> {solid, water, cross, tex} (Mesh|null each)
   }

@@ -4,8 +4,11 @@
 // to the canvas with, in order: a light FXAA (the only anti-aliasing the game
 // has; the renderer runs antialias:false for fill rate), a colour grade (warm
 // lift in the shadows, a cool pull in the highlights, a little saturation),
-// film grain, then the ACES tone map and the sRGB transfer that three.js
-// skips when rendering into a target. It is deliberately ONE pass: every
+// then the ACES tone map and the sRGB transfer that three.js skips when
+// rendering into a target. Film grain used to sit between the grade and the
+// tone map and was removed by request (2026-08-28): on the flat Vivid style's
+// large single-colour faces it read as sensor noise, not texture, and it was
+// the "why does the game look grainy" complaint. It is deliberately ONE pass: every
 // extra full-screen pass is another few million fragment invocations, which
 // is exactly the budget a midrange Android GPU does not have (GAME-OVERVIEW
 // section 12). On the Lite tier none of this runs and the CSS vignette and
@@ -27,8 +30,6 @@ const FRAG = /* glsl */ `
 precision highp float;
 uniform sampler2D tDiffuse;
 uniform vec2 uTexel;     // 1 / render size
-uniform float uTime;
-uniform float uGrain;
 uniform float uSat;
 uniform vec3 uLift;      // added to the darks (warm)
 uniform vec3 uGain;      // multiplied in (cool highlights)
@@ -60,17 +61,12 @@ vec3 fxaa( vec2 uv ) {
   return ( lB < lMin || lB > lMax ) ? a : b;
 }
 
-float hash( vec2 p ) { return fract( sin( dot( p, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 ); }
-
 void main() {
   vec3 col = fxaa( vUv );
   // grade, in linear light before the tone curve
   col = col * uGain + uLift;
   float l = luma( col );
   col = mix( vec3( l ), col, uSat );
-  // grain: fine, monochrome, strongest in the mid-darks
-  float g = hash( vUv * 1731.0 + fract( uTime ) * 97.0 ) - 0.5;
-  col += g * uGrain * ( 1.0 - smoothstep( 0.0, 1.2, l ) );
   gl_FragColor = vec4( max( col, 0.0 ), 1.0 );
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -93,8 +89,6 @@ export class Post {
       uniforms: {
         tDiffuse: { value: this.target.texture },
         uTexel: { value: new THREE.Vector2(1 / 4, 1 / 4) },
-        uTime: { value: 0 },
-        uGrain: { value: 0.035 },
         uSat: { value: 1.12 },
         uLift: { value: new THREE.Vector3(0.01, 0.006, 0.0) },
         uGain: { value: new THREE.Vector3(1.06, 1.06, 1.095) },
@@ -126,9 +120,10 @@ export class Post {
     this.material.uniforms.uTexel.value.set(1 / tw, 1 / th);
   }
 
+  // `time` fed the grain and is kept in the signature so the caller is
+  // untouched; nothing reads it now
   render(scene, camera, time) {
     const gl = this.gl;
-    this.material.uniforms.uTime.value = time;
     gl.setRenderTarget(this.target);
     gl.render(scene, camera);
     gl.setRenderTarget(null);

@@ -1561,9 +1561,12 @@ light's own `needsUpdate` does nothing under manual mode, and a map that is
 never rendered produces "mismatch between texture format and sampler type"
 warnings on every draw. Cloud shadows are a define-gated texture fetch in
 the same materials. The post pass is one full-screen triangle: five-tap
-FXAA, a warm lift and cool gain, 1.12 saturation, film grain, then ACES and
-the sRGB transfer (three skips both when rendering into a target). Half-float
-target, 0.8 render scale on phones. Every mesh in the game carries
+FXAA, a warm lift and cool gain, 1.12 saturation, then ACES and the sRGB
+transfer (three skips both when rendering into a target). Film grain sat
+between the grade and the tone map until 2026-08-28: on the Vivid style's
+large flat faces it read as sensor noise, and it was removed outright rather
+than gated per style (the lit look loses nothing that was ever asked for).
+Half-float target, 0.8 render scale on phones. Every mesh in the game carries
 `castShadow`/`receiveShadow` flags already, which cost nothing until the map
 is on.
 
@@ -1674,3 +1677,69 @@ Updated 19 September 2026, 15:20 IST (Asia/Kolkata).
 Gathering beacons, interaction targets and picking effects now use the actual berry prop's world position and ground height. This removes the half-cell offset between the light and the model. All harvestable wild berry plants use the same leafy, red-berry model as the task bushes. Wild plants share instanced foliage and fruit geometry in two draw calls; the shared lighting shader applies each instance's world transform for mist and cloud shading.
 
 Picking removes fruit while leaving the trunk and leaves. Existing wild-berry save keys still suppress harvested fruit after loading. The food-depletion scene also empties wild plants and removes their interaction targets. Service-worker cache is v13. Regression checks compare model geometry and colours, verify fruit-only removal/restoration and saved picked state, and check that beacons follow the true prop centre and height.
+
+## 27. Vivid style (2026-08-28 01:09 IST)
+
+A second visual style, selectable in Settings ("Vivid style", default off):
+bold flat colours and crisp fixed block shading in place of the lit look. It
+exists because a Godot rebuild of the valley (an engine evaluation living in
+the gitignored `godot/` folder) accidentally proved the palette reads better
+UNLIT: full saturation plus hard per-face contrast looks like deliberate art
+direction, where the lit pipeline mutes the same hexes.
+
+### 27.1 How it works (`world/shade.js`)
+
+One more splice in `enhance()`: `FRAG_VIVID` replaces
+`#include <opaque_fragment>` and, when the shared `uVivid` uniform is on,
+overwrites `outgoingLight` with the raw albedo times a fixed face shade
+computed from the world-space normal (top 1.0, bottom 0.55, x sides 0.76,
+z sides 0.86, the same ratios as the Godot build). Because it overwrites the
+lit result, everything in the lighting path vanishes under vivid by
+construction: the baked sun mask, the shadow map, cloud shadows, water
+specular. Mist and scene fog apply after the override, so depth still reads.
+
+Two per-material defines refine it:
+- `USE_VIVID_FULL` (the mesher's cross-flora material): no face shading,
+  flora renders at full palette brightness like the Godot build.
+- `USE_VIVID_SRGBFIX` (set automatically for `vertexColors` materials): the
+  mesher writes hex/255 numbers into colour attributes, which the shader
+  treats as linear, so the final sRGB encode would lift them. A `pow(2.2)`
+  decode makes the screen show the authored hex exactly. THREE.Color uniform
+  materials (props, characters) are already CPU-converted and skip this.
+
+`setVivid(on)` flips the uniform plus `material.toneMapped` on every enhanced
+material: ACES filmic (renderer.js) compresses exactly the saturation this
+style exists for, and the toneMapped flip is why the toggle recompiles (like
+`setClouds`), so it happens on a settings change only. Materials enhanced
+while vivid is already on inherit the current state.
+
+### 27.2 Interplay and rules of thumb
+
+- "Rich graphics" under vivid contributes only the post pass (shadow map and
+  cloud shadows live in the lighting path, which vivid overwrites). Both
+  toggles are independent; vivid + rich = flat colours with FXAA and the
+  grade. The pass's film grain was removed the same day (see 20.6), so
+  neither style is grainy; the Rich settings note now says "smoother edges"
+  instead of "a film finish".
+- Three stray Lambert materials (the waterskin pouch, the painted-pot decal,
+  the fossil-plate marks) were never `enhance()`d and would have rendered lit
+  amid a flat world; they are enhanced now, which also gives them mist and
+  clouds in the ordinary style. `MAT.stone.clone()` in props keeps the old
+  clone behaviour (clones drop `onBeforeCompile`), untouched.
+- Settings: one entry in settings.js (`vivid`, default false everywhere; a
+  style choice, not a performance tier) and two strings (`setVivid`,
+  `setVividNote`). Shipped 27 October 2026, 23:04 IST, with the service
+  worker cache at `towcb-v14` (upstream had reached v13 first).
+- The player's blob shadow no longer depth-tests (`depthTest: false`). The
+  model Y is eased after an auto-step (`_stepLift`), so a depth-tested disc
+  either sat buried under the just-climbed step's surface and strobed
+  (original), or popped a full block ahead of the eased body when glued to
+  the ground (the first attempted fix). Drawing over whatever ground is
+  behind it ends the whole class; the camera boom keeps the player
+  unoccluded, so the decal-through-walls risk of a depth-free disc does not
+  arise in practice. The lit style had been hiding the strobe (dark ground
+  plus the map shadow on top); vivid exposed it. Same fix in the Godot
+  build's player (`no_depth_test`).
+- The Rich shadow box texel-snap written alongside this landed upstream
+  first (section 21, `_shadowRight`/`_shadowUp` in `renderer.js`), so the
+  local duplicate was dropped at merge time.

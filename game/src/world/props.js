@@ -168,7 +168,7 @@ export function makePot(record, scale = 0.5) {
     tex.colorSpace = THREE.SRGBColorSpace;
     const dec = new THREE.Mesh(
       new THREE.PlaneGeometry(0.42 * scale * 2, 0.42 * scale * 2),
-      new THREE.MeshLambertMaterial({ map: tex, transparent: true })
+      enhance(new THREE.MeshLambertMaterial({ map: tex, transparent: true }))
     );
     const rMid = Math.max(...prof) * scale;
     dec.position.set(0, 0.55 * scale * 1.1 * 2 * 0.5, rMid + 0.012);
@@ -390,7 +390,7 @@ export function makeFossilPlate(x, y, z, kind = 0) {
   const plate = box(0.9, 0.9, 0.06, MAT.stone.clone());
   plate.material.color = new THREE.Color(0x9a9284);
   g.add(plate);
-  const markMat = new THREE.MeshLambertMaterial({ color: 0x6e675e });
+  const markMat = enhance(new THREE.MeshLambertMaterial({ color: 0x6e675e }));
   if (kind === 0) {
     for (let i = 0; i < 6; i++) {
       const a = i * 1.05, r = 0.06 + i * 0.05;
