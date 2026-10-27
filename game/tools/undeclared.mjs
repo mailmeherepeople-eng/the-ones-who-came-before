@@ -10,7 +10,7 @@
 // read them. Modules parse fine with a missing name, `node --check` is happy,
 // and nothing fails until the line actually runs, which here was the first
 // press of Fire. The live game sat soft-locked at the Act 1 hunt for five
-// weeks with every other check green (GAME-OVERVIEW section 28).
+// weeks with every other check green (docs/CHANGELOG.md section 28).
 //
 // What it does, per module under the scanned folder:
 //   1. Parses it (acorn, vendored in ./vendor/acorn, so no npm install).

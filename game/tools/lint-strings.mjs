@@ -5,7 +5,7 @@
 //    only in constants.js and strings.js (strings quote verbatim textbook
 //    figures, which are protected below).
 // 3. Protected strings: qualifiers that a careless copy-edit must not delete.
-// 4. No em/en dashes in anything the player reads (CLAUDE.md rule 2). Comments
+// 4. No em/en dashes in anything the player reads (AGENTS.md rule 2). Comments
 //    are exempt; quoted string contents are not.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';

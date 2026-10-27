@@ -3,7 +3,8 @@
 A live scene editor for this game — and, deliberately, for any three.js project.
 Dev-only and lazily loaded: nothing of it exists in the game until you ask for it.
 
-**Open it:** add `?edit` to the URL, or press **F2** at any time.
+**Open it:** add `?edit` to the URL, or press **backtick**, **Ctrl+E** or **F2** at any time (backtick and
+Ctrl+E toggle it; F2 often needs Fn on a laptop).
 
 ```
 http://localhost:8321/?edit

@@ -1,0 +1,9 @@
+# Searches skip these (ripgrep and Claude Code's Grep/Glob read this file; git does not).
+# They are frozen copies, vendored libraries or untracked bulk, never the code you are changing.
+# Search them on purpose with `rg --no-ignore`.
+game-baseline/
+game/vendor/
+game/tools/vendor/
+godot/
+docs/archive/
+.playwright-mcp/

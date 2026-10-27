@@ -1,20 +1,22 @@
 # =============================================================================
-# STANDING RULE: GitHub carries the SHIPPED GAME and nothing else.
+# STANDING RULE (AGENTS.md rule 1): GitHub carries the SHIPPED GAME and nothing else.
 #
 # No planning documents. No idea documents. No design docs, specs, research
-# notes, knowledge maps, allocation tables, brainstorms, meeting notes, drafts,
-# handoff scratch or review screenshots. Ever.
+# notes, knowledge maps, allocation tables, audits, briefs, brainstorms, meeting
+# notes, drafts, tasks, session logs, handoff scratch or review screenshots. Ever.
 #
-# Those live on disk and in the Obsidian vault, which is where thinking belongs.
-# The repo is for files the game needs to run, plus the minimum documentation
-# needed to pick the code back up.
+# Those live on disk (in the ignored docs/ subfolders below) and in the Obsidian
+# vault, which is where thinking belongs. The repo is for files the game needs to
+# run, plus the minimum documentation needed to pick the code back up.
 #
 # When adding a new file, ask: does the game need this to run, or does a
 # developer need it to understand what shipped? If neither, it is ignored here
 # BEFORE the first commit.
 #
-# Currently kept on GitHub: README.md, GAME-OVERVIEW.md (what shipped),
-# game/README.md, game/COVERAGE.md, game/EDITOR.md, and game/ itself.
+# Currently kept on GitHub: AGENTS.md, CLAUDE.md, HANDOFF.md, README.md,
+# docs/GAME.md, docs/REFERENCE.md, docs/COVERAGE.md, docs/EDITOR.md,
+# docs/CHANGELOG.md, game/ (with game/README.md, game/audio/README.md),
+# game-baseline/ + compare.html (kept on purpose), and the Pages entry files.
 # =============================================================================
 
 # --- Planning, design and research (never on GitHub) ---
@@ -22,12 +24,19 @@ chapter4-design-doc.md
 class6-history-knowledge-map.md
 ideas for game dev for each concept.md
 two-mode-allocation.md
-# Includes docs/superpowers/specs/ and docs/ai/ (the AI collaboration docs:
-# architecture, flow, decisions, constraints, test checklist, rollback and the
-# rest). They are developer thinking, so they live on disk and in the Obsidian
-# vault. HANDOFF.md section 11 points at them. Do NOT narrow this rule to a
-# subfolder without checking what else has landed under docs/ since.
-docs/
+# docs/: only the five reference docs below are public. Everything else under
+# docs/ stays on disk: plans/ (briefs, screenshots), ai/ (the older AI
+# collaboration docs), superpowers/ (specs), archive/ (retired docs and old
+# shots), design/ (design docs, knowledge maps), sources/ (textbooks), sessions/
+# (session logs), shots/ (review screenshots and scratch) and TASKS.md (open
+# asks). Do NOT add a new negation without checking what else has landed under
+# docs/ since; a new public doc is a deliberate, reviewed choice.
+docs/*
+!docs/GAME.md
+!docs/REFERENCE.md
+!docs/COVERAGE.md
+!docs/EDITOR.md
+!docs/CHANGELOG.md
 *-design-doc.md
 *-knowledge-map.md
 *-spec.md
@@ -43,6 +52,10 @@ docs/
 *-rework.md
 *-proposal.md
 *-audit.md
+# The 19 Sep 2026 audit report was committed as HTML by mistake (removed on
+# 2026-10-28; it stays in history). Audits and reports of any format stay off.
+*audit*.html
+*audit*.md
 ideas*.md
 notes*.md
 plan*.md

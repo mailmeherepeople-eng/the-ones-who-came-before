@@ -1,25 +1,22 @@
 # The Ones Who Came Before
 
-A browser voxel game that teaches **NCERT Class 6 Social Science, Chapter 4 — "Timeline
-and Sources of History"** by making you *live* the history first and *excavate your own
-past* afterward.
+A browser voxel game that teaches **NCERT Class 6 Social Science, Chapter 4, "Timeline and Sources of History"**
+by making you *live* the history first and *excavate your own past* afterward.
 
-**▶ [Play it](https://mailmeherepeople-eng.github.io/the-ones-who-came-before/game/)** — desktop or phone, no install.
+**▶ [Play it](https://mailmeherepeople-eng.github.io/the-ones-who-came-before/game/)** on a phone or desktop, no install.
 
-Made by Git Gud Studio. One valley, one save file, three acts, ~50 syllabus items.
-
----
+Made by Git Gud Studio. One valley, one save file, three acts, 51 syllabus items.
 
 ## The idea
 
 | | |
 |---|---|
-| **Act 1 — LIVE** | You are an early human. You paint a cave wall, throw a pot and press your maker's mark into it, weave a basket, bury an elder with her beads. Everything you make is stored with its map position. |
-| **Act 2 — PASS** | A draggable time dial. You scrub 5,400 BCE → 2026 CE and watch a cutaway of your own hut: the basket frays and vanishes, the pot chips but survives, the hut collapses into a grassed mound. Plus the no-year-zero trick, the BCE/CE gap formula, and the calendar faces. |
-| **Act 3 — DIG** | Present day, five-specialist excavation team. You dig up *your own* objects — your actual painting PNG revealed by lantern light, your actual maker's mark read by the epigraphist — and the basket's empty slot: **"∅ ORGANIC — NOT PRESERVED."** |
+| **Act 1: LIVE** | You are an early human. You paint a cave wall, throw a pot and press your maker's mark into it, weave a basket, bury an elder with her beads. Everything you make is stored with its place on the map. |
+| **Act 2: PASS** | A time dial over your valley. Scrub from 5,400 BCE to 2026 CE and watch your own hut underground: the basket frays and vanishes, the pot chips but survives, the hut becomes a grassed mound. Then walk the missing year zero, count gaps between dates, and swap calendar faces. |
+| **Act 3: DIG** | The present day, as a five-specialist team. You dig up *your own* objects (your actual painting revealed by lantern light, your actual maker's mark read by the epigraphist) and find the basket's empty slot: **"ORGANIC: NOT PRESERVED."** |
 
-The preservation bias isn't taught in a text box. You made the basket with one effortless
-tap in Act 1, and in Act 3 it is the one thing missing.
+The preservation bias is not taught in a text box. You made the basket with one effortless tap in Act 1, and in
+Act 3 it is the one thing missing.
 
 ## Run it locally
 
@@ -31,56 +28,34 @@ npx serve -l 8321 game
 
 Then open <http://localhost:8321>.
 
-**Desktop:** WASD + mouse-drag (or click for pointer lock) + E + scroll.
+**Desktop:** WASD, mouse drag (or click for pointer lock), E to interact, Q to equip, scroll to zoom.
 **Touch:** left joystick to move, drag the right side to look, tap to interact, pinch to zoom.
+
+Before any commit: `node game/tools/check.mjs` (regressions, content lint, undeclared names, audio manifest,
+offline precache, control characters, file sizes).
 
 ## Tech
 
-Vanilla JavaScript ES modules with Three.js v0.185 vendored into `game/vendor/` — the game
-runs offline after first load and has no toolchain at all. Vertex-coloured voxel chunks
-(160×24×160) with culled meshing and per-vertex ambient occlusion, a 30 fps limiter, a
-capped pixel ratio, WebGL context-loss recovery and a hidden-tab logic heartbeat.
-Full story snapshots in `localStorage` and IndexedDB, including original artwork, plus activity checkpoints and save import/export.
-
-There is also a full in-game **world editor** (`?edit` or **F2**) — flight, click-select,
-terrain brush, `.glb`/`.vox` import, a 16×16 per-face block painter — written against a
-~120-line host adapter so it ports to any Three.js project.
-
-## Content lint
-
-```bash
-node game/tools/lint-strings.mjs
-```
-
-Fails on old-syllabus terms, date literals outside `constants.js`/`strings.js`, and any
-edit to the protected NCERT phrasings (the no-year-zero trick, the verbatim 2,583-year
-worked example, the "Perhaps they believed" hedge). Keep it green.
+Vanilla JavaScript ES modules with Three.js 0.185 vendored into `game/vendor/`, so the game runs offline after its
+first load and has no toolchain. Vertex-coloured voxel chunks (160 x 24 x 160) with culled meshing, ambient
+occlusion and baked sun shadows, a flat storybook default look, a 30 fps limiter, a capped pixel ratio and quality
+tiers for cheap phones. Saves are full snapshots in localStorage and IndexedDB, including the player's original
+artwork. A full in-game world editor (`?edit` or backtick) is loaded only on demand.
 
 ## Documentation
 
-**Picking this up cold? Read [HANDOFF.md](HANDOFF.md) first.** It is the
-five-minute orientation: current state, how to run and test, the rules that
-must not be broken, open work, and the traps that cost time here.
-
-| File | What's in it |
+| File | What is in it |
 |---|---|
-| [HANDOFF.md](HANDOFF.md) | Start here. Session-start orientation and current state |
-| [GAME-OVERVIEW.md](GAME-OVERVIEW.md) | The complete reference: architecture, every act beat by beat, the living-world systems, the editor, known bugs |
-| [game/COVERAGE.md](game/COVERAGE.md) | Every examinable syllabus item → the beat that teaches it |
-| [game/EDITOR.md](game/EDITOR.md) | World editor user guide |
-| [CLAUDE.md](CLAUDE.md) | Standing rules for this repo, both enforced by tooling |
+| [AGENTS.md](AGENTS.md) | The rules for anyone (or any agent) working here. Start here |
+| [HANDOFF.md](HANDOFF.md) | Current state, who is on what, what is next |
+| [docs/GAME.md](docs/GAME.md) | What the game is: learners, goal, pillars, the three acts |
+| [docs/REFERENCE.md](docs/REFERENCE.md) | How it works now: code map, controls, every beat, systems, debug tools |
+| [docs/COVERAGE.md](docs/COVERAGE.md) | Every examinable syllabus item and the beat that teaches it |
+| [docs/EDITOR.md](docs/EDITOR.md) | World editor guide |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | History of what shipped and why |
 
-The design documents, knowledge map and spec are deliberately **not** in this
-repo (see CLAUDE.md rule 1). They live on the author's disk and in the vault.
+Design documents, plans and research are deliberately not in this repo (AGENTS.md rule 1). The NCERT textbook used
+as the content source is reference input, so it is not here either.
 
-## Debug parameters
-
-`?fast` (3-second countdowns) · `?act=2` / `?act=3` (jump with seeded records) ·
-`?dev` (expose `window.G`) · `?tp=x,z` (teleport) · `?edit` (world editor) ·
-**Alt+M** (act menu; also in Settings) · **F2** (editor)
-
-## Not in this repo
-
-`social science textbooks/class 6.zip` (~201 MB) is the NCERT source bundle. It exceeds
-GitHub's 100 MB per-file limit and is reference input rather than project output, so it is
-gitignored — re-downloadable from NCERT if you need it.
+`game-baseline/` is a frozen copy of the build before the mobile performance pass, playable side by side through
+[compare.html](compare.html).

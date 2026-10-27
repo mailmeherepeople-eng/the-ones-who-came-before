@@ -18,9 +18,9 @@ act3.js beats.
 | 4.10 | Gregorian: 12/365, leap years, 400 rule (1800✗ 1900✗ 2000✓) | Act 2 P5 gregorian line (verbatim rule) |
 | 4.11 | CE, formerly AD, from conventional year of Jesus' birth | Act 2 P2 (protected "conventional") |
 | 4.12 | BCE, formerly BC, counted backward | Act 2 P2 |
-| 4.13 | No year zero | Act 2 P2 TRICK challenge; dial physically has no zero |
-| 4.14 | Add then subtract 1 | Act 2 P3 formula card |
-| 4.15 | Buddha 560 BCE → 2024 CE = 2,583 (book's example, verbatim) | Act 2 P3 book-example card |
+| 4.13 | No year zero | Act 2 P2 user-paced BCE/CE lesson: the playable year bridge has no stone for zero (`sky/timeLessons.js`); dial physically has no zero; P6 practice |
+| 4.14 | Add then subtract 1 | Act 2 P3 user-paced gap lesson: count the jumps, then the shortcut, then three supported practice gaps |
+| 4.15 | Buddha 560 BCE → 2024 CE = 2,583 (book's example, verbatim) | Act 2 P3 worked calculation revealed in three parts, total 2,583 (protected) |
 | 4.16 | Decade | Act 2 P4 decade lock |
 | 4.17 | Century; 21st century = 2001–2100; cricket framing | Act 2 P4 century beat |
 | 4.18 | 3rd century BCE = 300–201 BCE | Act 2 P4 centuryNote |
