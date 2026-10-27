@@ -90,6 +90,14 @@ mockup*.png
 social science textbooks/
 fees1dd/
 
+# --- Godot build (engine evaluation; not the shipped game) ---
+# The Godot rebuild of the game lives here while the engine decision is open.
+# The shipped game is game/ (Three.js). If the Godot version ever becomes the
+# shipped game, remove this rule DELIBERATELY, in its own commit, after
+# deciding what of it belongs in public history (.godot/ caches and test
+# screenshots never do).
+/godot/
+
 # --- OS / editor cruft ---
 Thumbs.db
 desktop.ini
