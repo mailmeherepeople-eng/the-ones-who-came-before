@@ -1763,7 +1763,22 @@ error.
 `node --check` does not catch an undeclared name (only a run does). A
 scope-aware scan of every module (acorn, undeclared identifiers and import
 targets) found these five names and nothing else, in HEAD or the working
-tree. Adding that scan to `check.mjs` is the open follow-up.
+tree.
+
+**Since 27 October 2026, 23:25 IST, that scan is a gate step.**
+`game/tools/undeclared.mjs` runs inside `check.mjs` ("undeclared names,
+imports"), using acorn 8.18.0 vendored at `game/tools/vendor/acorn/` (MIT,
+licence beside it), so there is still no npm install. Per module it walks real
+scopes (imports, hoisted `var`, block-scoped `let`/`const`/`class`/`function`,
+parameters, destructuring, catch and loop variables) and fails on any name
+that resolves to nothing and is not a JavaScript or browser global. A few
+real globals that are nearly always typos (`name`, `event`, `status`, `self`
+and similar) count as failures too. It also fails when a relative import,
+re-export or dynamic `import()` names a missing file or an export that is not
+there, following `export *` chains the way `three.module.js` uses them. Tried
+against the pre-fix `act1.js` it reports all five `ARROW_*` names; it leaves
+`typeof x` alone. It cannot see property keys (`S.act1.missingKey`), and it
+does not play a beat: the human half of the checklist still stands.
 
 **The Site Report's first era label was blank (since 10 August 2026).** The
 tribe-wording pass (6dd12a3) renamed `eraLabels.band` to `eraLabels.tribe` in

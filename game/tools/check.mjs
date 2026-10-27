@@ -11,6 +11,10 @@
 // Each check here exists because something actually went wrong:
 //   content lint     the em dash and old-syllabus rules, plus the protected
 //                    NCERT phrasings, all of which ship to children
+//   undeclared names a commit deleted the bow constants while the hunt still
+//                    read them; every module parsed, and the live game sat
+//                    soft-locked at the Act 1 hunt for five weeks
+//                    (undeclared.mjs, GAME-OVERVIEW section 28)
 //   audio manifest   a clip on disk but not in the manifest is silent, and
 //                    nothing at runtime says so
 //   service worker   three modules shipped for a whole pass without ever being
@@ -58,6 +62,7 @@ function runTool(name, script, args = []) {
 
 runTool('gameplay regressions', 'regression.mjs');
 runTool('content lint', 'lint-strings.mjs');
+runTool('undeclared names, imports', 'undeclared.mjs');
 runTool('audio manifest in sync', 'sync-audio-manifest.mjs', ['--check']);
 
 // ---------- 3: the service worker precache list ----------

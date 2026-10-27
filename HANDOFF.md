@@ -35,9 +35,10 @@ Or use `.claude/launch.json`: **`game`** (port 8321, serves `game/`) or
 **`compare`** (port 8323, serves the REPO ROOT so `/game/` and
 `/game-baseline/` are both reachable, same as Pages).
 
-Before every commit, one command for everything a machine can check (content
-lint, audio manifest in sync, service worker precache complete, no control
-characters in source):
+Before every commit, one command for everything a machine can check (gameplay
+regressions, content lint, no undeclared names or broken imports, audio
+manifest in sync, service worker precache complete, no control characters in
+source):
 
 ```
 node game/tools/check.mjs
