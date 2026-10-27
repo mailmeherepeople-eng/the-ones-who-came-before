@@ -46,6 +46,7 @@ export const B = {
   STRATA_B: 36,
   STRATA_C: 37,
   STRATA_D: 38,
+  ROOTS: 39, // banyan aerial roots (slice 1)
 };
 
 // [topColor, sideColor, bottomColor, opaque, solid]
@@ -67,42 +68,52 @@ export const BLOCK_DEFS = {
   // grass: a real green (was 0x87a556, a khaki that sat in the same value
   // band as sand and dirt, so the valley read as one beige sheet), with a
   // clear grass-rim/soil contrast on the sides
-  [B.GRASS]: { top: C(0x79a843), side: C(0x8a6742), bottom: C(0x74542f), opaque: true, solid: true },
-  [B.DIRT]: { top: C(0x8a6440), side: C(0x7e5a39), bottom: C(0x704e30), opaque: true, solid: true },
-  [B.STONE]: { top: C(0x9a948b), side: C(0x8b867d), bottom: C(0x7c7770), opaque: true, solid: true },
-  [B.SAND]: { top: C(0xe3cf9a), side: C(0xd6c085), bottom: C(0xc6ae70), opaque: true, solid: true },
+  // Slice 1 (2026-10-27): an Indian palette, central India in the style of
+  // the Bhimbetka hills. Monsoon green over red laterite soil, buff and rose
+  // sandstone, murram paths, mud-walled huts. Ids are untouched (saves).
+  [B.GRASS]: { top: C(0x6d9c3d), side: C(0x955a3d), bottom: C(0x80492f), opaque: true, solid: true },
+  [B.DIRT]: { top: C(0x9c5e40), side: C(0x8f5439), bottom: C(0x7f4830), opaque: true, solid: true },
+  [B.STONE]: { top: C(0xab917b), side: C(0x9c836e), bottom: C(0x8c7562), opaque: true, solid: true },
+  [B.SAND]: { top: C(0xe2cb98), side: C(0xd4ba84), bottom: C(0xc3a770), opaque: true, solid: true },
   // deeper blue-teal river water
   [B.WATER]: { top: C(0x2b7a9c), side: C(0x256b88), bottom: C(0x1b526e), opaque: false, solid: false, water: true },
   [B.ICE]: { top: C(0xd6ecf6), side: C(0xb9d8ea), bottom: C(0xa3c6dc), opaque: true, solid: true },
-  [B.ROCK]: { top: C(0x77705f), side: C(0x6a6355), bottom: C(0x5c564a), opaque: true, solid: true },
-  [B.WOOD]: { top: C(0x9b7746), side: C(0x74562c), bottom: C(0x9b7746), opaque: true, solid: true },
-  [B.LEAVES]: { top: C(0x528f33), side: C(0x48802e), bottom: C(0x3e7028), opaque: true, solid: true },
+  // Vindhyan sandstone: rose-buff faces, the colour of the Bhimbetka shelters
+  [B.ROCK]: { top: C(0xb3856a), side: C(0xa4775d), bottom: C(0x8f6650), opaque: true, solid: true },
+  [B.WOOD]: { top: C(0x9a7247), side: C(0x6b4a2f), bottom: C(0x9a7247), opaque: true, solid: true },
+  [B.LEAVES]: { top: C(0x46802b), side: C(0x3e7227), bottom: C(0x356222), opaque: true, solid: true },
   [B.BUSH]: { top: C(0x47823a), side: C(0xa63d30), bottom: C(0x38622c), opaque: true, solid: true },
   [B.BUSH_BARE]: { top: C(0x6b7448), side: C(0x5f6841), bottom: C(0x525a38), opaque: true, solid: true },
-  [B.THATCH]: { top: C(0xd2a95f), side: C(0xc0954e), bottom: C(0xac8343), opaque: true, solid: true },
-  [B.WATTLE]: { top: C(0xa07b4a), side: C(0x8f6c40), bottom: C(0x7c5c36), opaque: true, solid: true },
-  [B.PATH]: { top: C(0xb59a67), side: C(0x9d8557), bottom: C(0x87724b), opaque: true, solid: true },
+  [B.THATCH]: { top: C(0xd4a856), side: C(0xc29447), bottom: C(0xab803c), opaque: true, solid: true },
+  // mud-plastered walls, the red-brown of the soil they are made from
+  [B.WATTLE]: { top: C(0xae7650), side: C(0x9e6846), bottom: C(0x88583b), opaque: true, solid: true },
+  // murram: the beaten red laterite of a village path
+  [B.PATH]: { top: C(0xc08452), side: C(0xa96f45), bottom: C(0x925e3b), opaque: true, solid: true },
   [B.FARMLAND]: { top: C(0x5f4527), side: C(0x6f5230), bottom: C(0x63482a), opaque: true, solid: true },
   [B.CROP]: { top: C(0xa8bf55), side: C(0x8ba847), bottom: C(0x5f4527), opaque: true, solid: true },
-  [B.MUDBRICK]: { top: C(0xbb9159), side: C(0xac814c), bottom: C(0x997242), opaque: true, solid: true },
+  [B.MUDBRICK]: { top: C(0xbe8656), side: C(0xae7749), bottom: C(0x99673e), opaque: true, solid: true },
   // walk-through vegetation — must never wall off the riverbank (solid stays false)
-  [B.REED]: flora(0x7fa04c, 0xa9c26a, { crossH: 1.0, crossTaper: 0.25 }),
-  [B.MOUND]: { top: C(0x967c4b), side: C(0x88703f), bottom: C(0x7a6437), opaque: true, solid: true },
-  [B.STERILE]: { top: C(0xcbb896), side: C(0xbca887), bottom: C(0xac9877), opaque: true, solid: true },
+  // kans grass (kaash): the tall riverbank grass whose white plumes open
+  // after the monsoon. Same id and placement as the old reeds.
+  [B.REED]: flora(0x93a352, 0xf3efe2, { crossH: 1.0, crossTaper: 0.25 }),
+  [B.MOUND]: { top: C(0x9c7049), side: C(0x8d633f), bottom: C(0x7d5636), opaque: true, solid: true },
+  [B.STERILE]: { top: C(0xceb08a), side: C(0xbea07b), bottom: C(0xad906c), opaque: true, solid: true },
   [B.CHARCOAL]: { top: C(0x2e2a26), side: C(0x282420), bottom: C(0x22201c), opaque: true, solid: true },
   // warm off-white snow top (B lowest channel) — a blue-white top made the
   // whole cold basin cast grey-blue under the scene-A sky
   [B.SNOWGRASS]: { top: C(0xeaeee2), side: C(0x8a6742), bottom: C(0x74542f), opaque: true, solid: true },
   // ---- decorative flora (all walk-through, all crossed quads) ----
-  [B.TALLGRASS]: flora(0x6fa545, 0x93bd58),
+  [B.TALLGRASS]: flora(0x6c963c, 0xa8b45c),
   // flowers keep more top width than grass so the bloom still reads
   [B.FLOWER_RED]: flora(0x5f8c44, 0xd8503c, { crossTaper: 0.3 }),
-  [B.FLOWER_YELLOW]: flora(0x5f8c44, 0xeac944, { crossTaper: 0.3 }),
-  [B.FLOWER_WHITE]: flora(0x5f8c44, 0xf0eee2, { crossTaper: 0.3 }),
+  // marigold orange-yellow
+  [B.FLOWER_YELLOW]: flora(0x5f8c44, 0xf2ad2e, { crossTaper: 0.3 }),
+  // pink rather than white: a white bloom read as litter or snow at range
+  [B.FLOWER_WHITE]: flora(0x5f8c44, 0xe48db5, { crossTaper: 0.3 }),
   [B.FERN]: flora(0x39682f, 0x4d8038, { crossTaper: 0.4 }),
   [B.SHRUB_BERRY]: flora(0x3f7434, 0xc03a2c, { fleck: true, crossTaper: 0.35 }),
   // dry straw-brown tuft, lighter seed heads — sits naturally on the grass hue
-  [B.DEADBUSH]: flora(0x8a6a3c, 0xa89058, { crossTaper: 0.45 }),
+  [B.DEADBUSH]: flora(0x9a7240, 0xc2a462, { crossTaper: 0.45 }),
   // frost tuft: CLEARLY green sage body, warm pale tip. The mesher paints the
   // accent full-strength on both top verts and gradients it down the quad, so
   // the body must stay saturated-green (wide R/G/B spread) and the tip must
@@ -111,16 +122,24 @@ export const BLOCK_DEFS = {
   // spikier than meadow grass so act1's dense cold scatter reads as frost.
   [B.SNOWTUFT]: flora(0xa2b183, 0xdce4cb, { crossH: 0.6, crossTaper: 0.62 }),
   // ---- tree / rock / strata variants (cube blocks) ----
-  [B.LEAVES_DARK]: { top: C(0x3b6c2a), side: C(0x356228), bottom: C(0x2f5723), opaque: true, solid: true },
-  [B.LEAVES_BRIGHT]: { top: C(0x77ad3a), side: C(0x6b9e35), bottom: C(0x5e8c30), opaque: true, solid: true },
+  // banyan and mango: deep glossy green
+  [B.LEAVES_DARK]: { top: C(0x30652a), side: C(0x2b5a25), bottom: C(0x244d20), opaque: true, solid: true },
+  // peepal and date-palm fronds: lighter, yellower green
+  [B.LEAVES_BRIGHT]: { top: C(0x6aa037), side: C(0x5f9132), bottom: C(0x527e2c), opaque: true, solid: true },
   // pale WARM birch bark — creamy, never concrete grey (banding via mesher jitter)
-  [B.WOOD_BIRCH]: { top: C(0xbfa87e), side: C(0xe6d9b6), bottom: C(0xbfa87e), opaque: true, solid: true },
-  [B.ROCK_DARK]: { top: C(0x453f37), side: C(0x3d3831), bottom: C(0x36322b), opaque: true, solid: true },
+  // date-palm trunk (was pale birch): ringed grey-brown, the mesher's ring
+  // banding for this id now reads as old frond scars. Also the log crossing.
+  [B.WOOD_BIRCH]: { top: C(0x8e7a5c), side: C(0xa48d6a), bottom: C(0x8e7a5c), opaque: true, solid: true },
+  // weathered, smoke-darkened sandstone: cave walls and shelter interiors
+  [B.ROCK_DARK]: { top: C(0x6b4c3c), side: C(0x5f4335), bottom: C(0x523a2e), opaque: true, solid: true },
   // sedimentary bands for the fossil-cliff reading face ("layers = time")
   [B.STRATA_A]: { top: C(0x8a5138), side: C(0x8a5138), bottom: C(0x7c4832), opaque: true, solid: true },
   [B.STRATA_B]: { top: C(0xc9a468), side: C(0xc9a468), bottom: C(0xb8945c), opaque: true, solid: true },
   [B.STRATA_C]: { top: C(0x8b8b6d), side: C(0x8b8b6d), bottom: C(0x7d7d62), opaque: true, solid: true },
   [B.STRATA_D]: { top: C(0xd9bd85), side: C(0xd9bd85), bottom: C(0xc8ad77), opaque: true, solid: true },
+  // banyan aerial roots: hanging cords, walk-through like any flora, so a
+  // banyan's skirt of roots never walls off a path
+  [B.ROOTS]: flora(0x76563a, 0x8d6c4c, { crossH: 1.0, crossTaper: 0.05 }),
 };
 
 // Runtime block registration — the world editor's block importer uses this to

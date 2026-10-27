@@ -48,6 +48,25 @@ export const SHADE = {
   sunDir: { value: new THREE.Vector3(40, 60, 20).normalize() },
   sunColor: { value: new THREE.Color(0xffe4b8) },
   vivid: { value: 0 },
+  // ---- vivid's storybook light (only read while vivid is on) ----
+  // Vivid paints the raw palette, so without these a cave is exactly as
+  // bright as the meadow and "stepping out into the light" means nothing.
+  //   vividShadow  floor of the baked sun shadow: a face the mesher marked
+  //                as sunless renders at this fraction, never black
+  //   darkLo/Hi    one world-space box (the training cave) that is dark
+  //   darkAmt      how dark: 0 is off, 0.66 leaves a third of the colour
+  //   glow         up to four warm pools of light, xyz + radius (w 0 = off)
+  //   vividSky     what the river reflects at a grazing angle
+  vividShadow: { value: 0.7 },
+  darkLo: { value: new THREE.Vector3() },
+  darkHi: { value: new THREE.Vector3() },
+  darkAmt: { value: 0 },
+  glow: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+  glowColor: { value: new THREE.Color(0xffb565) },
+  vividSky: { value: new THREE.Color(0x9fd2ee) },
+  // the scene's light colour for vivid, which has no lights: cold for the
+  // ice age, warm for the title's golden hour, white otherwise (setSky sets it)
+  vividTint: { value: new THREE.Color(0xffffff) },
 };
 
 const ENHANCED = new Set();
@@ -155,6 +174,14 @@ uniform vec3 uMistColor;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform float uVivid;
+uniform float uVividShadow;
+uniform vec3 uDarkLo;
+uniform vec3 uDarkHi;
+uniform float uDarkAmt;
+uniform vec4 uGlow[ 4 ];
+uniform vec3 uGlowColor;
+uniform vec3 uVividSky;
+uniform vec3 uVividTint;
 varying vec3 vWPos;
 #ifdef USE_SUNMASK
   varying float vSun;
@@ -221,7 +248,38 @@ if ( uVivid > 0.5 ) {
   #ifdef USE_VIVID_SRGBFIX
     towcbAlbedo = pow( towcbAlbedo, vec3( 2.2 ) );
   #endif
-  outgoingLight = towcbAlbedo * towcbShade;
+  // storybook light: the mesher's baked sun shadow (clouds included on the
+  // Rich tier), the dark zone, then warm glows that only lift what is dark
+  float towcbLit = 1.0;
+  #ifdef USE_SUNMASK
+    towcbLit = mix( uVividShadow, 1.0, towcbSunMask );
+  #endif
+  vec3 towcbZLo = smoothstep( uDarkLo - 0.75, uDarkLo, vWPos );
+  vec3 towcbZHi = 1.0 - smoothstep( uDarkHi, uDarkHi + 0.75, vWPos );
+  float towcbZone = towcbZLo.x * towcbZLo.y * towcbZLo.z * towcbZHi.x * towcbZHi.y * towcbZHi.z * uDarkAmt;
+  #ifdef USE_SUNMASK
+    towcbLit = min( towcbLit, mix( 1.0 - towcbZone, 1.0, towcbSunMask ) );
+  #else
+    towcbLit = min( towcbLit, 1.0 - towcbZone );
+  #endif
+  float towcbGlow = 0.0;
+  for ( int i = 0; i < 4; i ++ ) {
+    vec4 towcbG = uGlow[ i ];
+    if ( towcbG.w > 0.0 ) towcbGlow += 1.0 - smoothstep( 0.0, towcbG.w, distance( vWPos, towcbG.xyz ) );
+  }
+  towcbGlow = min( towcbGlow, 1.0 );
+  vec3 towcbLight = vec3( towcbLit ) + uGlowColor * ( towcbGlow * ( 1.0 - towcbLit ) * 1.3 );
+  outgoingLight = towcbAlbedo * towcbShade * towcbLight;
+  #ifdef USE_WATER
+    // water that reads as water: the sky in it at a grazing angle, and a
+    // tight sun glint riding the animated normal
+    float towcbFres = pow( 1.0 - clamp( dot( normal, geometryViewDir ), 0.0, 1.0 ), 3.0 );
+    outgoingLight = mix( outgoingLight, uVividSky, towcbFres * 0.6 );
+    vec3 towcbSunV = normalize( ( viewMatrix * vec4( uSunDir, 0.0 ) ).xyz );
+    float towcbSp = pow( max( dot( normal, normalize( towcbSunV + geometryViewDir ) ), 0.0 ), 90.0 );
+    outgoingLight += vec3( towcbSp * 0.8 );
+  #endif
+  outgoingLight *= uVividTint;
 }
 #include <opaque_fragment>
 `;
@@ -277,6 +335,14 @@ export function enhance(mat, opts = {}) {
     shader.uniforms.uCloudTex = SHADE.cloudTex;
     shader.uniforms.uCloudAmt = SHADE.cloudAmt;
     shader.uniforms.uVivid = SHADE.vivid;
+    shader.uniforms.uVividShadow = SHADE.vividShadow;
+    shader.uniforms.uDarkLo = SHADE.darkLo;
+    shader.uniforms.uDarkHi = SHADE.darkHi;
+    shader.uniforms.uDarkAmt = SHADE.darkAmt;
+    shader.uniforms.uGlow = SHADE.glow;
+    shader.uniforms.uGlowColor = SHADE.glowColor;
+    shader.uniforms.uVividSky = SHADE.vividSky;
+    shader.uniforms.uVividTint = SHADE.vividTint;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\n' + VERT_PARS)
       .replace('#include <begin_vertex>', VERT_BEGIN)
@@ -325,6 +391,28 @@ export function setVivid(on) {
     m.toneMapped = !on;
     m.needsUpdate = true;
   }
+}
+
+export const isVivid = () => vividOn;
+
+// Vivid's dark zone: one world-space box that renders dark except where the
+// mesher baked sunlight onto a face (a cave mouth, a shaft through the roof).
+// Pass null to switch it off. Uniform writes only, so this is free per call.
+export function setDarkZone(lo, hi, amount = 0.66) {
+  if (!lo) { SHADE.darkAmt.value = 0; return; }
+  SHADE.darkLo.value.set(lo.x, lo.y, lo.z);
+  SHADE.darkHi.value.set(hi.x, hi.y, hi.z);
+  SHADE.darkAmt.value = amount;
+}
+
+// Vivid's warm pools of light: up to four {x, y, z, r}. Anything beyond four
+// is ignored; an empty list switches them all off.
+export function setGlows(list = []) {
+  SHADE.glow.value.forEach((v, i) => {
+    const g = list[i];
+    if (g) v.set(g.x, g.y, g.z, g.r);
+    else v.set(0, 0, 0, 0);
+  });
 }
 
 // advance the shared clock; the renderer calls this once per rendered frame

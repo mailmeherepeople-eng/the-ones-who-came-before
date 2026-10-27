@@ -563,7 +563,7 @@ async function sceneA(G) {
   dressSceneACold(G.world);
   scatterWildBerries(G.world); // before remeshAll, so setRaw is enough
   G.mesher.remeshAll();
-  G.renderer.setSky(0xbcd3e6, 0xd4e2ec); // colder light
+  G.renderer.setSky(0xbcd3e6, 0xd4e2ec, 0xdbe6f2); // colder light
   // the ice-age basin: a thin cold mist on the low ground, snow in the air
   G.renderer.setMist(0.45, 10, 5);
   FX.setMotes('snow');

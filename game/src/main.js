@@ -12,8 +12,8 @@ import { runAct1 } from './acts/act1.js';
 import { SFX } from './audio.js';
 import { FX } from './fx/fx.js';
 import { Settings } from './settings.js';
-import { setVivid } from './world/shade.js';
-import { SITES } from './world/terrain.js';
+import { setVivid, setDarkZone, setGlows } from './world/shade.js';
+import { SITES, TRAINING_CAVE } from './world/terrain.js';
 import { buildSceneB } from './world/states.js';
 import { installEquipment } from './ui/equipment.js';
 
@@ -90,9 +90,14 @@ Settings.subscribe(() => {
   G.player.gentleCamera = Settings.get('gentleCamera');
   G.player.lookScale = Settings.get('sensitivity') ? 0.55 : 1;
   document.body.classList.toggle('large-text', Settings.get('largeText'));
+  G.renderer.setShadowsAllowed(!Settings.get('vivid'));
   G.renderer.setRich(Settings.get('rich'));
   setVivid(Settings.get('vivid'));
 });
+
+// The training cave is dark in every era (vivid only; the lit style has real
+// light for it). Set once: it is a fact about the valley, not about a beat.
+setDarkZone(TRAINING_CAVE.lo, TRAINING_CAVE.hi, 0.6);
 
 // visual FX layer: init once on the persistent scene; wire player juice hooks
 FX.init(G.renderer.scene);
@@ -117,6 +122,7 @@ Sound.loadManifest();
 import { disposeGroup, foldIfStatic } from './world/props.js';
 
 export function clearStage(G) {
+  setGlows([]); // a scene's warm pools of light leave with its props
   G.interactables.length = 0;
   for (const n of G.npcs) n.dispose();
   G.npcs.length = 0;
@@ -394,7 +400,7 @@ function startTitleWorld(titleEl) {
     G.mesher.remeshAll();
     // late afternoon: the act skies are noon blues; this is the one golden
     // hour in the game, and it belongs to the first thing anyone sees
-    G.renderer.setSky(0x8fb8dc, 0xe9cfa6);
+    G.renderer.setSky(0x8fb8dc, 0xe9cfa6, 0xfff0d6);
     G.renderer.setMist(0.35, 11, 5);
     FX.setMotes('pollen');
     G.player.modelHidden = true;

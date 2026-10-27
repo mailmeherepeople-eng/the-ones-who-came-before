@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Renderer } from '../src/engine/renderer.js';
 import { Player } from '../src/player/player.js';
 import * as THREE from '../vendor/three.module.js';
-import { B } from '../src/world/blocks.js';
+import { B, isSolid } from '../src/world/blocks.js';
 globalThis.localStorage = {getItem:()=>null};
 const { CODEX, codexText } = await import('../src/codex.js');
 import { TEACHABLE } from '../src/syllabus.js';
@@ -68,7 +68,41 @@ for(let i=0;i<120;i++) {
   trainee.update(1/60,walking);
 }
 assert.ok(trainee.pos.x>22 && trainee.onGround,'Real jump physics must clear the sill and land safely');
-console.log('PASS larger world preserves every original terrain height and river column; cave headroom and real jump route are traversable');
+// The long training cave (slice 1, 2026-10-27). A breadth-first walk over the
+// cells a player can stand in (solid below, two free above), stepping one block
+// up, jumping two, or dropping. It proves the sill still gates the practice
+// rooms, the way out is the long passage and nothing shorter (an early sun
+// crack was a climbable staircase straight to the cliff top), and the camp is
+// only reachable through the mouth.
+for (const ice of [true,false]) {
+  const w=new VoxelWorld();buildBase(w,{ice});
+  const solid=(x,y,z)=>isSolid(w.get(x,y,z));
+  const stand=(x,y,z)=>solid(x,y-1,z)&&!solid(x,y,z)&&!solid(x,y+1,z);
+  const walkFrom=(from,maxUp)=>{
+    const key=(x,y,z)=>`${x},${y},${z}`,dist=new Map([[key(from.x,10,from.z),0]]),queue=[[from.x,10,from.z]];
+    while(queue.length){
+      const [x,y,z]=queue.shift(),d=dist.get(key(x,y,z));
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=x+dx,nz=z+dz;if(nx<0||nz<0||nx>60||nz>45)continue;
+        for(let ny=y+maxUp;ny>=y-8;ny--){
+          if(!stand(nx,ny,nz))continue;
+          if(ny>y&&solid(x,ny+1,z))continue;
+          if(ny<y&&(solid(nx,y,nz)||solid(nx,y+1,nz)))continue;
+          const k=key(nx,ny,nz);if(!dist.has(k)){dist.set(k,d+1);queue.push([nx,ny,nz]);}
+          break;
+        }
+      }
+    }
+    return site=>{let best=null;for(const [k,d] of dist){const [x,,z]=k.split(',').map(Number);if(x===site.x&&z===site.z&&(best===null||d<best))best=d;}return best;};
+  };
+  const walking=walkFrom(SITES.trainingStart,1),jumping=walkFrom(SITES.trainingStart,2),fromBasket=walkFrom(SITES.trainingBasket,2);
+  assert.equal(walking(SITES.trainingBasket),null,'The sill must still take a jump');
+  assert.equal(walking(SITES.trainingExit),null,'No way out of the sleeping chamber without the jump');
+  assert.ok(jumping(SITES.trainingBasket)!==null&&jumping(SITES.trainingExit)!==null,'Basket and mouth reachable with a jump');
+  assert.ok(fromBasket(SITES.trainingExit)>=80,`The way out is the long passage (got ${fromBasket(SITES.trainingExit)} steps)`);
+  assert.ok(jumping(SITES.campA)>jumping(SITES.trainingExit),'The camp is reached through the mouth, never round it');
+}
+console.log('PASS larger world preserves every original terrain height and river column; cave headroom, real jump and the long way out are traversable');
 for (const hz of [30,60,90,120,144]) {
   let seconds=0;
   const r=Object.assign(Object.create(Renderer.prototype),{paused:false,_last:0,_acc:0,_frameInterval:1/30,

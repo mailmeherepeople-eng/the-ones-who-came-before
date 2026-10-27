@@ -100,7 +100,10 @@ export class Renderer {
     }, 300);
   }
 
-  setSky(skyHex, fogHex) {
+  // vividTint: the light colour the Vivid style paints with, since it has no
+  // lights of its own. White unless a scene asks (cold ice age, warm title).
+  setSky(skyHex, fogHex, vividTint = 0xffffff) {
+    SHADE.vividTint.value.set(vividTint);
     const sky = new THREE.Color(skyHex);
     const fog = new THREE.Color(fogHex);
     // zenith: skyHex pushed darker and a touch more saturated
@@ -163,10 +166,10 @@ export class Renderer {
     const gl = this.gl;
     if (on) {
       const phone = QUALITY_TIER === 'low' || matchMedia('(pointer: coarse)').matches;
-      gl.shadowMap.enabled = true;
+      gl.shadowMap.enabled = this.shadowsAllowed !== false;
       gl.shadowMap.type = THREE.PCFShadowMap; // PCFSoft is the expensive one on mobile
       gl.shadowMap.autoUpdate = false;        // updated together with the light in _render
-      this.sun.castShadow = true;
+      this.sun.castShadow = gl.shadowMap.enabled;
       this.sun.shadow.mapSize.set(phone ? 512 : 1024, phone ? 512 : 1024);
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
       const c = this.sun.shadow.camera;
@@ -193,6 +196,21 @@ export class Renderer {
     });
   }
 
+  // The Vivid style paints the palette and never reads the shadow map, so
+  // while it is on the map is neither enabled nor rendered: the Rich tier
+  // keeps its post pass and cloud shadows and drops a whole depth pass.
+  // Callers flip vivid in the same tick, which recompiles every enhanced
+  // material anyway, so the shadow define change rides that recompile.
+  setShadowsAllowed(allowed) {
+    allowed = !!allowed;
+    if (allowed === (this.shadowsAllowed !== false)) return;
+    this.shadowsAllowed = allowed;
+    if (!this.rich) return;
+    this.gl.shadowMap.enabled = allowed;
+    this.sun.castShadow = allowed;
+    if (allowed) this.gl.shadowMap.needsUpdate = true;
+  }
+
   // keep the shadow box on the part of the world the camera is looking at
   _followShadow() {
     const cam = this.camera;
@@ -216,7 +234,7 @@ export class Renderer {
   _render(dt) {
     tickShade(dt);
     if (this.rich) {
-      this._followShadow();
+      if (this.gl.shadowMap.enabled) this._followShadow();
       this.post.render(this.scene, this.camera, SHADE.time.value);
     } else {
       this.gl.render(this.scene, this.camera);

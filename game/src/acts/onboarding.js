@@ -9,6 +9,8 @@ import { activity } from '../ui/activity.js';
 import { SFX } from '../audio.js';
 import { FX } from '../fx/fx.js';
 import { setBeacon } from '../ui/objective.js';
+import { setGlows } from '../world/shade.js';
+import { valleyReveal } from '../sky/interstitial.js';
 
 export const TRAINING_STEPS = ['look','forward','back','left','right','jump','basket','equip','stow','ready','exit','camp'];
 const text = S.onboarding;
@@ -36,6 +38,8 @@ export function dressTrainingShelter(G) {
     const lamp=new THREE.PointLight(0xffdeb0,intensity,14,1.5);
     lamp.position.set(site.x,14,site.z);group.add(lamp);
   }
+  // the same two lamps for the vivid style, which ignores scene lights
+  setGlows([{...SITES.trainingLight,y:12,r:7},{...SITES.trainingBasket,y:12,r:6}]);
   const mat=new THREE.Mesh(new THREE.BoxGeometry(1.7,.06,2.2),new THREE.MeshLambertMaterial({color:0x756042}));
   mat.position.set(SITES.trainingStart.x,10.035,SITES.trainingStart.z);group.add(mat);
   G.renderer.scene.add(group);G.props.push({group,_folded:true});
@@ -118,6 +122,14 @@ export async function runOnboarding(G) {
     G.player.teleport(at.x,at.z,at.yaw,at.y);
     last.copy(G.player.pos);distance=0;looked=0;jumped=false;
   }
+  // The first look at the valley (sky/interstitial.js valleyReveal), once per
+  // story: on stepping out of the mouth, or straight after Skip practice,
+  // which puts the player at the mouth without the walk.
+  const playReveal=()=>{
+    if(Save.activity('onboarding').revealSeen) return Promise.resolve();
+    Save.setActivity('onboarding',{revealSeen:true});
+    return valleyReveal(G,{gentle:!!G.player.gentleCamera||reducedMotion.matches});
+  };
   function finish(skipped=false){
     if(finished)return;
     finished=true;
@@ -127,6 +139,7 @@ export async function runOnboarding(G) {
       const at=SITES.trainingExit;G.player.teleport(at.x,at.z,Math.PI/2);
     }
     Save.setActivity('onboarding',{started:true,done:true,step:TRAINING_STEPS.length,skipped});Save.persist();
+    if(skipped){el.hidden=true;playReveal().then(resolveDone);return;}
     resolveDone();
   }
   function advance(){
@@ -134,7 +147,11 @@ export async function runOnboarding(G) {
     step++;
     if(step>=TRAINING_STEPS.length){finish();return;}
     if(TRAINING_STEPS[step]==='camp'){
-      quiet=3.5;el.hidden=true;root.classList.add('training-reveal');FX.setMotes('snow');
+      // out in the light: the card stays hidden for the whole reveal, then a
+      // short breath before it comes back with "find your people"
+      quiet=Infinity;el.hidden=true;root.classList.add('training-reveal');FX.setMotes('snow');
+      setGlows([]);
+      playReveal().then(()=>{quiet=1.2;});
     }
     paint();
   }
@@ -193,5 +210,6 @@ export async function runOnboarding(G) {
     G.interactables=G.interactables.filter(o=>o!==pickup);
     root.classList.remove('training-active','training-reveal');el.remove();
     setBeacon(G,null);disposeGroup(scene,group);FX.setMotes('snow');G.hud.hidePrompt();
+    setGlows([]);
   }
 }

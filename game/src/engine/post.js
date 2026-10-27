@@ -18,6 +18,7 @@
 // there is no build step here, the pass is forty lines of GLSL, and both
 // libraries would add a render pass per effect.
 import * as THREE from '../../vendor/three.module.js';
+import { SHADE } from '../world/shade.js';
 
 const VERT = /* glsl */ `
 varying vec2 vUv;
@@ -33,6 +34,7 @@ uniform vec2 uTexel;     // 1 / render size
 uniform float uSat;
 uniform vec3 uLift;      // added to the darks (warm)
 uniform vec3 uGain;      // multiplied in (cool highlights)
+uniform float uVivid;    // the Vivid style: FXAA only, no grade, no tone map
 varying vec2 vUv;
 // three prepends the tone-mapping and colour-space helpers to every
 // ShaderMaterial on its own; only the apply chunks go at the end of main()
@@ -63,12 +65,20 @@ vec3 fxaa( vec2 uv ) {
 
 void main() {
   vec3 col = fxaa( vUv );
-  // grade, in linear light before the tone curve
-  col = col * uGain + uLift;
-  float l = luma( col );
-  col = mix( vec3( l ), col, uSat );
+  if ( uVivid < 0.5 ) {
+    // grade, in linear light before the tone curve
+    col = col * uGain + uLift;
+    float l = luma( col );
+    col = mix( vec3( l ), col, uSat );
+  }
   gl_FragColor = vec4( max( col, 0.0 ), 1.0 );
-  #include <tonemapping_fragment>
+  // Vivid's materials opt out of tone mapping so the palette shows as
+  // authored; on the Rich tier this pass is where the tone map would land
+  // instead, so it opts out here too. Without this a Rich device showed
+  // Vivid graded and ACES-curved (lime grass) while a Lite one showed it raw.
+  if ( uVivid < 0.5 ) {
+    #include <tonemapping_fragment>
+  }
   #include <colorspace_fragment>
 }`;
 
@@ -92,6 +102,7 @@ export class Post {
         uSat: { value: 1.12 },
         uLift: { value: new THREE.Vector3(0.01, 0.006, 0.0) },
         uGain: { value: new THREE.Vector3(1.06, 1.06, 1.095) },
+        uVivid: SHADE.vivid,
       },
       vertexShader: VERT,
       fragmentShader: FRAG,

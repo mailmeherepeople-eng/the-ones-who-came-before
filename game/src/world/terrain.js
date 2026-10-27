@@ -1,7 +1,7 @@
 // Deterministic valley terrain. One valley, one river, a north cliff with a
 // rock shelter, plains east, meadow west (design doc §4).
 import { WORLD } from '../constants.js';
-import { B } from './blocks.js';
+import { B, isOpaque } from './blocks.js';
 
 const { SIZE_X: SX, SIZE_Z: SZ, SIZE_Y: SY, WATER_LEVEL } = WORLD;
 
@@ -139,29 +139,156 @@ export function buildBase(world, opts = {}) {
   dressOutlands(world, lush, ice);
 }
 
-// A bent, generously roofed route, separate from the original painted shelter.
-// Explicit floor coordinates are shared with the tutorial and resume checkpoints.
+// ---- the training cave ------------------------------------------------------
+// The band's sleeping chamber deep in the north cliff, and the long way out to
+// the light. Slice 1 (2026-10-27): "make the training cave much longer". The
+// practice rooms keep every floor coordinate the tutorial and the resume
+// checkpoints share (SITES.training*); what changed is the way out. The old
+// walk from the basket to the mouth was about ten blocks. Now one winding
+// passage of about eighty runs right round the practice rooms before it meets
+// daylight, and three cracks cut along the sun's own angle let real sunlight
+// fall on its floor, so it reads in both visual styles.
+//
+//   R1  sleeping chamber and the circle of light    look, move
+//   R2  the sill: two blocks, so it takes a jump      jump
+//   R3  the basket nook                               basket, equip, stow
+//   L1  north up the east side                        exit ...
+//   L2  west under the cliff top (two sun cracks)
+//   L3  south down the west side
+//   L4  east toward the light, then the mouth onto the old approach
+//
+// One passage, no branches, walls of one or two blocks between runs.
+// regression.mjs walks it and fails if the sill can be skipped, if the basket
+// nook can reach daylight any other way, or if the mouth stops being reachable.
+export const TRAINING_CAVE = {
+  // the box vivid treats as dark (world/shade.js setDarkZone); the mouth at
+  // z 22 is deliberately outside it
+  lo: { x: 1, y: 9.5, z: 1 },
+  hi: { x: 36, y: 18, z: 21.6 },
+  // both in L2, which runs east-west like the sun's own slant, so the light
+  // travels down the passage's air before it ever meets rock
+  cracks: [{ x: 19, z: 2 }, { x: 27, z: 2 }],
+};
+const CAVE_ROOMS = [ // [x0, z0, x1, z1] — air y 10..16, roof y 17
+  [8, 7, 18, 17],   // R1
+  [17, 11, 29, 17], // R2
+  [23, 15, 30, 17], // R3
+];
+const CAVE_RUNS = [ // [x0, z0, x1, z1] — air from y 10 to a varying ceiling
+  [31, 15, 31, 17], // doorway R3 → L1
+  [32, 2, 34, 17],  // L1
+  [3, 2, 34, 4],    // L2
+  [3, 2, 5, 21],    // L3
+  [3, 19, 30, 21],  // L4
+  [24, 22, 30, 22], // the mouth, cut through the cliff face
+];
+const SUN_DX = 40 / 60, SUN_DZ = 20 / 60; // world/mesher.js's sun march
+
 export function carveTrainingCave(world, ice = false) {
-  for (let x = 4; x <= 33; x++) for (let z = 2; z <= 22; z++) {
-    const edge = Math.min(x - 4, 33 - x, z - 2, 22 - z);
+  const FLOOR = 9;
+  // 1. a rose sandstone mass over the whole footprint
+  for (let x = 1; x <= 36; x++) for (let z = 1; z <= 22; z++) {
+    const edge = Math.min(x - 1, 36 - x, z - 1, 22 - z);
     const roof = Math.min(SY - 3, 15 + Math.min(4, edge));
-    for (let y = 7; y <= roof; y++) world.setRaw(x, y, z, y === roof && ice ? B.SNOWGRASS : B.ROCK_DARK);
+    for (let y = 7; y <= roof; y++) world.setRaw(x, y, z, y === roof && ice ? B.SNOWGRASS : B.ROCK);
   }
-  const rooms = [[7,5,18,17], [17,11,29,17], [23,15,30,22]];
-  for (const [x0,z0,x1,z1] of rooms) for (let x=x0;x<=x1;x++) for (let z=z0;z<=z1;z++) {
-    world.setRaw(x,9,z,B.ROCK_DARK);
-    for (let y=10;y<=16;y++) world.setRaw(x,y,z,B.AIR);
-    // Continuous roof, even where the natural cliff was low.
-    world.setRaw(x,17,z,B.ROCK_DARK);
-    world.setRaw(x,18,z,ice ? B.SNOWGRASS : B.ROCK);
+  const carved = new Set();
+  const air = (x, y, z) => { world.setRaw(x, y, z, B.AIR); carved.add(`${x},${y},${z}`); };
+  // 2. the practice rooms, exactly as the tutorial knows them
+  for (const [x0, z0, x1, z1] of CAVE_ROOMS) {
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+      for (let y = FLOOR + 1; y <= 16; y++) air(x, y, z);
+      // continuous roof, even where the natural cliff was low
+      world.setRaw(x, 17, z, B.ROCK_DARK);
+      world.setRaw(x, 18, z, ice ? B.SNOWGRASS : B.ROCK);
+    }
   }
-  // Two-block sill: too tall for auto-step, within the real jump clearance.
-  for (let z=11;z<=17;z++) for (let y=10;y<=11;y++) world.setRaw(20,y,z,B.ROCK);
-  // Walkable approach, with no foliage in the exit sightline.
-  for (let z=23;z<=30;z++) for (let x=24;x<=30;x++) {
-    const target = groundHeight(x,z);
-    const h = Math.round(9 + (target-9)*Math.min(1,(z-23)/7));
-    setSurface(world,x,z,h,z<26 ? B.ROCK : B.PATH);
+  // 3. the way out: a lower, uneven ceiling (13 to 15) so it feels like a
+  //    passage and not a corridor; never under four blocks of headroom. The
+  //    last stretch before the mouth opens up to 15 so the low sun, coming
+  //    in from the south-east, falls across the floor ahead of the player:
+  //    the light at the end of the passage is real light.
+  for (const [x0, z0, x1, z1] of CAVE_RUNS) {
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+      const nearMouth = z >= 19 && x >= 21;
+      const ceil = nearMouth ? 15 : 13 + Math.floor(noise2(x * 0.31 + 5.1, z * 0.29 + 2.3) * 2.99);
+      for (let y = FLOOR + 1; y <= ceil; y++) air(x, y, z);
+    }
+  }
+  // 4. alcoves into the OUTER walls only (an inner wall is the only thing
+  //    between two runs, so it is never touched): L2's north face, L3's west
+  //    face, L1's east face. Head-height bites, so the walls stop being flat.
+  const alcove = (x, z) => {
+    if (hash2(x * 13 + 7, z * 17 + 3) < 0.55) return;
+    const top = FLOOR + 2 + Math.floor(hash2(x * 5, z * 11) * 2);
+    for (let y = FLOOR + 1; y <= top; y++) air(x, y, z);
+  };
+  for (let x = 6; x <= 31; x++) alcove(x, 1);
+  for (let z = 6; z <= 17; z++) alcove(2, z);
+  for (let z = 5; z <= 14; z++) alcove(35, z);
+  // 5. sun cracks: carve along the exact march the mesher uses to bake
+  //    sunlight, from a 2x2 patch of floor up to open sky. Only from y 14 up:
+  //    a crack is a staircase one block per step, and below 14 a player could
+  //    climb it straight out of the cave (the first version did exactly that).
+  //    Below 14 the ray is still inside the passage's own air, so the floor
+  //    patch is lit all the same.
+  for (const c of TRAINING_CAVE.cracks) {
+    for (const ox of [0.02, 0.5, 0.98, 1.02, 1.5, 1.98]) for (const oz of [0.02, 0.5, 0.98, 1.02, 1.5, 1.98]) {
+      for (let k = 0; ; k++) {
+        const sx = Math.floor(c.x + ox + SUN_DX * k), sy = FLOOR + 1 + k, sz = Math.floor(c.z + oz + SUN_DZ * k);
+        if (sy >= SY) break;
+        if (sy >= 14 && world.get(sx, sy, sz) !== B.AIR) world.setRaw(sx, sy, sz, B.AIR);
+      }
+    }
+  }
+  // 6. line every carved space with dark, smoke-stained stone (the floor
+  //    included), with a paler sandstone band at y 12 so the walls show
+  //    their layers; the outside of the mass stays rose
+  for (const key of carved) {
+    const [x, y, z] = key.split(',').map(Number);
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]]) {
+      const nx = x + dx, ny = y + dy, nz = z + dz;
+      const id = world.get(nx, ny, nz);
+      if (id !== B.ROCK && id !== B.STONE && id !== B.DIRT && id !== B.SNOWGRASS) continue;
+      const band = ny === 12 && hash2(nx * 3 + nz, nz * 5) > 0.35;
+      world.setRaw(nx, ny, nz, band ? B.ROCK : B.ROCK_DARK);
+    }
+  }
+  // 6b. pools of daylight: any cave floor the sun actually reaches (the
+  //     cracks, the last stretch before the mouth) is pale wind-blown sand,
+  //     not smoke-stained stone. Same march as the mesher's sun bake, so the
+  //     sand is exactly where the light lands, and it reads in both styles.
+  for (const key of carved) {
+    const [x, y, z] = key.split(',').map(Number);
+    if (y !== FLOOR + 1 || !isOpaque(world.get(x, FLOOR, z))) continue;
+    let sky = true;
+    for (let k = 0; k <= 14; k++) {
+      const sx = Math.floor(x + 0.5 + SUN_DX * k), sy = Math.floor(FLOOR + 1.02 + k), sz = Math.floor(z + 0.5 + SUN_DZ * k);
+      if (sy >= SY) break;
+      if (isOpaque(world.get(sx, sy, sz))) { sky = false; break; }
+    }
+    if (sky) world.setRaw(x, FLOOR, z, B.SAND);
+  }
+  // 7. the sill: two blocks, too tall for auto-step, within the real jump
+  for (let z = 11; z <= 17; z++) for (let y = 10; y <= 11; y++) world.setRaw(20, y, z, B.ROCK);
+  // 8. stalactites where there is room for them: rooms only (ceiling 16),
+  //    hanging no lower than y 14, and clear of every place the tutorial
+  //    sends the player
+  const keepClear = [SITES.trainingStart, SITES.trainingLight, SITES.trainingJump, SITES.trainingBasket];
+  for (const [x0, z0, x1, z1] of CAVE_ROOMS) {
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+      if (keepClear.some((s) => Math.abs(s.x - x) <= 1 && Math.abs(s.z - z) <= 1)) continue;
+      const h = hash2(x * 7 + 1, z * 9 + 4);
+      if (h < 0.84) continue;
+      world.setRaw(x, 16, z, B.ROCK_DARK);
+      if (h > 0.95) world.setRaw(x, 15, z, B.ROCK_DARK);
+    }
+  }
+  // 9. walkable approach, with no foliage in the exit sightline (unchanged)
+  for (let z = 23; z <= 30; z++) for (let x = 24; x <= 30; x++) {
+    const target = groundHeight(x, z);
+    const h = Math.round(9 + (target - 9) * Math.min(1, (z - 23) / 7));
+    setSurface(world, x, z, h, z < 26 ? B.ROCK : B.PATH);
   }
 }
 
@@ -498,12 +625,13 @@ function scatterVegetation(world, lush, ice) {
     }
   }
 
-  // reeds along banks: 1–2 tall clusters (walk-through — never wall the bank)
+  // kans grass along banks (the REED block): 1–2 tall clusters, a little
+  // denser since slice 1 so the banks read as tall grass, walk-through as ever
   for (let z = 20; z < SZ; z++) {
     const rx = riverX(z);
     for (const dx of [-5, -4, -3, 3, 4, 5]) {
       const x = Math.round(rx + dx + noise2(z * 0.3, 1) * 2);
-      if (hash2(x, z) < 0.62) continue;
+      if (hash2(x, z) < 0.5) continue;
       const h = world.topAt(x, z);
       if (h < WATER_LEVEL - 1 || h > WATER_LEVEL + 1) continue;
       const top = world.get(x, h, z);
@@ -531,60 +659,113 @@ function pickLeafTint(x, z) {
 
 /**
  * Place a tree at (x, y, z) — y is the first trunk block. Signature is stable;
- * the variant (oak / birch / acacia / rare snag) is a deterministic hash of
- * position, so saved worlds rebuild identically.
+ * the variant is a deterministic hash of position, so saved worlds rebuild
+ * identically.
+ *
+ * Slice 1 (2026-10-27): the valley's trees are central Indian now. Sal (the
+ * tall dry-forest tree), banyan with aerial roots, peepal, date palm and babul
+ * (the acacia), plus the odd dead snag. Two rules every variant keeps, because
+ * walkability was hand-verified around the old trees: the trunk is one block
+ * at exactly (x, z), and nothing solid sits lower than y + 2, so a player can
+ * walk under any canopy. Banyan roots are walk-through flora.
  */
 export function placeTree(world, x, y, z, trunk = 3) {
   const v = hash2(x * 5 + 1, z * 7 + 2);
-  if (v < 0.5) placeOak(world, x, y, z, trunk);
-  else if (v < 0.72) placeBirch(world, x, y, z, trunk);
-  else if (v < 0.94) placeAcacia(world, x, y, z, trunk);
+  if (v < 0.30) placeSal(world, x, y, z, trunk);
+  else if (v < 0.44) placeBanyan(world, x, y, z, trunk);
+  else if (v < 0.60) placePeepal(world, x, y, z, trunk);
+  else if (v < 0.78) placePalm(world, x, y, z, trunk);
+  else if (v < 0.95) placeAcacia(world, x, y, z, trunk);
   else placeSnag(world, x, y, z, trunk);
 }
 
-// rounded canopy: 5x5 skirt with corners knocked out, 3x3 above, capped
-function placeOak(world, x, y, z, trunk) {
-  const tint = pickLeafTint(x, z);
-  for (let i = 0; i < trunk; i++) world.setRaw(x, y + i, z, B.WOOD);
-  const ty = y + trunk;
-  for (let dy = 0; dy <= 1; dy++) {
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue; // knock corners
-        // ragged rim: drop a few edge leaves on the lower skirt
-        if (dy === 0 && Math.abs(dx) + Math.abs(dz) >= 3 && hash2(x + dx * 3, z + dz * 5) > 0.72) continue;
-        leaf(world, x + dx, ty - 1 + dy, z + dz, tint);
-      }
-    }
-  }
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      if (Math.abs(dx) === 1 && Math.abs(dz) === 1 && hash2(x + dx, z + dz * 3) > 0.6) continue;
-      leaf(world, x + dx, ty + 1, z + dz, tint);
-    }
-  }
-  leaf(world, x, ty + 2, z, tint);
-  world.setRaw(x, ty - 1, z, B.WOOD); // trunk continues into the canopy
-}
-
-// taller, pale trunk, slim bright crown
-function placeBirch(world, x, y, z, trunk) {
+// sal: tall straight trunk, a dense crown taller than it is wide
+function placeSal(world, x, y, z, trunk) {
   const h = trunk + 2;
-  for (let i = 0; i < h; i++) world.setRaw(x, y + i, z, B.WOOD_BIRCH);
-  const ty = y + h;
-  const tint = hash2(x, z * 11) < 0.5 ? B.LEAVES_BRIGHT : B.LEAVES;
-  for (let dy = -2; dy <= 0; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        if (Math.abs(dx) === 1 && Math.abs(dz) === 1 && (dy === -2 || hash2(x + dx * 7, z + dz) > 0.55)) continue;
-        leaf(world, x + dx, ty + dy, z + dz, tint);
+  for (let i = 0; i < h; i++) world.setRaw(x, y + i, z, B.WOOD);
+  const tint = hash2(x * 3, z * 5) < 0.6 ? B.LEAVES : B.LEAVES_DARK;
+  const top = y + h;
+  for (let dy = -2; dy <= 2; dy++) {
+    const r = dy === -2 || dy === 2 ? 1 : 2;
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        if (r === 2 && Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        if (r === 2 && Math.abs(dx) + Math.abs(dz) === 3 && hash2(x + dx * 7, z + dz * 3 + dy) > 0.7) continue;
+        leaf(world, x + dx, top + dy, z + dz, tint);
       }
     }
   }
-  leaf(world, x, ty + 1, z, tint);
+  leaf(world, x, top + 3, z, tint);
 }
 
-// wide, flat-topped canopy on a shortish trunk
+// banyan: short thick-looking trunk, a very wide low dome, and aerial roots
+// hanging from the rim of the canopy to the ground
+function placeBanyan(world, x, y, z, trunk) {
+  const h = Math.max(3, trunk);
+  for (let i = 0; i < h; i++) world.setRaw(x, y + i, z, B.WOOD);
+  const base = y + h - 1; // canopy underside: never below y + 2
+  for (let dy = 0; dy <= 2; dy++) {
+    const R = dy === 0 ? 3.6 : dy === 1 ? 3.2 : 2.1;
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dz = -4; dz <= 4; dz++) {
+        const d = Math.hypot(dx, dz);
+        if (d > R) continue;
+        if (dy === 0 && d > 2.6 && hash2(x + dx * 5, z + dz * 9) > 0.78) continue;
+        leaf(world, x + dx, base + dy, z + dz, B.LEAVES_DARK);
+      }
+    }
+  }
+  // roots: a few hanging cords from the canopy rim down to the ground. Flora
+  // only fills air, and a root never lands on the trunk's own column.
+  for (const [dx, dz] of [[3, 1], [-2, 3], [-3, -1], [1, -3], [2, 2]]) {
+    if (hash2(x + dx * 11, z + dz * 13) < 0.35) continue;
+    const rx = x + dx, rz = z + dz;
+    for (let yy = base - 1; yy >= y; yy--) {
+      if (world.get(rx, yy, rz) !== B.AIR) break;
+      world.setRaw(rx, yy, rz, B.ROOTS);
+    }
+  }
+}
+
+// peepal: a spreading, open, bright crown with a ragged edge
+function placePeepal(world, x, y, z, trunk) {
+  const h = trunk + 1;
+  for (let i = 0; i < h; i++) world.setRaw(x, y + i, z, B.WOOD);
+  const top = y + h;
+  for (let dy = -1; dy <= 2; dy++) {
+    const R = dy === -1 ? 2.4 : dy === 0 ? 2.9 : dy === 1 ? 2.3 : 1.2;
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        const d = Math.hypot(dx, dz);
+        if (d > R) continue;
+        if (d > R - 1 && hash2(x + dx * 3 + dy, z + dz * 7) > 0.66) continue;
+        leaf(world, x + dx, top + dy, z + dz, B.LEAVES_BRIGHT);
+      }
+    }
+  }
+}
+
+// date palm: a tall ringed trunk (WOOD_BIRCH's banding) with a crown of
+// fronds that reach out and droop at the tips
+function placePalm(world, x, y, z, trunk) {
+  const h = trunk + 3 + Math.floor(hash2(x * 7, z * 3) * 2);
+  for (let i = 0; i < h; i++) world.setRaw(x, y + i, z, B.WOOD_BIRCH);
+  const top = y + h;
+  leaf(world, x, top, z, B.LEAVES);
+  leaf(world, x, top + 1, z, B.LEAVES_BRIGHT);
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+    const diag = dx !== 0 && dz !== 0;
+    leaf(world, x + dx, top, z + dz, B.LEAVES_BRIGHT);
+    if (!diag) {
+      leaf(world, x + dx * 2, top, z + dz * 2, B.LEAVES_BRIGHT);
+      leaf(world, x + dx * 3, top - 1, z + dz * 3, B.LEAVES); // drooping tip
+    } else if (hash2(x + dx * 5, z + dz * 5) > 0.4) {
+      leaf(world, x + dx * 2, top - 1, z + dz * 2, B.LEAVES);
+    }
+  }
+}
+
+// babul (acacia): wide, flat-topped canopy on a shortish trunk
 function placeAcacia(world, x, y, z, trunk) {
   const h = trunk + 1;
   for (let i = 0; i < h; i++) world.setRaw(x, y + i, z, B.WOOD);

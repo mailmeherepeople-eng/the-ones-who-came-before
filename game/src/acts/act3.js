@@ -31,8 +31,9 @@ export async function runAct3(G, resumeBeat = null) {
   clearCrossFlora(G.world, SITES.digCamp.x, SITES.digCamp.z, 6);
   G.mesher.remeshAll();
   G.renderer.setSky(0x9ec8e8, 0xcfe0ee);
-  // first morning on site: mist still lying in the river valley
-  G.renderer.setMist(0.4, 10, 5);
+  // first morning on site: mist still lying in the river valley, thin enough
+  // since slice 1 that the river under it still reads as water
+  G.renderer.setMist(0.22, 10, 5);
   FX.setMotes('pollen');
   G.player.teleport(SITES.digCamp.x, SITES.digCamp.z + 2, Math.PI * 1.1);
   G.mode = 'ground';

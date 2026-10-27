@@ -1785,3 +1785,109 @@ tribe-wording pass (6dd12a3) renamed `eraLabels.band` to `eraLabels.tribe` in
 `strings.js`, but `ui/report.js` still read `E.band`, so the first marker on
 the report's timeline had no label. It reads `E.tribe` now. This is the same
 one-line fix that sat unmerged on `claude/infallible-almeida-b0bbe1`.
+
+## 29. Slice 1: an Indian valley, the long cave, the first look at the world
+
+Updated 28 October 2026, 00:24 IST (Asia/Kolkata).
+
+The first slice of the 27 October improvement plan ("make Chapter 4 great,
+start with the look"), plus two asks made while it was being built: "make
+the training cave much longer", and "when the person steps out into the
+light, a cinematic shot that shows the world with the camera slowly
+panning". Service worker cache `towcb-v15`.
+
+### 29.1 One look: Vivid is the default
+
+- `settings.js`: `vivid` defaults to true on every device. A one-time
+  migration (`LOOK_VERSION = 2`) drops a saved `vivid` from settings written
+  before it, because settings are saved whole and a player who touched any
+  toggle had the old default written down as if chosen. A later choice sticks.
+- Vivid had no light at all, so a cave was as bright as a meadow. It now has
+  a small storybook light model in `world/shade.js` (vivid branch only):
+  - the mesher's baked sun mask as a soft shadow, floor `vividShadow` 0.7
+    (cloud shadows included on Rich, since they ride the same mask);
+  - one dark box, `setDarkZone()`: inside it a face is dark unless the sun
+    mask says sunlight lands on it. `main.js` sets it once to
+    `TRAINING_CAVE` (the cave is dark in every era);
+  - up to four warm glows, `setGlows()`, which only lift what is dark (the
+    tutorial lamps; cleared by `clearStage`);
+  - water: sky reflection at grazing angles plus a sun glint;
+  - a per-scene light colour: `renderer.setSky(sky, fog, vividTint)`. Cold
+    for Scene A and Act 2's first stage, warm for the title, white otherwise.
+- `engine/post.js` leaves Vivid alone (FXAA only: no grade, no ACES). Before
+  this a Rich device showed Vivid graded and tone mapped (lime grass) while a
+  Lite device showed it raw.
+- `renderer.setShadowsAllowed()`: Vivid never reads the shadow map, so under
+  Vivid it is neither enabled nor rendered. That pays for the new world (29.5).
+
+### 29.2 The palette: central India, the Bhimbetka hills
+
+Colours only; every block id is unchanged, so saves are untouched. Monsoon
+green grass over red laterite soil, rose-buff Vindhyan sandstone for cliffs,
+weathered dark sandstone inside caves and shelters, murram (red laterite)
+paths, mud-plastered walls with golden thatch, marigold flowers, and pink in
+place of white (white blooms read as litter or snow at range). `REED` is now
+kans grass with white plumes, a little denser along the banks. Act 3's
+morning mist went from 0.4 to 0.22 so the river under it reads as water.
+
+### 29.3 Indian trees (`world/terrain.js placeTree`)
+
+Sal, banyan, peepal, date palm, babul (the old acacia) and the odd dead snag,
+chosen by the same position hash. Oak and birch are gone. Two rules every
+variant keeps, because walkability was verified around the old trees: the
+trunk is one block at exactly (x, z), and nothing solid sits lower than
+y + 2. Banyan aerial roots are a new walk-through flora block, `B.ROOTS`
+(id 39). `WOOD_BIRCH` is now the ringed date-palm trunk (and the middle log
+of the crossing).
+
+### 29.4 The long training cave (`carveTrainingCave`, `TRAINING_CAVE`)
+
+The practice rooms keep every coordinate the tutorial and resume
+checkpoints use (sleeping chamber, sill, basket nook). What changed is the
+way out: the walk from the basket to the mouth was about 10 blocks and is
+now about 90. One passage, no branches, runs north, west under the cliff
+top, south, then east to the mouth. Two cracks cut along the mesher's exact
+sun march let real sunlight onto the floor of the north run, and any cave
+floor the sun reaches is pale wind-blown sand, so the pools of daylight read
+in both styles. The cracks only open from y 14 up: the first version started
+at the floor and was a climbable staircase straight out of the cave.
+
+The rock mass grew from x 4..33, z 2..22 to x 1..36, z 1..22, so three
+columns at the camp's west edge (x 34..36, z 18..22) are cliff now. The
+approach outside the mouth is unchanged. `regression.mjs` walks every
+standable cell in both ice and thaw builds and fails if the sill can be
+skipped, the way out from the basket drops under 80 steps, or the camp is
+reachable other than through the mouth. The exit step's wording says the
+passage is long and that daylight shows the way.
+
+### 29.5 The first look at the valley (`sky/interstitial.js valleyReveal`)
+
+When the exit step completes, or straight after Skip practice, the camera
+leaves the player at the mouth, rises over the cliff edge and sweeps the
+valley for about 13.6 s (3.2 s up, 8 s of pan, 2.4 s home), letterboxed and
+wordless, then lands exactly where the camera rig wants it. A fresh key or
+tap after the first second skips to the return; a held movement key does
+not (its repeats are ignored). Gentle camera gets one still wide shot, cut
+in and out. It plays once per story (`onboarding.revealSeen`). `tween()`
+gained an optional `stop` check so a skip ends a segment at once.
+
+### 29.6 Measured (fixed poses, desktop, Rich on; draw calls / triangles)
+
+| pose | before (lit) | after, lit | after, Vivid default |
+|---|---|---|---|
+| cave | 107 / 83.6k | 107 / 87.4k | 100 / 76.3k |
+| camp | 28 / 26.1k | 27 / 29.1k | 16 / 16.0k |
+| river | 42 / 37.2k | 40 / 40.1k | 27 / 26.1k |
+| valley | 100 / 85.9k | 100 / 90.9k | 88 / 78.2k |
+| act 3 | 90 / 74.5k | 90 / 81.7k | 77 / 67.5k |
+
+Lit against lit isolates the new world: same calls, 4 to 12 percent more
+triangles (taller and wider trees). The default look is below the old one
+everywhere because Vivid skips the shadow pass. Not yet measured on a real
+phone.
+
+### 29.7 Not done in this slice
+
+The lit style got the new palette but was not tuned for it. The world's edge
+is still a flat wall into fog. People, the camp's props and the present-day
+dig look as they did; those are later slices.

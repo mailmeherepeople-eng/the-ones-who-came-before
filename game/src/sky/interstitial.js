@@ -86,15 +86,124 @@ export async function skyGlimpse(G, {
   G.mode = prevMode;
 }
 
+// ---------- the first look at the valley ----------
+// Slice 1 (2026-10-27): "when the person steps out into the light, there
+// should be a cinematic style shot that shows the world with the camera slowly
+// panning". The camera leaves the player at the cave mouth, rises over the
+// cliff edge, and sweeps slowly across the valley (the camp and its smoke by
+// the river, the river itself, the plains with their herds, the far meadow),
+// then settles back behind the player. No words: the world is the point.
+//
+// A tap or a key after the first second skips straight to the return, so a
+// player who has seen it never sits through it. With gentle camera (the
+// reduced-motion setting) there is no flight: one still wide shot, a cut in
+// and a cut back.
+const REVEAL = {
+  rise: [new THREE.Vector3(26, 25, 13), new THREE.Vector3(30, 24, 16), new THREE.Vector3(36, 22, 20)],
+  // where the camera looks while it drifts: near camp and river, the valley
+  // floor, the plains, then down the valley to the south
+  look: [
+    new THREE.Vector3(44, 9, 30), new THREE.Vector3(62, 6, 52),
+    new THREE.Vector3(96, 8, 50), new THREE.Vector3(84, 6, 98),
+  ],
+  still: { pos: new THREE.Vector3(30, 24, 15), look: new THREE.Vector3(66, 6, 58) },
+};
+
+export async function valleyReveal(G, { gentle = false } = {}) {
+  const cam = G.renderer.camera;
+  const prevMode = G.mode;
+  G.mode = 'ui';
+  G.input.setEnabled(false);
+  G.hud.hidePrompt();
+  const boxEl = document.createElement('div');
+  boxEl.className = 'sky-letterbox';
+  G.hud.root.appendChild(boxEl);
+
+  // Where the rig wants the camera when we hand back: let syncCamera place
+  // it, read it, put the camera back (the wake sequence's trick, so the
+  // return lands with no pop).
+  const p0 = cam.position.clone(), q0 = cam.quaternion.clone();
+  G.player.syncCamera();
+  const homePos = cam.position.clone(), homeQuat = cam.quaternion.clone();
+  cam.position.copy(p0); cam.quaternion.copy(q0);
+
+  const aim = new THREE.Matrix4(), up = new THREE.Vector3(0, 1, 0);
+  const quatLooking = (from, at, out = new THREE.Quaternion()) =>
+    out.setFromRotationMatrix(aim.lookAt(from, at, up));
+
+  let skipped = false, armed = false;
+  // a held movement key repeats, and would skip the moment we arm: only a
+  // fresh press counts
+  const skip = (e) => { if (armed && !e.repeat) skipped = true; };
+  window.addEventListener('keydown', skip);
+  window.addEventListener('pointerdown', skip);
+  const armTimer = setTimeout(() => { armed = true; }, 1000);
+
+  try {
+    if (gentle) {
+      cam.position.copy(REVEAL.still.pos);
+      quatLooking(REVEAL.still.pos, REVEAL.still.look, cam.quaternion);
+      const t0 = performance.now();
+      while (!skipped && performance.now() - t0 < 3500) await wait(100);
+    } else {
+      const path = new THREE.CatmullRomCurve3(REVEAL.rise);
+      const gaze = new THREE.CatmullRomCurve3(REVEAL.look);
+      const pos = new THREE.Vector3(), at = new THREE.Vector3(), q = new THREE.Quaternion();
+      // 1. lift off the shoulder to the first viewpoint, already turning to
+      //    the valley (3.2 s)
+      const from = cam.position.clone(), fromQ = cam.quaternion.clone();
+      path.getPoint(0, pos); gaze.getPoint(0, at);
+      const firstQ = quatLooking(pos, at, new THREE.Quaternion());
+      const firstPos = pos.clone();
+      await tween(3200, (t) => {
+        const k = ease(t);
+        cam.position.lerpVectors(from, firstPos, k);
+        cam.quaternion.slerpQuaternions(fromQ, firstQ, k);
+      }, () => skipped);
+      // 2. the slow pan: drift along the cliff edge while the gaze sweeps the
+      //    valley (8 s, eased so it starts and ends without a jolt)
+      if (!skipped) {
+        await tween(8000, (t) => {
+          const k = ease(t);
+          path.getPoint(k, pos); gaze.getPoint(k, at);
+          cam.position.copy(pos);
+          cam.quaternion.copy(quatLooking(pos, at, q));
+        }, () => skipped);
+      }
+    }
+    // 3. home: back down behind the player (a cut if gentle)
+    if (gentle) {
+      cam.position.copy(homePos); cam.quaternion.copy(homeQuat);
+    } else {
+      const from = cam.position.clone(), fromQ = cam.quaternion.clone();
+      await tween(skipped ? 900 : 2400, (t) => {
+        const k = ease(t);
+        cam.position.lerpVectors(from, homePos, k);
+        cam.quaternion.slerpQuaternions(fromQ, homeQuat, k);
+      });
+    }
+  } finally {
+    clearTimeout(armTimer);
+    window.removeEventListener('keydown', skip);
+    window.removeEventListener('pointerdown', skip);
+    boxEl.remove();
+    G.player.syncCamera();
+    G.input.setEnabled(true);
+    G.mode = prevMode;
+  }
+}
+
 // rAF-driven with a timer fallback: story beats await these, and rAF starves
 // in hidden/embedded tabs — the fallback keeps progression from wedging.
-export function tween(ms, fn) {
+// `stop` (optional) ends the tween early, where it stands, when it returns true.
+export function tween(ms, fn, stop = null) {
   return new Promise((res) => {
     const t0 = performance.now();
     let done = false;
     const finish = () => { done = true; clearInterval(iv); res(); };
     const advance = () => {
       if (done) return;
+      if (stop?.()) { finish(); return; }
       const k = Math.min(1, (performance.now() - t0) / ms);
       fn(k);
       if (k >= 1) finish();

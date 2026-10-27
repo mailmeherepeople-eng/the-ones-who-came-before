@@ -140,7 +140,7 @@ export async function runAct2(G) {
       // Sky and fog switch immediately, so the era reads as changed on the
       // frame you cross the boundary even though the terrain is still catching
       // up over the next few frames.
-      G.renderer.setSky(s === 0 ? 0xbcd3e6 : 0x9ec8e8, s === 0 ? 0xd4e2ec : 0xcfe0ee);
+      G.renderer.setSky(s === 0 ? 0xbcd3e6 : 0x9ec8e8, s === 0 ? 0xd4e2ec : 0xcfe0ee, s === 0 ? 0xdbe6f2 : 0xffffff);
       // the diorama is seen from 70 units up: ground mist and air motes
       // would only blur the strata that the act is about
       G.renderer.setMist(0);

@@ -43,25 +43,39 @@ export const SETTINGS = [
     def: QUALITY_TIER === 'high',
   },
   {
-    // Vivid style (world/shade.js setVivid): flat storybook shading in place
-    // of the lit look. A style choice, not a performance tier, so it defaults
-    // off on every device.
+    // Vivid style (world/shade.js setVivid): the game's look since slice 1 of
+    // the 2026-10-27 plan, bold palette with storybook light, on for every
+    // device. Off falls back to the realistic lit pipeline. A style choice,
+    // not a performance tier (vivid is the cheaper of the two: it skips the
+    // shadow map, see renderer.setShadowsAllowed).
     id: 'vivid',
     label: () => S.ui.setVivid,
     note: () => S.ui.setVividNote,
-    def: false,
+    def: true,
   },
 ];
 
 const DEFAULTS = Object.fromEntries(SETTINGS.map((s) => [s.id, s.def]));
 
+// Bumped when a default changes and returning players should get the new
+// one. Settings are saved whole, so a player who changed ANY toggle has the
+// old default for every other toggle written down as if they had chosen it.
+// Version 2 (2026-10-27): vivid became the default look.
+const LOOK_VERSION = 2;
+
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    if (!raw) return { ...DEFAULTS, lookVersion: LOOK_VERSION };
+    const saved = JSON.parse(raw);
+    if ((saved.lookVersion ?? 1) < LOOK_VERSION) {
+      delete saved.vivid; // never chosen, only inherited: take the new default
+      saved.lookVersion = LOOK_VERSION;
+      try { localStorage.setItem(KEY, JSON.stringify({ ...DEFAULTS, ...saved })); } catch { /* private mode */ }
+    }
+    return { ...DEFAULTS, ...saved };
   } catch {
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, lookVersion: LOOK_VERSION };
   }
 }
 
