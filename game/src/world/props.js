@@ -19,6 +19,7 @@ const MAT = {
   flame: new THREE.MeshBasicMaterial({ color: 0xff9d3c }),
   flameCore: new THREE.MeshBasicMaterial({ color: 0xffe08a }),
   ember: new THREE.MeshBasicMaterial({ color: 0xffb066 }),
+  torchWrap: new THREE.MeshLambertMaterial({ color: 0x3b2a1d }), // charred grass and resin
   mote: new THREE.MeshBasicMaterial({ color: 0xd8cfae, transparent: true, opacity: 0.55, depthWrite: false }),
   bone: new THREE.MeshLambertMaterial({ color: 0xe8e0cc }),
   shell: new THREE.MeshLambertMaterial({ color: 0xf2e3c9 }),
@@ -81,6 +82,141 @@ function box(w, h, d, mat, x = 0, y = 0, z = 0) {
   // Flames and embers are MeshBasic and must not throw a shadow.
   if (mat.isMeshLambertMaterial) { m.castShadow = true; m.receiveShadow = true; }
   return m;
+}
+
+// A wall torch for the training cave (2026-10-28: "add a few lit torches in
+// the training area so that it looks bright"). A stick wedged into a crack,
+// angled up and out, its head wrapped and burning. `face` is the direction it
+// points into the room: 'n' (-z), 's' (+z), 'e' (+x), 'w' (-x); (x, y, z) is
+// the point on the wall face where the stick goes in.
+//
+// No PointLight: every scene light costs every lit fragment on a phone, and
+// a dozen of them would be the most expensive thing in the game. The flame is
+// MeshBasic, so it burns bright in both styles, and the returned `glow` is
+// what lights the rock in the Vivid style (world/shade.js setGlows). The
+// update flickers the flame, the halo and that glow's radius together.
+const TORCH_FACING = { s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 };
+export function makeTorch(x, y, z, face = 's') {
+  const g = grp(x, y, z);
+  g.name = 'torch';
+  g.rotation.y = TORCH_FACING[face] ?? 0;
+  const tilt = 0.62; // radians up from level
+  const stick = box(0.07, 0.07, 0.52, MAT.woodDark);
+  stick.rotation.x = -tilt;
+  stick.position.set(0, Math.sin(tilt) * 0.26, Math.cos(tilt) * 0.26);
+  const tip = new THREE.Vector3(0, Math.sin(tilt) * 0.52, Math.cos(tilt) * 0.52);
+  const wrap = box(0.13, 0.15, 0.13, MAT.torchWrap, tip.x, tip.y, tip.z);
+  wrap.rotation.x = -tilt;
+  g.add(stick, wrap);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.34, 5), MAT.flame);
+  flame.position.set(tip.x, tip.y + 0.22, tip.z);
+  const core = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 5), MAT.flameCore);
+  core.position.set(tip.x, tip.y + 0.16, tip.z);
+  const halo = fireGlow(1.3, 0xff8a2a);
+  halo.position.set(tip.x, tip.y + 0.2, tip.z);
+  g.add(flame, core, halo);
+  foldStatic(g); // stick and wrap fold; the flame, core and halo are not Lambert
+  // the glow sits a little out from the wall so the rock round it lights evenly
+  const out = new THREE.Vector3(0, 0, 0.8).applyAxisAngle(new THREE.Vector3(0, 1, 0), g.rotation.y);
+  const glow = { x: x + out.x, y: y + 0.4, z: z + out.z, r: 8 };
+  let t = Math.random() * 10;
+  return {
+    group: g,
+    glow,
+    update(dt) {
+      t += dt;
+      const s = 1 + Math.sin(t * 11) * 0.13 + Math.sin(t * 27) * 0.07;
+      flame.scale.set(s, s, s);
+      core.scale.set(2 - s, s, 2 - s);
+      halo.material.opacity = 0.5 + Math.sin(t * 11) * 0.08;
+      glow.r = 8 + Math.sin(t * 9) * 0.3 + Math.sin(t * 23) * 0.15;
+    },
+  };
+}
+
+// The waterfall at the head of the river (world/terrain.js WATERFALL): a sheet
+// of water with two layers of streaks scrolling down at different speeds, a
+// churning band of foam where it lands, and a soft cloud of spray. All
+// MeshBasic, so it reads the same in both styles, and fog-aware. main.js makes
+// it once and keeps it for the whole game (the falls are there in every era;
+// it hides itself when the lip is frozen).
+let streakTex = null;
+function streakTexture() {
+  if (streakTex) return streakTex;
+  const cv = document.createElement('canvas');
+  cv.width = 64; cv.height = 128;
+  const c = cv.getContext('2d');
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 46; i++) {
+    const x = Math.floor(rnd() * 64), y = Math.floor(rnd() * 128), len = 18 + rnd() * 60;
+    const a = 0.25 + rnd() * 0.6;
+    c.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`;
+    c.fillRect(x, y, 1 + Math.floor(rnd() * 2), len);
+    if (y + len > 128) c.fillRect(x, y - 128, 2, len); // wrap so the tile repeats cleanly
+  }
+  streakTex = new THREE.CanvasTexture(cv);
+  streakTex.colorSpace = THREE.SRGBColorSpace;
+  streakTex.wrapS = streakTex.wrapT = THREE.RepeatWrapping;
+  return streakTex;
+}
+export function makeWaterfall(spec) {
+  const w = spec.x1 - spec.x0, h = spec.top - spec.bottom;
+  const cx = spec.x0 + w / 2, cy = spec.bottom + h / 2;
+  const g = new THREE.Group();
+  g.name = 'waterfall';
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ color: 0x7fc4de, transparent: true, opacity: 0.88, depthWrite: false }));
+  sheet.position.set(cx, cy, spec.face + 0.03);
+  g.add(sheet);
+  const layers = [];
+  for (const [opacity, speed, dz, rx, ry] of [[0.85, 1.1, 0.06, 1.6, 1.4], [0.55, 1.9, 0.1, 2.3, 2.1]]) {
+    const map = streakTexture().clone();
+    map.needsUpdate = true;
+    map.repeat.set(rx, ry);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ map, color: 0xeefaff, transparent: true, opacity, depthWrite: false }));
+    m.position.set(cx, cy, spec.face + dz);
+    g.add(m);
+    layers.push({ map, speed });
+  }
+  // the lip: a pale curl where the water tips over
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(w, 0.18, 0.5),
+    new THREE.MeshBasicMaterial({ color: 0xd8f1fa, transparent: true, opacity: 0.85, depthWrite: false }));
+  lip.position.set(cx, spec.top - 0.05, spec.face - 0.1);
+  g.add(lip);
+  // foam where it lands, and a few churning lumps
+  const foamMat = new THREE.MeshBasicMaterial({ color: 0xf4fbff, transparent: true, opacity: 0.8, depthWrite: false });
+  const foam = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.16, 1.8), foamMat);
+  foam.position.set(cx, spec.bottom + 0.04, spec.face + 0.9);
+  g.add(foam);
+  const lumps = [];
+  for (let i = 0; i < 7; i++) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.42), foamMat);
+    l.userData = { x: spec.x0 + 0.4 + (i / 6) * (w - 0.8), ph: i * 1.7 };
+    g.add(l);
+    lumps.push(l);
+  }
+  const spray = fireGlow(5.5, 0xffffff);
+  spray.material.opacity = 0.32;
+  spray.position.set(cx, spec.bottom + 1.4, spec.face + 1.2);
+  g.add(spray);
+  let t = 0;
+  return {
+    group: g,
+    update(dt) {
+      t += dt;
+      for (const L of layers) L.map.offset.y += L.speed * dt;
+      foam.scale.set(1, 1 + Math.sin(t * 5) * 0.25, 1 + Math.sin(t * 3.3) * 0.08);
+      for (const l of lumps) {
+        const u = l.userData, k = (t * 0.9 + u.ph) % 1;
+        l.position.set(u.x, spec.bottom + 0.1 + Math.sin(k * Math.PI) * 0.35, spec.face + 0.5 + k * 1.6);
+        const sc = 1 - k * 0.6;
+        l.scale.set(sc, sc, sc);
+      }
+      spray.material.opacity = 0.3 + Math.sin(t * 2.1) * 0.06;
+    },
+  };
 }
 
 export function makeCampfire(x, y, z) {

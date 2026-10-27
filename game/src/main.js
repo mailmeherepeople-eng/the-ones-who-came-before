@@ -13,7 +13,7 @@ import { SFX } from './audio.js';
 import { FX } from './fx/fx.js';
 import { Settings } from './settings.js';
 import { setVivid, setDarkZone, setGlows } from './world/shade.js';
-import { SITES, TRAINING_CAVE } from './world/terrain.js';
+import { SITES, TRAINING_CAVE, WATERFALL } from './world/terrain.js';
 import { buildSceneB } from './world/states.js';
 import { installEquipment } from './ui/equipment.js';
 
@@ -97,7 +97,14 @@ Settings.subscribe(() => {
 
 // The training cave is dark in every era (vivid only; the lit style has real
 // light for it). Set once: it is a fact about the valley, not about a beat.
-setDarkZone(TRAINING_CAVE.lo, TRAINING_CAVE.hi, 0.6);
+setDarkZone(TRAINING_CAVE.lo, TRAINING_CAVE.hi, 0.52);
+
+// The waterfall at the head of the river: made once on the persistent scene
+// (never in G.props, so no scene clear retires it), shown whenever the lip
+// holds water rather than ice. See world/terrain.js WATERFALL.
+const falls = makeWaterfall(WATERFALL);
+G.renderer.scene.add(falls.group);
+const fallsLip = WATERFALL.lip;
 
 // visual FX layer: init once on the persistent scene; wire player juice hooks
 FX.init(G.renderer.scene);
@@ -119,7 +126,8 @@ setObserver(G.renderer.camera);
 Sound.loadManifest();
 
 // ---------- stage clearing (interactables, NPCs, props) ----------
-import { disposeGroup, foldIfStatic } from './world/props.js';
+import { disposeGroup, foldIfStatic, makeWaterfall } from './world/props.js';
+import { B } from './world/blocks.js';
 
 export function clearStage(G) {
   setGlows([]); // a scene's warm pools of light leave with its props
@@ -204,6 +212,8 @@ G.renderer.onFrame = (dt) => {
   }
   if (G.tick) G.tick(dt, inp);
   FX.update(dt);
+  falls.group.visible = G.world.get(fallsLip.x, fallsLip.y, fallsLip.z) === B.WATER;
+  if (falls.group.visible) falls.update(dt);
   G.mesher.flush(QUALITY.meshBudget);
 };
 

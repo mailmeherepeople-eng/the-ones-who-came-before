@@ -1497,3 +1497,68 @@ reference half described an older game (the audit's F12), and rule files in thre
   `dev/editor.js` (1,615) frozen at their count. Its closing line points at the AGENTS.md checklist, since
   `docs/ai/TEST-CHECKLIST.md` was never in a fresh clone.
 - Nothing player-facing changed.
+
+## 31. Torches, the waterfall, a better player, true colours in Vivid
+
+Updated 28 October 2026, 01:15 IST (Asia/Kolkata).
+
+Asks of 28 October: "add a few lit torches in the training area so that it
+looks bright", "make the start of a river a waterfall", "make the player
+character look a little better". Service worker cache `towcb-v16`.
+
+### 31.1 Torches in the training cave
+
+- `world/props.js makeTorch(x, y, z, face)`: a stick wedged in the wall,
+  angled up, with a wrapped head, a flickering MeshBasic flame, a halo, and a
+  `glow` the Vivid style lights the rock with. No PointLight (each scene
+  light costs every lit fragment on a phone).
+- Twelve, listed in `TRAINING_CAVE.torches` (`world/terrain.js`): four in the
+  sleeping chamber, one each at the sill and the basket nook, six along the
+  way out. Placed by `dressTrainingShelter`, they last all of Scene A.
+- Glows (`world/shade.js`): any number registered; each frame `updateGlows`
+  hands the shader the eight nearest the camera within 40 blocks, with a
+  count, so with no torch near the loop exits at once. Fire light now adds to
+  a face (it can pass its daylight colour) instead of only filling shadow.
+- The practice rooms' walls are pale rose sandstone with a dark band; the
+  passage out stays smoke-dark, so the walk still goes dark to light. Floors
+  stay dark (regression.mjs checks them). The cave's dark zone is 0.52.
+
+### 31.2 The waterfall where the river starts
+
+- The gorge used to end in an open slot into the sky at the world's edge.
+  `carveWaterfall` (`world/terrain.js`, `WATERFALL`) raises the gorge floor
+  behind the gorge mouth to y 14 with the upper river on it, banks a block
+  higher, and ends it in a lip at z 12, where the gorge opens into the valley,
+  so the falls are seen from the camp and the valley floor (deep in the slot
+  the cliff walls hid them from everywhere).
+- `world/props.js makeWaterfall`: a sheet with two layers of streaks
+  scrolling at different speeds, a pale lip, foam and lumps where it lands, a
+  spray glow. Made once in `main.js` on the persistent scene (never in
+  G.props), ticked every frame in every mode, shown while `WATERFALL.lip`
+  holds water.
+- In the ice scenes the lip is ice and a curtain of ice hangs where the water
+  falls. The falls start in Scene B, after the thaw, which is the chapter's
+  own "melt, rivers swell" (4.42). The reveal pan does not target the falls:
+  it always plays in the ice age, when they are lost in the cold haze.
+- Not walkable ground (a gorge the cliffs fence); regression.mjs's river and
+  boat checks pass.
+
+### 31.3 The player model (`player/player.js _buildModel`)
+
+Same parts, joints and names (walk cycle, tool attachment and first-person
+hiding are untouched). Added: eyes with whites, brows, nose, mouth, ears,
+ochre on the cheeks, a fringe, back hair and a topknot with a red tie, fur on
+the shoulders, a bead necklace with a shell pendant, the satchel strap, a
+fringed hide wrap at the hips, armbands, wrist cords, wrapped feet. Each
+moving part's details are folded into that part and the static ones into the
+root, so the body costs about the same draw calls as before. Fold each mesh
+once: a second fold bakes from the material colour and bleaches it.
+
+### 31.4 Folded props and characters rendered too dark in Vivid (fixed)
+
+`world/merge.js` bakes vertex colours from THREE.Color, which is already
+linear; Vivid's `USE_VIVID_SRGBFIX` decode (meant for the mesher's raw sRGB
+numbers) darkened every folded mesh a second time, since Vivid existed.
+`enhance(mat, { linearColors: true })` skips the decode (own program cache
+key), and `MERGED_MAT` passes it. Every folded prop and NPC is brighter in
+Vivid now, at its authored colour.

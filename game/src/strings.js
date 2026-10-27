@@ -882,7 +882,7 @@ export const S = {
   },
 
   // ---------- SYLLABUS LABELS (teacher-facing) ----------
-  // One line per examinable item in game/COVERAGE.md. These render in the codex
+  // One line per examinable item in docs/COVERAGE.md. These render in the codex
   // and in the ?data results table, so they are user-visible and belong here.
   // Every taught item has a teacher-facing label.
   syllabus: {

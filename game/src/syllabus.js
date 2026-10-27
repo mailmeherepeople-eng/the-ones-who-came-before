@@ -1,6 +1,6 @@
 // The examinable knowledge map of NCERT Class 6 History Ch. 4, as data.
 //
-// game/COVERAGE.md is the prose version and maps every item to the beat that
+// docs/COVERAGE.md is the prose version and maps every item to the beat that
 // ships it; this file is the machine-readable half, and it is what the codex,
 // the recall prompts and the results export all key off. One id, one meaning,
 // everywhere.

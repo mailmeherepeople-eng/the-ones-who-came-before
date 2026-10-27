@@ -3,15 +3,15 @@
 Cap 6 KB, only what is current. Read `AGENTS.md` first. When something here is done, take it out (the record goes
 in `docs/CHANGELOG.md`).
 
-## Resume here (2026-10-28 01:05 IST)
+## Resume here (2026-10-28 01:30 IST)
 
-- Live on Pages: `main` at 65b544d, service worker `towcb-v15`. Slice 1 of the 27 Oct visual plan has shipped:
+- Live on Pages: 65b544d, service worker `towcb-v15`. Slice 1 of the 27 Oct visual plan has shipped:
   Vivid is the default look on every device, a central-Indian palette and trees, a ~90-block training cave, and a
   wordless valley reveal when the player steps out of it (CHANGELOG §29).
-- In progress in the main session: torches in the training cave, a waterfall at the river's north end, a better
-  player model.
-- Docs and gate restructured on branch `worktree-agent-af61166f0c41c6f6c` (this layout, CHANGELOG §30), not merged.
-- Waiting for the user's play: slice 1 on a real phone (not measured on one yet).
+- Committed on `main`, not pushed (cache `towcb-v16`): this docs layout and the size gate (§30); twelve torches in
+  the training cave, a waterfall where the river starts (frozen until the thaw), a better player model, and folded
+  props and NPCs no longer too dark in Vivid (§31). Push when the user says.
+- Waiting for the user's play: slice 1 and §31 on a real phone (not measured on one yet).
 
 ## Where things stand
 
@@ -28,8 +28,7 @@ in `docs/CHANGELOG.md`).
 
 | Agent | Task | Files owned | Since |
 |---|---|---|---|
-| Main session | cave torches, north waterfall, player model | `game/src/**`, `game/tools/regression.mjs` | 2026-10-28 |
-| Docs agent (worktree) | docs and gate restructure; remove this row on merge | root docs, `docs/`, `.gitignore`, `.ignore`, `game/tools/check.mjs` | 2026-10-28 |
+| (none) | | | |
 
 ## Next, in order
 
@@ -58,4 +57,3 @@ flat wall into fog; `?fast` is dead (no act uses a countdown).
 | Engine | Three.js for now (2026-08-28: "restyle Three.js, then decide"). The Godot evaluation lives in ignored `godot/` |
 | `game-baseline/` and `compare.html` | kept by the user's call (2026-08-10); do not tidy away |
 | Scope | "make Chapter 4 great, start with the look" (2026-10-27); more chapters not decided |
-| Main-checkout clutter | untracked shots, design docs and the audit report to move into ignored `docs/archive/`, `docs/design/`, `docs/sources/` (the restructure report lists each path) |

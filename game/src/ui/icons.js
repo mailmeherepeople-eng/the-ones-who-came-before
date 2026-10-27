@@ -9,7 +9,7 @@
 // the table falls back to the emoji, so a new prompt never breaks.
 //
 // Each path is a 24x24 viewBox, 1.8px strokes, round caps. Hand-drawn to keep
-// the repo asset-free (CLAUDE.md: GitHub carries the shipped game only).
+// the repo asset-free (AGENTS.md rule 1: GitHub carries the shipped game only).
 const P = {
   // three berries on a sprig
   '🫐': '<circle cx="8" cy="14" r="3.2"/><circle cx="15.5" cy="15" r="3.2"/><circle cx="12" cy="8.5" r="3.2"/><path d="M12 5.3V3M10.2 3.8 12 3l1.8.8"/>',

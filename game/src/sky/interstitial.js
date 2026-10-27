@@ -101,7 +101,9 @@ export async function skyGlimpse(G, {
 const REVEAL = {
   rise: [new THREE.Vector3(26, 25, 13), new THREE.Vector3(30, 24, 16), new THREE.Vector3(36, 22, 20)],
   // where the camera looks while it drifts: near camp and river, the valley
-  // floor, the plains, then down the valley to the south
+  // floor, the plains, then down the valley to the south. (The waterfall is
+  // not on the path: the reveal always plays in the ice age, when the falls
+  // are a frozen curtain lost in the cold haze from up here.)
   look: [
     new THREE.Vector3(44, 9, 30), new THREE.Vector3(62, 6, 52),
     new THREE.Vector3(96, 8, 50), new THREE.Vector3(84, 6, 98),

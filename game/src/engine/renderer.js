@@ -3,7 +3,7 @@
 // Sky: gradient dome + sun disc/glow + drifting cloud billboards, all derived
 // from the two hexes acts already pass to setSky(skyHex, fogHex).
 //
-// Lighting pass (2026-08-23, GAME-OVERVIEW section 20): ACES tone mapping in
+// Lighting pass (2026-08-23, docs/CHANGELOG.md section 20): ACES tone mapping in
 // the material shaders (free: no extra pass until the Rich tier asks for one),
 // a stronger sun over a weaker sky fill so the mesher's baked shadows have
 // something to cut into, a horizon that no longer bleaches to white, and two
@@ -11,7 +11,7 @@
 // follows the camera, and the merged post pass in engine/post.js.
 import * as THREE from '../../vendor/three.module.js';
 import { PERF, QUALITY, QUALITY_TIER } from '../constants.js';
-import { SHADE, tickShade, setClouds } from '../world/shade.js';
+import { SHADE, tickShade, setClouds, updateGlows } from '../world/shade.js';
 import { Post } from './post.js';
 
 // matches this.sun.position (40, 60, 20) so the disc sits on the light
@@ -233,6 +233,7 @@ export class Renderer {
 
   _render(dt) {
     tickShade(dt);
+    updateGlows(this.camera.position);
     if (this.rich) {
       if (this.gl.shadowMap.enabled) this._followShadow();
       this.post.render(this.scene, this.camera, SHADE.time.value);

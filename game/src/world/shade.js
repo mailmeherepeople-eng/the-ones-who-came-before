@@ -55,13 +55,17 @@ export const SHADE = {
   //                as sunless renders at this fraction, never black
   //   darkLo/Hi    one world-space box (the training cave) that is dark
   //   darkAmt      how dark: 0 is off, 0.66 leaves a third of the colour
-  //   glow         up to four warm pools of light, xyz + radius (w 0 = off)
+  //   glow         up to GLOW_MAX warm pools of light, xyz + radius, the
+  //                nearest to the camera chosen each frame (updateGlows);
+  //                glowN says how many slots are live, so with nothing near
+  //                the loop exits at once
   //   vividSky     what the river reflects at a grazing angle
   vividShadow: { value: 0.7 },
   darkLo: { value: new THREE.Vector3() },
   darkHi: { value: new THREE.Vector3() },
   darkAmt: { value: 0 },
-  glow: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+  glow: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
+  glowN: { value: 0 },
   glowColor: { value: new THREE.Color(0xffb565) },
   vividSky: { value: new THREE.Color(0x9fd2ee) },
   // the scene's light colour for vivid, which has no lights: cold for the
@@ -178,7 +182,8 @@ uniform float uVividShadow;
 uniform vec3 uDarkLo;
 uniform vec3 uDarkHi;
 uniform float uDarkAmt;
-uniform vec4 uGlow[ 4 ];
+uniform vec4 uGlow[ 8 ];
+uniform int uGlowN;
 uniform vec3 uGlowColor;
 uniform vec3 uVividSky;
 uniform vec3 uVividTint;
@@ -263,12 +268,15 @@ if ( uVivid > 0.5 ) {
     towcbLit = min( towcbLit, 1.0 - towcbZone );
   #endif
   float towcbGlow = 0.0;
-  for ( int i = 0; i < 4; i ++ ) {
+  for ( int i = 0; i < 8; i ++ ) {
+    if ( i >= uGlowN ) break;
     vec4 towcbG = uGlow[ i ];
-    if ( towcbG.w > 0.0 ) towcbGlow += 1.0 - smoothstep( 0.0, towcbG.w, distance( vWPos, towcbG.xyz ) );
+    towcbGlow += 1.0 - smoothstep( 0.0, towcbG.w, distance( vWPos, towcbG.xyz ) );
   }
   towcbGlow = min( towcbGlow, 1.0 );
-  vec3 towcbLight = vec3( towcbLit ) + uGlowColor * ( towcbGlow * ( 1.0 - towcbLit ) * 1.3 );
+  // fire light ADDS (it can push a face past its daylight colour): a torch
+  // has to read as a light source on dark rock, not just as less shadow
+  vec3 towcbLight = vec3( towcbLit ) + uGlowColor * ( towcbGlow * 1.25 );
   outgoingLight = towcbAlbedo * towcbShade * towcbLight;
   #ifdef USE_WATER
     // water that reads as water: the sky in it at a grazing angle, and a
@@ -310,9 +318,13 @@ const FRAG_FOG = /* glsl */ `
 /**
  * Splice the game's shading features into a Lambert material.
  * @param {THREE.Material} mat
- * @param {{sun?:boolean, sway?:boolean, water?:boolean, vividFull?:boolean}} opts
+ * @param {{sun?:boolean, sway?:boolean, water?:boolean, vividFull?:boolean, linearColors?:boolean}} opts
  * vividFull: in the vivid style this material skips face shading and renders
  * at full palette brightness (cross flora, which has no meaningful faces).
+ * linearColors: its vertex colours are already linear (world/merge.js bakes
+ * from THREE.Color), so vivid must not decode them again. Only the mesher
+ * writes raw sRGB numbers; before this flag every folded prop and character
+ * rendered too dark in vivid.
  */
 export function enhance(mat, opts = {}) {
   if (!mat || mat.userData.towcb) return mat;
@@ -322,7 +334,7 @@ export function enhance(mat, opts = {}) {
   if (opts.sway) mat.defines.USE_SWAY = '';
   if (opts.water) mat.defines.USE_WATER = '';
   if (opts.vividFull) mat.defines.USE_VIVID_FULL = '';
-  if (mat.vertexColors) mat.defines.USE_VIVID_SRGBFIX = '';
+  if (mat.vertexColors && !opts.linearColors) mat.defines.USE_VIVID_SRGBFIX = '';
   if (cloudsOn) mat.defines.USE_CLOUDS = '';
   mat.toneMapped = !vividOn; // materials born while vivid is on match the set
   mat.onBeforeCompile = (shader) => {
@@ -340,6 +352,7 @@ export function enhance(mat, opts = {}) {
     shader.uniforms.uDarkHi = SHADE.darkHi;
     shader.uniforms.uDarkAmt = SHADE.darkAmt;
     shader.uniforms.uGlow = SHADE.glow;
+    shader.uniforms.uGlowN = SHADE.glowN;
     shader.uniforms.uGlowColor = SHADE.glowColor;
     shader.uniforms.uVividSky = SHADE.vividSky;
     shader.uniforms.uVividTint = SHADE.vividTint;
@@ -358,7 +371,7 @@ export function enhance(mat, opts = {}) {
   };
   // three caches programs by this key; without it two materials with
   // different defines could be handed the same compiled program
-  const tag = `towcb:${opts.sun ? 's' : ''}${opts.sway ? 'w' : ''}${opts.water ? 'a' : ''}${opts.vividFull ? 'f' : ''}${mat.vertexColors ? 'v' : ''}`;
+  const tag = `towcb:${opts.sun ? 's' : ''}${opts.sway ? 'w' : ''}${opts.water ? 'a' : ''}${opts.vividFull ? 'f' : ''}${mat.vertexColors ? (opts.linearColors ? 'L' : 'v') : ''}`;
   mat.customProgramCacheKey = () => tag + (mat.defines.USE_CLOUDS !== undefined ? ':c' : '');
   ENHANCED.add(mat);
   return mat;
@@ -405,14 +418,31 @@ export function setDarkZone(lo, hi, amount = 0.66) {
   SHADE.darkAmt.value = amount;
 }
 
-// Vivid's warm pools of light: up to four {x, y, z, r}. Anything beyond four
-// is ignored; an empty list switches them all off.
+// Vivid's warm pools of light: any number of {x, y, z, r}, kept by reference
+// so an owner can flicker r. Each frame updateGlows() hands the shader the
+// GLOW_MAX nearest to the camera within GLOW_RANGE; an empty list is off.
+const GLOW_MAX = 8, GLOW_RANGE = 40;
+let glowList = [];
 export function setGlows(list = []) {
-  SHADE.glow.value.forEach((v, i) => {
-    const g = list[i];
-    if (g) v.set(g.x, g.y, g.z, g.r);
-    else v.set(0, 0, 0, 0);
-  });
+  glowList = list.slice();
+  if (!glowList.length) SHADE.glowN.value = 0;
+}
+
+// called once per rendered frame by the renderer
+export function updateGlows(cam) {
+  if (!glowList.length) { SHADE.glowN.value = 0; return; }
+  const near = [];
+  for (const g of glowList) {
+    const d = (g.x - cam.x) ** 2 + (g.y - cam.y) ** 2 + (g.z - cam.z) ** 2;
+    if (d < GLOW_RANGE * GLOW_RANGE) near.push([d, g]);
+  }
+  near.sort((a, b) => a[0] - b[0]);
+  const n = Math.min(GLOW_MAX, near.length);
+  for (let i = 0; i < n; i++) {
+    const g = near[i][1];
+    SHADE.glow.value[i].set(g.x, g.y, g.z, g.r);
+  }
+  SHADE.glowN.value = n;
 }
 
 // advance the shared clock; the renderer calls this once per rendered frame

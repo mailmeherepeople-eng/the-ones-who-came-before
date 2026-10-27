@@ -1,9 +1,9 @@
 import * as THREE from '../../vendor/three.module.js';
-import { SITES } from '../world/terrain.js';
+import { SITES, TRAINING_CAVE } from '../world/terrain.js';
 import { S } from '../strings.js';
 import { Save } from '../save.js';
 import { Inv } from '../inventory.js';
-import { makeBasket, disposeGroup } from '../world/props.js';
+import { makeBasket, makeTorch, disposeGroup } from '../world/props.js';
 import { syncEquipment } from '../ui/equipment.js';
 import { activity } from '../ui/activity.js';
 import { SFX } from '../audio.js';
@@ -38,8 +38,16 @@ export function dressTrainingShelter(G) {
     const lamp=new THREE.PointLight(0xffdeb0,intensity,14,1.5);
     lamp.position.set(site.x,14,site.z);group.add(lamp);
   }
-  // the same two lamps for the vivid style, which ignores scene lights
-  setGlows([{...SITES.trainingLight,y:12,r:7},{...SITES.trainingBasket,y:12,r:6}]);
+  // Lit torches on the walls, all the way out. They stay for the whole of
+  // Scene A (clearStage retires props and glows together), so the cave is
+  // still lit if the player walks back in after the reveal.
+  const glows=[{...SITES.trainingLight,y:12,r:7},{...SITES.trainingBasket,y:12,r:6}];
+  for (const t of TRAINING_CAVE.torches) {
+    const torch=makeTorch(t.x,12.3,t.z,t.face);
+    G.renderer.scene.add(torch.group);G.props.push(torch);glows.push(torch.glow);
+  }
+  // the vivid style ignores scene lights: the lamps and the torches light it
+  setGlows(glows);
   const mat=new THREE.Mesh(new THREE.BoxGeometry(1.7,.06,2.2),new THREE.MeshLambertMaterial({color:0x756042}));
   mat.position.set(SITES.trainingStart.x,10.035,SITES.trainingStart.z);group.add(mat);
   G.renderer.scene.add(group);G.props.push({group,_folded:true});
@@ -150,7 +158,6 @@ export async function runOnboarding(G) {
       // out in the light: the card stays hidden for the whole reveal, then a
       // short breath before it comes back with "find your people"
       quiet=Infinity;el.hidden=true;root.classList.add('training-reveal');FX.setMotes('snow');
-      setGlows([]);
       playReveal().then(()=>{quiet=1.2;});
     }
     paint();
@@ -210,6 +217,5 @@ export async function runOnboarding(G) {
     G.interactables=G.interactables.filter(o=>o!==pickup);
     root.classList.remove('training-active','training-reveal');el.remove();
     setBeacon(G,null);disposeGroup(scene,group);FX.setMotes('snow');G.hud.hidePrompt();
-    setGlows([]);
   }
 }

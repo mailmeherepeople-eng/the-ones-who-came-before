@@ -6,12 +6,13 @@ import * as THREE from '../../vendor/three.module.js';
 import { PLAYER, WORLD } from '../constants.js';
 import { isSolid, isWater } from '../world/blocks.js';
 import { enhance } from '../world/shade.js';
+import { foldStatic } from '../world/merge.js';
 
 // camera boom: desired follow distance (wheel/pinch adjusts within MIN..MAX),
 // orbit pivot height above the feet, and how far short of a wall hit to stop
 const CAM = { DIST: 4.6, MIN: 2.2, MAX: 7.5, PIVOT: 1.5, PAD: 0.3, HIDE_BELOW: 1.15 };
 
-// ---- camera feel (GAME-OVERVIEW section 20) ----
+// ---- camera feel (docs/CHANGELOG.md section 20) ----
 // Rest FOV, and how far it opens while running: speed reads as speed.
 const FOV_REST = 70, FOV_RUN = 75;
 // Shake follows Eiserloh's GDC 2016 rules: a trauma value in 0..1 that decays
@@ -122,22 +123,80 @@ export class Player {
       return m;
     };
     const g = new THREE.Group();
-    const skin = 0x8a5a3a, wrap = 0xc27b3e, hair = 0x2e2018; // ember wrap: the player pops
+    // 2026-10-28: "make the player character look a little better, right now
+    // it looks the most plain". Same parts, same joints, same names (the walk
+    // cycle swings legs and arms from the hip and shoulder; tools attach to
+    // the arms), with the detail a child can read at a glance: a face (eyes
+    // with whites, brows, nose, mouth, ochre on the cheeks), hair with a
+    // topknot, a fur wrap on the shoulders for the ice age, a bead necklace
+    // (the bead beat), a fringed hide wrap at the hips, armbands and wrapped
+    // feet. Every part's details are folded into that part (world/merge.js),
+    // so the body is still one draw call per moving part.
+    const skin = 0x8d5b3b, wrap = 0xc27b3e, hair = 0x22170f; // ember wrap: the player pops
+    const C = {
+      skinDark: 0x77492e, hide: 0x9a6a3c, hideDark: 0x7a5230, fur: 0x6e4f33, furLight: 0x9b7a52,
+      leather: 0x5a4128, ochre: 0xd49a3a, redOchre: 0xc0532f, bone: 0xf1e6cf, eye: 0xf4efe6, dark: 0x1c1410,
+      lip: 0x5a2c1c,
+    };
     // limbs pivot at the joint: legs hang from the hip (y=0.6), arms from the
     // shoulder (y=1.2); geometry is shifted down so proportions are unchanged
     this._legL = box(0.17, 0.6, 0.2, skin, -0.13, 0.6, 0, true);
     this._legR = box(0.17, 0.6, 0.2, skin, 0.13, 0.6, 0, true);
+    for (const leg of [this._legL, this._legR]) {
+      leg.add(box(0.19, 0.09, 0.25, C.leather, 0, -0.555, 0.03)); // wrapped foot
+      leg.add(box(0.185, 0.04, 0.21, C.furLight, 0, -0.47, 0));   // ankle tie
+    }
     this._torso = box(0.52, 0.62, 0.3, wrap, 0, 0.92, 0);
+    const t = this._torso;
+    t.add(box(0.54, 0.06, 0.32, C.hideDark, 0, -0.28, 0));          // hem
+    t.add(box(0.6, 0.12, 0.36, C.fur, 0, 0.27, 0));                 // fur on the shoulders
+    t.add(box(0.32, 0.1, 0.04, C.furLight, 0, 0.2, 0.17));          // its front edge
+    t.add(box(0.06, 0.72, 0.03, C.leather, 0.04, -0.02, 0.165));    // satchel strap, front...
+    t.children[t.children.length - 1].rotation.z = 0.62;
+    t.add(box(0.06, 0.72, 0.03, C.leather, 0.04, -0.02, -0.165));   // ...and back
+    t.children[t.children.length - 1].rotation.z = -0.62;
+    const beads = [C.bone, C.redOchre, C.ochre, C.bone, C.ochre, C.redOchre, C.bone];
+    beads.forEach((c, i) => {                                       // the necklace
+      const u = i / (beads.length - 1) - 0.5;
+      t.add(box(0.055, 0.055, 0.04, c, u * 0.3, 0.13 - (0.25 - u * u) * 0.3, 0.17)); // hangs in a U
+    });
+    t.add(box(0.07, 0.08, 0.04, C.bone, 0, -0.01, 0.175));          // a shell pendant
     this._armL = box(0.13, 0.5, 0.17, skin, -0.34, 1.2, 0, true);
     this._armR = box(0.13, 0.5, 0.17, skin, 0.34, 1.2, 0, true);
+    for (const arm of [this._armL, this._armR]) {
+      arm.add(box(0.15, 0.05, 0.19, C.ochre, 0, -0.14, 0));         // armband
+      arm.add(box(0.15, 0.035, 0.19, C.furLight, 0, -0.4, 0));      // wrist cord
+    }
     const head = box(0.4, 0.38, 0.38, skin, 0, 1.45, 0);
-    head.add(box(0.42, 0.12, 0.4, hair, 0, 0.16, -0.01)); // hair cap
-    head.add(box(0.06, 0.06, 0.02, 0x1c1410, -0.09, 0.0, 0.2)); // eyes: front = +z
-    head.add(box(0.06, 0.06, 0.02, 0x1c1410, 0.09, 0.0, 0.2));
+    head.add(box(0.42, 0.12, 0.4, hair, 0, 0.16, -0.01));           // hair cap
+    head.add(box(0.4, 0.07, 0.04, hair, 0, 0.12, 0.19));            // fringe
+    head.add(box(0.42, 0.3, 0.06, hair, 0, 0.02, -0.2));            // hair down the back
+    for (const sx of [-1, 1]) head.add(box(0.04, 0.22, 0.3, hair, sx * 0.205, 0.05, -0.04));
+    head.add(box(0.16, 0.12, 0.16, hair, 0, 0.27, -0.06));          // topknot...
+    head.add(box(0.17, 0.035, 0.17, C.redOchre, 0, 0.225, -0.06));  // ...and its tie
+    for (const sx of [-1, 1]) {                                     // eyes: front = +z
+      head.add(box(0.085, 0.07, 0.02, C.eye, sx * 0.09, 0.0, 0.195));
+      head.add(box(0.045, 0.06, 0.02, C.dark, sx * 0.085, -0.005, 0.205));
+      head.add(box(0.1, 0.025, 0.02, hair, sx * 0.09, 0.065, 0.2));          // brow
+      head.add(box(0.07, 0.022, 0.02, C.redOchre, sx * 0.13, -0.06, 0.195)); // ochre on the cheek
+      head.add(box(0.04, 0.09, 0.07, skin, sx * 0.215, -0.01, 0));           // ear
+    }
+    head.add(box(0.05, 0.07, 0.05, C.skinDark, 0, -0.04, 0.21));    // nose
+    head.add(box(0.1, 0.022, 0.02, C.lip, 0, -0.115, 0.195));       // mouth
     this._head = head;
     const satchel = box(0.2, 0.24, 0.1, 0x6d5433, -0.3, 0.68, -0.12); // evidence bag
     const belt = box(0.54, 0.08, 0.32, 0x6d5433, 0, 0.66, 0);
-    g.add(this._legL, this._legR, this._torso, this._armL, this._armR, head, satchel, belt);
+    const hips = box(0.56, 0.2, 0.34, C.hide, 0, 0.56, 0);          // hide wrap at the hips
+    for (const fz of [0.175, -0.175]) {
+      for (let i = 0; i < 4; i++) hips.add(box(0.07, 0.11, 0.02, C.hideDark, -0.18 + i * 0.12, -0.14, fz)); // fringe
+    }
+    // fold each moving part's details into that part (one call each), then
+    // the static bits on the root (belt, satchel, hip wrap and its fringe)
+    // into one more. Fold each mesh ONCE: a second fold bakes from the
+    // material colour and would bleach a part already folded.
+    for (const part of [this._legL, this._legR, this._armL, this._armR, this._torso, head]) foldStatic(part);
+    g.add(this._legL, this._legR, this._torso, this._armL, this._armR, head, satchel, belt, hips);
+    foldStatic(g, [this._legL, this._legR, this._torso, this._armL, this._armR, head]);
     // Blob shadow, same language as the NPCs, with one difference: NO depth
     // test. The model Y is eased after an auto-step (_stepLift), so for a
     // third of a second after every 1-block climb a depth-tested disc sits

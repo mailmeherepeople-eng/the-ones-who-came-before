@@ -18,7 +18,7 @@
 //
 // Deliberately hand-rolled rather than using vendor/gltf/BufferGeometryUtils:
 // that file is 36 KB for one function, and vendor/gltf/ is dev-only by
-// convention (GAME-OVERVIEW §11.4 — dev tooling stays out of the shipped
+// convention (docs/CHANGELOG.md §11.4 — dev tooling stays out of the shipped
 // graph). Attributes are normalised to position/normal/colour first, which
 // makes the weld below trivial.
 import * as THREE from '../../vendor/three.module.js';
@@ -27,7 +27,7 @@ import { enhance } from './shade.js';
 // One material for every folded mesh in the game. props.js registers this in
 // its SHARED_MATS set so disposeGroup() never disposes it. Enhanced so folded
 // props and characters share the world's mist and cloud shadows.
-export const MERGED_MAT = enhance(new THREE.MeshLambertMaterial({ vertexColors: true }));
+export const MERGED_MAT = enhance(new THREE.MeshLambertMaterial({ vertexColors: true }), { linearColors: true });
 
 const _inv = new THREE.Matrix4();
 const _rel = new THREE.Matrix4();

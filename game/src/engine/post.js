@@ -10,7 +10,7 @@
 // large single-colour faces it read as sensor noise, not texture, and it was
 // the "why does the game look grainy" complaint. It is deliberately ONE pass: every
 // extra full-screen pass is another few million fragment invocations, which
-// is exactly the budget a midrange Android GPU does not have (GAME-OVERVIEW
+// is exactly the budget a midrange Android GPU does not have (docs/CHANGELOG.md
 // section 12). On the Lite tier none of this runs and the CSS vignette and
 // the in-material tone map stand in for it.
 //

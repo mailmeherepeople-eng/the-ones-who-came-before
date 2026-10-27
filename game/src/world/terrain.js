@@ -134,9 +134,52 @@ export function buildBase(world, opts = {}) {
 
   carveShelter(world);
   carveFossilCliff(world);
+  carveWaterfall(world, ice);
   scatterVegetation(world, lush, ice);
   carveTrainingCave(world, ice);
   dressOutlands(world, lush, ice);
+}
+
+// ---- the waterfall -----------------------------------------------------------
+// 2026-10-28: "make the start of the river a waterfall". The river used to
+// leave the valley through an open slot in the north cliff, straight into
+// the sky at the world's edge. Now the slot ends in a rock lip with the upper
+// river pooled on top, and the river starts by falling off it. The falling
+// sheet, foam and spray are a prop (world/props.js makeWaterfall), made once
+// in main.js because the falls are there in every era; in the cold scenes the
+// lip freezes and a curtain of ice hangs where the water would fall.
+// Nothing here is walkable ground: it is the closed end of a gorge the
+// cliffs already fence.
+// The lip sits where the gorge opens into the valley (z 12), not deep in the
+// slot: from anywhere else the slot walls hid it. Behind the lip the upper
+// river runs on the gorge floor raised to y 14, below the slot walls on both
+// sides, back to the world's edge.
+const FALLS_Z = 11; // the last row of the raised gorge floor
+const FALLS_RX = Math.round(riverX(FALLS_Z));
+const FALLS_POOL = 14; // the upper river's water cell height
+export const WATERFALL = {
+  x0: FALLS_RX - 3, x1: FALLS_RX + 4,      // the sheet spans these x (cells x0..x1-1)
+  face: FALLS_Z + 1,                       // the lip's south face, where the water leaves it
+  top: FALLS_POOL + 0.85, bottom: WATER_LEVEL + 0.85, // water surface on the lip, and in the pool
+  lip: { x: FALLS_RX, y: FALLS_POOL, z: FALLS_Z }, // main.js shows the sheet while this cell is water
+};
+function carveWaterfall(world, ice) {
+  for (let z = 0; z <= FALLS_Z; z++) {
+    for (let x = FALLS_RX - 7; x <= FALLS_RX + 7; x++) {
+      if (world.topAt(x, z) > FALLS_POOL) continue; // slot wall: already higher
+      const channel = x >= WATERFALL.x0 && x < WATERFALL.x1;
+      const top = channel ? FALLS_POOL - 1 : FALLS_POOL + 1; // banks stand above the water
+      for (let y = 0; y <= top; y++) world.setRaw(x, y, z, y >= top - 1 ? B.ROCK : B.STONE);
+      for (let y = top + 1; y < SY; y++) world.setRaw(x, y, z, B.AIR);
+      if (channel) world.setRaw(x, FALLS_POOL, z, ice ? B.ICE : B.WATER);
+    }
+  }
+  if (ice) {
+    // the frozen curtain, one block proud of the lip
+    for (let x = WATERFALL.x0 + 1; x < WATERFALL.x1 - 1; x++) {
+      for (let y = WATER_LEVEL; y <= FALLS_POOL; y++) world.setRaw(x, y, WATERFALL.face, B.ICE);
+    }
+  }
 }
 
 // ---- the training cave ------------------------------------------------------
@@ -168,6 +211,18 @@ export const TRAINING_CAVE = {
   // both in L2, which runs east-west like the sun's own slant, so the light
   // travels down the passage's air before it ever meets rock
   cracks: [{ x: 19, z: 2 }, { x: 27, z: 2 }],
+  // wall torches (acts/onboarding.js dressTrainingShelter): the point where
+  // the stick meets the wall face, and the way it points. Inner walls only
+  // (the outer ones have alcoves), all at y 12.3, over head height.
+  torches: [
+    { x: 10.5, z: 7, face: 's' }, { x: 16.5, z: 7, face: 's' },   // R1 north wall
+    { x: 8, z: 13.5, face: 'e' }, { x: 13.5, z: 18, face: 'n' },  // R1 west, south
+    { x: 24.5, z: 11, face: 's' }, { x: 28.5, z: 18, face: 'n' }, // the sill, the basket nook
+    { x: 32, z: 9.5, face: 'e' },                                  // L1
+    { x: 8.5, z: 5, face: 'n' }, { x: 14.5, z: 5, face: 'n' },    // L2
+    { x: 6, z: 12.5, face: 'w' },                                  // L3
+    { x: 10.5, z: 19, face: 's' }, { x: 18.5, z: 19, face: 's' }, // L4
+  ],
 };
 const CAVE_ROOMS = [ // [x0, z0, x1, z1] — air y 10..16, roof y 17
   [8, 7, 18, 17],   // R1
@@ -192,12 +247,12 @@ export function carveTrainingCave(world, ice = false) {
     const roof = Math.min(SY - 3, 15 + Math.min(4, edge));
     for (let y = 7; y <= roof; y++) world.setRaw(x, y, z, y === roof && ice ? B.SNOWGRASS : B.ROCK);
   }
-  const carved = new Set();
+  const carved = new Set(), roomAir = new Set();
   const air = (x, y, z) => { world.setRaw(x, y, z, B.AIR); carved.add(`${x},${y},${z}`); };
   // 2. the practice rooms, exactly as the tutorial knows them
   for (const [x0, z0, x1, z1] of CAVE_ROOMS) {
     for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
-      for (let y = FLOOR + 1; y <= 16; y++) air(x, y, z);
+      for (let y = FLOOR + 1; y <= 16; y++) { air(x, y, z); roomAir.add(`${x},${y},${z}`); }
       // continuous roof, even where the natural cliff was low
       world.setRaw(x, 17, z, B.ROCK_DARK);
       world.setRaw(x, 18, z, ice ? B.SNOWGRASS : B.ROCK);
@@ -226,6 +281,8 @@ export function carveTrainingCave(world, ice = false) {
   for (let x = 6; x <= 31; x++) alcove(x, 1);
   for (let z = 6; z <= 17; z++) alcove(2, z);
   for (let z = 5; z <= 14; z++) alcove(35, z);
+  // a room wall already lined pale keeps it even where a passage shares it
+  const roomWall = (x, y, z) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => roomAir.has(`${x + dx},${y},${z + dz}`));
   // 5. sun cracks: carve along the exact march the mesher uses to bake
   //    sunlight, from a 2x2 patch of floor up to open sky. Only from y 14 up:
   //    a crack is a staircase one block per step, and below 14 a player could
@@ -243,15 +300,22 @@ export function carveTrainingCave(world, ice = false) {
   }
   // 6. line every carved space with dark, smoke-stained stone (the floor
   //    included), with a paler sandstone band at y 12 so the walls show
-  //    their layers; the outside of the mass stays rose
+  //    their layers; the outside of the mass stays rose. The practice rooms
+  //    are where people sleep and the torches burn: their WALLS stay pale
+  //    rose sandstone (a dark band at y 12 for the layers), so the
+  //    torchlight has something to show and the rooms read bright, while the
+  //    long passage out stays dark.
   for (const key of carved) {
     const [x, y, z] = key.split(',').map(Number);
+    const room = roomAir.has(key);
     for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]]) {
       const nx = x + dx, ny = y + dy, nz = z + dz;
       const id = world.get(nx, ny, nz);
       if (id !== B.ROCK && id !== B.STONE && id !== B.DIRT && id !== B.SNOWGRASS) continue;
       const band = ny === 12 && hash2(nx * 3 + nz, nz * 5) > 0.35;
-      world.setRaw(nx, ny, nz, band ? B.ROCK : B.ROCK_DARK);
+      const wall = dy === 0;
+      if (room && wall) world.setRaw(nx, ny, nz, band ? B.ROCK_DARK : B.ROCK);
+      else if (id !== B.ROCK || !roomWall(nx, ny, nz)) world.setRaw(nx, ny, nz, band ? B.ROCK : B.ROCK_DARK);
     }
   }
   // 6b. pools of daylight: any cave floor the sun actually reaches (the

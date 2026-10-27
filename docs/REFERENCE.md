@@ -56,7 +56,7 @@ systems; `acts/beats.js` checkpoints each beat, and a beat whose record exists i
 | `world/mesher.js` | chunk meshing: culled faces, AO, tint, baked sun mask, sway, water, cross flora, painted pass |
 | `world/shade.js` | `enhance()` for every material: sun mask, mist, clouds, sway, water, Vivid light model, dark zone, glows |
 | `world/props.js`, `merge.js`, `atlas.js` | ~25 prop factories; `foldStatic` mesh folding; the painted-block texture atlas |
-| `player/player.js` | AABB physics, jump, swim and breach, camera boom, model, equip, trauma shake, character collision |
+| `player/player.js` | AABB physics, jump, swim and breach, camera boom, model (face, topknot, fur, beads, hide wrap; each moving part folded, CL §31.3), equip, trauma shake, character collision |
 | `npc/npc.js`, `npc/ambient.js` | `Npc` and `Animal`: movement, carry, poses, bubbles, talk voice; the working-day scheduler |
 | `fx/fx.js` | pooled particles (2 draw calls), rings, pillars, waves, motes |
 | `acts/act1.js` | Act 1 scenes A to D (1,673 lines: frozen, split it before it grows) |
@@ -82,8 +82,10 @@ Engine details worth knowing:
 - **Baked sun:** each face corner marches toward the sun; the per-vertex `sun` mask dims light 0 only, so shade never
   goes black. Never add a DirectionalLight before the sun (CL §20.1).
 - **Vivid** (`setVivid`): overwrites the lit result with albedo times a fixed face shade, then a storybook light
-  model: soft sun mask (floor 0.7), `setDarkZone(TRAINING_CAVE)`, up to four `setGlows()`, water glint, per-scene tint
-  from `setSky(sky, fog, vividTint)`. Under Vivid the shadow map is neither enabled nor rendered (CL §27, §29.1).
+  model: soft sun mask (floor 0.7), `setDarkZone(TRAINING_CAVE)` (0.52), `setGlows()` (any number; `updateGlows`
+  hands the shader the 8 nearest the camera within 40 blocks each frame; fire light adds), water glint, per-scene
+  tint from `setSky(sky, fog, vividTint)`. Under Vivid the shadow map is neither enabled nor rendered. Folded meshes
+  pass `enhance(mat, { linearColors: true })` so Vivid does not darken them twice (CL §27, §29.1, §31.1, §31.4).
 - **Rich** (Settings, default on the `high` tier): shadow map, cloud shadows, one post pass (CL §20.6).
 - **Quality tier** (`?q=high|low`): pixel ratio cap, clouds, particle caps, remesh budgets. `high` is a capability
   guess and lands on midrange phones at DPR 3; it is not "desktop" (CL §14.2).
@@ -123,7 +125,12 @@ Engine details worth knowing:
   over the river at z about 37, village (76,80) that becomes the Act 3 mound, neighbour village (108,112), fossil
   cliff (102,12), modern village (24,106), dig camp (66,92).
 - **Training cave:** a ~90-block single passage from the basket nook to the mouth (north, west, south, east), two
-  sunlit cracks from y 14 up. The rock mass is x 1..36, z 1..22. `regression.mjs` walks it (CL §29.4).
+  sunlit cracks from y 14 up. The rock mass is x 1..36, z 1..22. `regression.mjs` walks it (CL §29.4). Twelve wall
+  torches (`TRAINING_CAVE.torches`, `props.makeTorch`, no scene lights) for all of Scene A; the practice rooms have
+  pale sandstone walls, the passage out stays dark (CL §31.1).
+- **Waterfall:** the river begins at `WATERFALL` (`world/terrain.js`): the gorge floor behind the gorge mouth is raised
+  to y 14 and ends in a lip at z 12; `props.makeWaterfall` (made once in `main.js`, ticked every frame) shows while
+  the lip holds water. In ice scenes it is a frozen curtain; it flows from Scene B, after the thaw (CL §31.2).
 - Eras come from `world/states.js` stages: ice camp, thaw, hamlet, village, ruins, grassed mound, present day.
   Ice-age Scene A is pale and frozen; settled eras warm; Act 3 has a light morning mist (0.22).
 - Not done: the world edge is a flat wall into fog; the lit style was not retuned for the new palette.
