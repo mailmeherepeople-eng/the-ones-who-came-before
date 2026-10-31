@@ -59,7 +59,10 @@ systems; `acts/beats.js` checkpoints each beat, and a beat whose record exists i
 | `player/player.js` | AABB physics, jump, swim and breach, camera boom, model (face, topknot, fur, beads, hide wrap; each moving part folded, CL §31.3), equip, trauma shake, character collision |
 | `npc/npc.js`, `npc/ambient.js` | `Npc` and `Animal`: movement, carry, poses, bubbles, talk voice, looks (`LOOKS` per named character, a hashed mix otherwise, `modern: true` for Act 3; CL §32.2); the working-day scheduler |
 | `fx/fx.js` | pooled particles (2 draw calls), rings, pillars, waves, motes |
-| `acts/act1.js` | Act 1 scenes A to D (1,673 lines: frozen, split it before it grows) |
+| `acts/act1.js` | Act 1 scenes A to D (1,547 lines: frozen, split it before it grows) |
+| `games/bow.js` | the shared bow: hold to draw, release, arcs zeroed on the crosshair, stuck arrows, hit feel, the bow in view |
+| `games/targets.js`, `hunt.js` | painted stand, swinging and running targets with ring scoring; the Act 1 hunt's shooting |
+| `games/range.js`, `scores.js` | the training post (title screen rounds, Scene A practice stop, lane clearing); local bests, medals, board |
 | `acts/onboarding.js`, `gathering.js` | the 12-stage cave tutorial and valley reveal call; the resumable first gathering task |
 | `acts/act2.js`, `acts/act3.js` | Act 2 phases P1 to P6; Act 3 beats |
 | `sky/dial.js`, `interface.js` | the timeline ruler, steps and settling; Act 2 notebook panel and playback |
@@ -102,7 +105,7 @@ Engine details worth knowing:
 | Interact | E or Enter, or click the prompt pill | tap the world or the pill |
 | Jump | Space | jump button |
 | Equip / put away | Q, or the equipment button | equipment button; a selector appears with several tools |
-| Bow | Take Aim, then Fire or Lower bow on the right rail; E or Enter also fire | the rail |
+| Bow | Take Aim (rail); drag to aim (or click once: the mouse is caught and aims as it moves); hold Space, F, E or the right button to draw (the left too once caught), let go to shoot; Lower bow (rail) | Take Aim; hold the round Draw button (bottom right), let go; a tap on the world never shoots |
 | Camera distance | wheel (2.2 to 7.5 blocks) | pinch |
 | Act menu | Alt+M, or Settings (confirms before wiping progress) | Settings |
 | World editor | backtick, Ctrl+E, F2, or `?edit` (dev) | `?edit` |
@@ -121,7 +124,8 @@ Engine details worth knowing:
   murram paths, mud walls and golden thatch, kans grass by the river. Trees: sal, banyan (walk-through `B.ROOTS`
   aerial roots), peepal, date palm, babul, the odd snag (CL §29.2, §29.3).
 - Places come from `SITES` in `world/terrain.js`. Key ones: training cave rooms (`training*`, northwest), rock shelter
-  (42,14) with the painting wall (42,9), Camp A (40,24), berry meadow (west), plains and herds (96,48), log crossing
+  (42,14) with the painting wall (42,9), Camp A (40,24), berry meadow (west), plains and herds (96,48), training post
+  (84,36, lanes run east over flat ground), log crossing
   over the river at z about 37, village (76,80) that becomes the Act 3 mound, neighbour village (108,112), fossil
   cliff (102,12), modern village (24,106), dig camp (66,92).
 - **Training cave:** a ~90-block single passage from the basket nook to the mouth (north, west, south, east), two
@@ -147,7 +151,7 @@ card ("Make a life here. Leave something behind.") and the era card. A resumed g
 
 | Scene | Beats |
 |---|---|
-| A, Ice (about 38,000 years ago) | Wake lying in the training cave, tap to rise (once per story). 12-stage tutorial: look, walk, back, strafe left and right, jump the sill, pick up the basket, equip, put away, equip, exit, reach camp (Skip practice exists). Valley reveal on stepping out (about 13.6 s, skippable, once). Gather: basket equipped, 12 berries, deposit in the store box, return the basket. Hunt: borrow the bow, reach the plains, Take Aim and Fire real arrows, down 3 deer, take and deposit the meat. Second hunt is a ruse: the bear appears 73 blocks from camp, run to the fire, return the bow. Fish: borrow the rod, timing ring at one of 4 spots, deposit, return. Fire circle: the elder speaks in pictograms; recall `band`. Knapping (timing, 3 strikes). Cave painting on a rock canvas, saved verbatim and mounted on the shelter wall. Three shells, beads at the knapping stone. Trade with a strange band; recall `huntGather`. Depletion and the move. The burial: place beads and blade; "Perhaps they believed something continued." |
+| A, Ice (about 38,000 years ago) | Wake lying in the training cave, tap to rise (once per story). 12-stage tutorial: look, walk, back, strafe left and right, jump the sill, pick up the basket, equip, put away, equip, exit, reach camp (Skip practice exists). Valley reveal on stepping out (about 13.6 s, skippable, once). Gather: basket equipped, 12 berries, deposit in the store box, return the basket. Hunt: borrow the bow, stop at the training post for three hits on the painted targets (once, `hunt.practised`), reach the plains, Take Aim, draw and release, down 3 deer, take and deposit the meat. Second hunt is a ruse: the bear appears 73 blocks from camp, run to the fire, return the bow. Fish: borrow the rod, timing ring at one of 4 spots, deposit, return. Fire circle: the elder speaks in pictograms; recall `band`. Knapping (timing, 3 strikes). Cave painting on a rock canvas, saved verbatim and mounted on the shelter wall. Three shells, beads at the knapping stone. Trade with a strange band; recall `huntGather`. Depletion and the move. The burial: place beads and blade; "Perhaps they believed something continued." |
 | B, Thaw (to 10,000 BCE) | Cinematic glimpse; the world thaws; protected caption on the last Ice Age |
 | C, Roots (7,000 BCE) | Plant 4 fields, lead the goats into the pen, the granary question (no one sack is yours), recall `lostTongues`, the chieftain's waterskin task, the water dispute and the lean week |
 | D, Fire and Clay (to 5,400 BCE) | Shape a pot and engrave your maker's mark (saved), weave a basket in one tap, shelf both in your hut, the copper trader, the grain delivery run to the neighbour village, recall `farming`, the lingering shot |
@@ -200,6 +204,23 @@ village (later slices change both).
   come back empty-handed with home and speed restored. Tests that drive NPCs must call it too.
 - **Hunting ambience:** a second, small herd on the west meadow, far from `SITES.plains`, so ambient arrows never
   scatter the player's herd. Arrows use fresh geometry per instance (shared geometry is disposed per arrow).
+- **The bow** (`games/bow.js`, CL §33): hold to draw (0.55 s to full), release to shoot; under 18% is a cancel.
+  At release a camera ray finds the target under the crosshair (else the nearest target within 4 blocks of the
+  sight line, else the first solid block) and the arrow is launched on the flat arc that lands there, so the
+  crosshair is honest at any range and a lead on a moving target works. Speed 24 to 54 blocks/s by draw; a short
+  draw wobbles. Arrows step in 0.3-block slices, stick into `hit.parent` (moving targets carry them), share one
+  folded geometry (`userData.shared`, never disposed with a target) and go after 16. A hit pauses the world 70 ms.
+  While drawing: look slows to 45%, the view narrows 18 degrees, walking slows (`player.aimLookMul`, `fovZoom`,
+  `moveMul`); `player.noJump` while raised, `moveLock` at the post. The bow in view is camera-attached, unlit,
+  depth-test off, sized from the camera's FOV and aspect (4 draw calls). Sounds are synthesized (`audio.js`); a
+  recorded `sfx/bow-loose` would win. The overlay `#ui-root > .bow-ui` must stay `pointer-events: none` (only the Draw
+  button takes presses), or it eats every look drag (CL §34).
+- **Training post** (`games/range.js`): the title's Training post button builds Scene B, clears the lanes (plants,
+  and whole trees whose trunk is in the box; wild berry bushes stay; ground untouched), and runs rounds of 10
+  arrows: Still (10, 20, 30 steps, x1 x2 x3), Swinging hide (x2, faster per hit), Running deer (x2, faster per hit; an erratic pace: it picks a new speed every 0.5 to 1.6 s, freezes, doubles back).
+  Rings 10/7/4/2; a streak of 3 or more adds 5 a hit. Medals and a top-ten board per round in `towcb-range-v1`
+  (`games/scores.js`), never in the story save. Leave reloads to the title. In Scene A the three still targets stand
+  at the post as props, used by the practice stop.
 - **Stateful props:** `makeCommunityChest` has a hinged lid and refcounted `hold()`/`releaseHold()`, plus `openFor(ms)`
   for the player. The factory owns the animation, the caller owns the intent.
 - **Collision both ways:** the player is pushed out of character cylinders through `moveAxis`; characters refuse any
@@ -208,6 +229,9 @@ village (later slices change both).
   2.2; NPCs and animals step 1.05 with a hop and jump 2.2 with the player's impulse and gravity. Blocked NPCs try the
   direct move first, then a level detour, then a climbing one, and jump after 0.5 s stuck (0.65 s cooldown). Do not
   lower 1.05 or reorder `tryMove`: both were tried.
+- **Bolting prey** (`Animal.fleeFrom`, CL §34.4): deer and other prey flee in 3 to 5 zigzag legs of 3 to 7 blocks,
+  15 to 57 degrees off dead away, each at 1.5 to 2.9 times walking pace, sometimes with a stop to look back. The
+  bear (`kind: 'predator'`) still leaves in one straight 18-block line. `goTo` and `down()` end a bolt.
 - **Animal distance gate:** far animals sleep, measured from a module-level `OBSERVER` set in `main.js`; a
   `followTarget` (the bear) never sleeps; opening the editor turns the gate off.
 - **Inventory:** tools and harvests are carried together; a tap takes one tool but a whole stack of harvest. The

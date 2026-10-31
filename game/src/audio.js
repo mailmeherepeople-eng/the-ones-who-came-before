@@ -150,6 +150,55 @@ export class GameAudio {
     this._tone(420, { dur: 0.05, gain: 0.03, type: 'sine' });
   }
 
+  // ---- the bow (games/bow.js) ----
+  // No recordings exist for any of these, so they are made here. Each is a
+  // short noise burst through a filter plus at most two oscillators.
+  _noise(dur, { freq = 1200, q = 0.8, type = 'bandpass', gain = 0.06, when = 0 } = {}) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime + when;
+    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+  // The string coming back: a low creak that rises with the draw. Returns a
+  // handle the bow stops on release or cancel.
+  bowDraw(seconds = 0.55) {
+    if (!this.ctx) return null;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(70, t);
+    o.frequency.linearRampToValueAtTime(118, t + seconds);
+    f.type = 'lowpass'; f.frequency.value = 520;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.018, t + 0.08);
+    g.gain.linearRampToValueAtTime(0.008, t + seconds + 0.2);
+    o.connect(f); f.connect(g); g.connect(this.master);
+    o.start(t);
+    return { stop: () => { try { g.gain.cancelScheduledValues(ctx.currentTime); g.gain.setTargetAtTime(0, ctx.currentTime, 0.02); o.stop(ctx.currentTime + 0.1); } catch { /* already stopped */ } } };
+  }
+  // The release: a plucked twang (pitch falls fast) and the swish of the
+  // shaft leaving. A full draw is louder and lower.
+  bowLoose(draw = 1) {
+    this._tone(210 - draw * 60, { dur: 0.22, gain: 0.05 + draw * 0.05, type: 'triangle', sweep: 70 });
+    this._noise(0.16, { freq: 2400, q: 0.6, gain: 0.03 + draw * 0.03 });
+  }
+  // The arrow arriving. `zone` 0 is a plain hit, 1 a good one, 2 the centre.
+  arrowHit(zone = 0) {
+    this._tone(130, { dur: 0.14, gain: 0.12, type: 'sine', sweep: 55 });
+    this._noise(0.08, { freq: 900, q: 1.2, gain: 0.07, type: 'lowpass' });
+    if (zone >= 1) this._tone(880, { dur: 0.18, gain: 0.04, type: 'triangle', when: 0.04 });
+    if (zone >= 2) this._tone(1320, { dur: 0.32, gain: 0.05, type: 'sine', when: 0.1 });
+  }
+  arrowMiss() { this._noise(0.12, { freq: 500, q: 0.7, gain: 0.05, type: 'lowpass' }); }
+
   // UI: a paper rustle when a card or narrator box opens. Filtered noise
   // with a fast swell and a soft tail, no file on disk.
   page() {

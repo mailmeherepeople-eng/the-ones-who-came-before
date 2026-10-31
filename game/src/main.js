@@ -348,6 +348,7 @@ async function boot() {
     <h1></h1><h2></h2>
     <button class="btn primary" id="t-start"></button>
     <button class="btn" id="t-new" style="display:none"></button>
+    <button class="btn" id="t-range"></button>
     <div class="studio"></div>`;
   // The valley behind the title. The screen paints its gradient first (two
   // frames, so a slow phone shows SOMETHING at once), then the lush valley is
@@ -360,6 +361,10 @@ async function boot() {
   title.querySelector('.studio').textContent = S.studio;
   const startBtn = title.querySelector('#t-start');
   const newBtn = title.querySelector('#t-new');
+  // The training post (games/range.js): archery rounds for scores, open from
+  // the first boot and outside the story, so it never touches the save.
+  const rangeBtn = title.querySelector('#t-range');
+  rangeBtn.textContent = S.trainingPost;
 
   let resume = false;
   if (Save.hasProgress) {
@@ -374,6 +379,7 @@ async function boot() {
 
   const mode = await new Promise((res) => {
     startBtn.addEventListener('click', () => res(resume ? 'resume' : 'new'), { once: true });
+    rangeBtn.addEventListener('click', () => res('range'), { once: true });
     newBtn.addEventListener('click', async () => {
       const pick = await G.hud.choice(S.newGameConfirm, [S.newGameNo, S.newGameYes]);
       if (pick === 1) { Save.reset(); res('new'); }
@@ -383,6 +389,11 @@ async function boot() {
   stopTitleWorld();
   title.remove();
 
+  if (mode === 'range') {
+    const { runRange } = await import('./games/range.js');
+    await runRange(G);
+    return;
+  }
   if (mode === 'new') {
     // How to study with this, said once and said plainly. The game is meant to
     // replace an evening with the textbook, and a student who is not told that

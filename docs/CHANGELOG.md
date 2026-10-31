@@ -1605,3 +1605,101 @@ character is still about eight draw calls.
 - Scene A crossings: with the northern river no longer frozen, crossing near the camp means the log crossing at
   z 37 or swimming (banks are climbable everywhere). `regression.mjs` passes, including the walkers-on-valid-ground
   check.
+
+## 33. The bow rebuilt, and a training post with scored rounds (2026-10-30 06:30 IST)
+
+Asks, 10-30: "shooting the animals with arrows does not feel satisfying. the aiming is weird, the shooting is
+weird", then "there should also be a training post where kids can practise archery. and some mini games where they
+can try to hit targets that are stationary, moving and stuff. so that they can play and try to get high scores
+among themselves."
+
+### 33.1 Why the old bow felt wrong (measured)
+
+- The crosshair lied. Arrows left the player's head at 22 blocks/s with a 1.5 upward kick under gravity 12: a dead
+  centre shot landed 0.6 blocks low at 10 blocks, 1.8 at 15, 3.7 at 20, against a 0.9 hit radius. Spooked deer run
+  18 blocks, so later shots were all long ones.
+- Any touch under 12 px of movement is a tap, and a tap fired while aiming: small aiming nudges loosed arrows.
+- No draw, no bow on screen in first person, no sound (`sfx/bow-loose` was never recorded), a small puff on a hit.
+
+### 33.2 The shared bow (`games/bow.js`)
+
+- Hold to draw, let go to shoot (touch: a round Draw button in the jump button's corner; desktop: mouse, Space, F,
+  E). Under 18% draw is a cancel. Taps on the world no longer shoot.
+- The arc is zeroed where the crosshair is: the target under it, else the nearest target within 4 blocks of the
+  sight line, else the first solid block. The second rule exists because zeroing on the ground behind a moving target
+  sent lead shots half a block high (found by a scripted archer: 0 of 10 on the running deer). Do not drop it.
+- Draw strength is the skill: 24 to 54 blocks/s, wobble only below full draw.
+- Feel: a camera-attached bow with a string that comes back, a nocked arrow, a draw ring round the crosshair, the
+  view narrowing and look slowing while drawing, a 70 ms hit pause, a crosshair mark, synthesized creak, twang,
+  thud and ping, and arrows that stay stuck where they land.
+- Player knobs: `aimLookMul`, `fovZoom`, `moveMul`, `moveLock`, `noJump` (`player/player.js`).
+
+### 33.3 The hunt and the training post
+
+- `games/hunt.js` holds the hunt's shooting, moved out of `act1.js` with its rules unchanged (Take Aim, Lower bow,
+  three deer, scatter on hit and miss, kills saved as they happen). `act1.js` went from 1,673 to 1,547 lines; the
+  gate's frozen cap follows it down.
+- `SITES.trainingPost` (84,36), just east of the river crossing on flat ground. Scene A stands three painted
+  targets there; the hunt stops for three hits first (once, `hunt.practised`), which is where the bow is taught.
+- The title screen's Training post button runs three rounds of ten arrows (`games/range.js`): Still targets at 10,
+  20, 30 steps (x1 x2 x3), a Swinging hide (x2), a Running deer cut-out (x2, rings over the heart). Moving targets
+  speed up with each hit. Rings 10/7/4/2, +5 a hit from a streak of three. Medals, a personal best and a top-ten
+  name board per round in `towcb-range-v1` (`games/scores.js`), on the device only, never in the story save.
+- Faces are painted hide in ochre, white clay and charcoal, the cave painting colours.
+- Lanes are cleared of plants and of whole trees whose trunk stands in them. Wild berry bushes are kept (block plus
+  shared model plus pick prompt, CL 15.2 and 26). Ground heights are not touched.
+
+### 33.4 Verified
+
+- `check.mjs` all PASS. Browser pane at 375x812 and 1280x720, stepping the frame loop by hand at 30 fps (the
+  background pane ran at one frame a second): full draw on centre hits the centre ring at 10, 20 and 30 steps;
+  0.3 off centre at 30 lands in the third ring; the story resumes at the hunt, the practice stop counts 1/3 to 3/3,
+  saves, hands on to the plains, and three shots down three deer; the results card, medal, name board and Shoot
+  again work by tapping; the world editor opens on backtick; no console errors.
+- Medal lines from scripted archers: on the moving rounds aiming at where the target is scores under bronze, a good
+  lead reaches silver (swing) or gold with body hits (run), so gold needs the heart rings (run 35/80/140, swing
+  30/65/110, still 50/110/170).
+- Cost at the post, fixed pose looking down the lanes: 46 draw calls against 36 without the new pieces (bow in view
+  4, three targets 6), 396 more triangles. Not yet measured on a real phone.
+
+## 34. Aiming with the mouse and finger, and a deer that runs like one (2026-10-30 09:50 IST)
+
+The user, playing §33: "unable to move the mouse. it is locked. i can only shoot." Then: "the deer needs to run
+erratically. not in the same rhythm. that is more realistic."
+
+### 34.1 Nothing could aim
+
+- `#ui-root > * { pointer-events: auto }` outranked `.bow-ui { pointer-events: none }`. The bow's overlay covers
+  the screen, so every press and drag landed on it: no mouse look, no pointer lock, no touch drag on a phone. Only
+  Space could shoot. The §33 tests set yaw and pitch from code, so they never saw it. Fix: the rule is now
+  `#ui-root > .bow-ui`.
+- Where the mouse cannot be caught (the desktop app's browser pane, iframes), a left drag is the only look. With
+  the bow up it also drew, so every look ended in a shot. Now the left button draws only once the mouse is caught;
+  the right button draws either way, and a right drag also looks (`engine/input.js`; the canvas menu is off).
+- The keyboard hint says so.
+
+### 34.2 The running deer
+
+- It picks a new pace every 0.5 to 1.6 s (0.45 to 1.5 times its base), freezes 18% of the time, doubles back mid
+  track 20% of the time, eases between paces at 9 blocks/s/s, and bobs as it runs. The head leads whichever way it
+  moves. Hit tests are in the sled's own space, so none of this needed a change there.
+- Scripted archers, 60 arrows each, steady deer against erratic (round scores): no lead 8 against 13; a good lead
+  read with a human's 0.2 s lag 92 against 59; a perfect lead 138 against 96. The run medal lines drop from
+  35/80/140 to 30/60/110 so a good lead still reaches silver about half the time.
+
+### 34.3 Verified
+
+- `check.mjs` all PASS. Browser pane: a left drag turns the view and fires nothing; a held right button shoots;
+  at 375x812 the screen under the overlay is the canvas and the Draw button still takes presses; the deer's track
+  over 10 s shows changes of pace and a turn mid track. The world editor opens (F2). Not yet played on a phone.
+
+### 34.4 The story's deer bolt too
+
+- The user, asked whether the hunt deer should run erratically as well: "Yes, them too".
+- `Animal.fleeFrom` (a kill or a miss near them in the hunt) was one straight 18-block run at 2.2 times walking
+  pace. Prey now bolt in 3 to 5 zigzag legs (3 to 7 blocks, alternating sides, 15 to 57 degrees off dead away), each
+  at 1.5 to 2.9 times walking pace, with a 0.25 to 0.7 s stop to look back now and then. Bolts end 8 to 15 blocks
+  away, so the herd stays closer than before. The bear keeps its straight line (Act 1's fire beat).
+- Verified in Scene A's world on the plains, four bolts stepped by hand: zigzags of about 3 blocks either side,
+  2 to 4 stops, 4 to 7 s each; the bear's flee is unchanged. `check.mjs` all PASS; the editor opens.
+

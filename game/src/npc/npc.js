@@ -1189,6 +1189,7 @@ export class Animal {
 
   goTo(x, z) {
     if (this.downed) return; // carcasses don't take orders
+    this._flee = null;
     this._target = { x: clampW(x), z: clampW(z), scripted: true };
     this._detour = null; this._detourCount = 0;
     this._stuckT = 0; this._stuckX = this.pos.x; this._stuckZ = this.pos.z;
@@ -1198,10 +1199,37 @@ export class Animal {
     if (this.downed) return;
     const dx = this.pos.x - x, dz = this.pos.z - z;
     const d = Math.hypot(dx, dz) || 1;
-    this._target = { x: clampW(this.pos.x + (dx / d) * 18), z: clampW(this.pos.z + (dz / d) * 18), scripted: true };
     this.fleeing = true;
+    if (this.kind === 'predator') { // the bear leaves in one straight, heavy line
+      this._flee = null;
+      this._target = { x: clampW(this.pos.x + (dx / d) * 18), z: clampW(this.pos.z + (dz / d) * 18), scripted: true };
+      this._detour = null; this._detourCount = 0;
+      this._stuckT = 0; this._stuckX = this.pos.x; this._stuckZ = this.pos.z;
+      return;
+    }
+    // Prey bolt like deer, not in a straight line (CL 34): 3 to 5 short legs
+    // zigzagging away from the scare, each at its own pace, and now and then
+    // a dead stop to look back before the next dash.
+    this._flee = { ax: dx / d, az: dz / d, legs: 3 + Math.floor(Math.random() * 3), side: Math.random() < 0.5 ? -1 : 1, pace: 2.2, pause: 0 };
+    this._fleeLeg();
+  }
+
+  // The next leg of a bolt; false when the bolt is over.
+  _fleeLeg() {
+    const f = this._flee;
+    if (!f || f.legs <= 0) { this._flee = null; return false; }
+    f.legs--;
+    f.side = -f.side;
+    const a = f.side * (0.25 + Math.random() * 0.75); // 15 to 57 degrees off dead away
+    const c = Math.cos(a), sn = Math.sin(a);
+    const hx = f.ax * c - f.az * sn, hz = f.ax * sn + f.az * c;
+    const len = 3 + Math.random() * 4;
+    this._target = { x: clampW(this.pos.x + hx * len), z: clampW(this.pos.z + hz * len), scripted: true };
+    f.pace = 1.5 + Math.random() * 1.4;
+    f.pause = f.legs < 4 && Math.random() < 0.22 ? 0.25 + Math.random() * 0.45 : 0;
     this._detour = null; this._detourCount = 0;
     this._stuckT = 0; this._stuckX = this.pos.x; this._stuckZ = this.pos.z;
+    return true;
   }
 
   // Permanent down-state: all AI/movement stops, a quick ~0.4s side-fall
@@ -1212,6 +1240,7 @@ export class Animal {
     if (this.downed) return;
     this.downed = true;
     this.fleeing = false;
+    this._flee = null;
     this.followTarget = null;
     this._target = null;
     this._detour = null;
@@ -1253,12 +1282,17 @@ export class Animal {
     if (!this.frozen) {
       this._wt -= dt;
       let tx = null, tz = null, scripted = false, isFollow = false;
-      if (this.followTarget) {
+      if (this._flee && this._flee.pause > 0) {
+        this._flee.pause -= dt; // stopped dead mid-bolt, looking back at the scare
+        this._yawTarget = Math.atan2(-this._flee.ax, -this._flee.az);
+      } else if (this.followTarget) {
         const d = Math.hypot(this.followTarget.x - this.pos.x, this.followTarget.z - this.pos.z);
         if (d > 1.8) { tx = this.followTarget.x; tz = this.followTarget.z; scripted = true; isFollow = true; }
       } else if (this._target) {
         if (Math.hypot(this._target.x - this.pos.x, this._target.z - this.pos.z) < 0.6) {
-          this._target = null; this.fleeing = false; this._detour = null; this._detourCount = 0;
+          if (!(this.fleeing && this._fleeLeg())) {
+            this._target = null; this.fleeing = false; this._flee = null; this._detour = null; this._detourCount = 0;
+          }
         } else {
           tx = this._target.x; tz = this._target.z; scripted = !!this._target.scripted;
         }
@@ -1277,7 +1311,7 @@ export class Animal {
         if (nav) {
           const dx = nav.x - this.pos.x, dz = nav.z - this.pos.z;
           const d = Math.hypot(dx, dz) || 1;
-          const sp = this.fleeing ? this.speed * 2.2 : this.speed;
+          const sp = this.fleeing ? this.speed * (this._flee?.pace ?? 2.2) : this.speed;
           const step = Math.min(sp * dt, d);
           const ux = dx / d, uz = dz / d;
           moving = tryMove(this, ux, uz, step);
@@ -1291,7 +1325,7 @@ export class Animal {
             if (wantJump && startJump(this)) { this._noProgT = 0; this._jumpCool = 0.65; }
           }
         } else if (!this._target) {
-          this.fleeing = false; // stall cleared the flee target
+          this.fleeing = false; this._flee = null; // stall cleared the flee target
         }
       } else {
         navIdle(this);

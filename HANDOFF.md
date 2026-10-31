@@ -3,14 +3,15 @@
 Cap 6 KB, only what is current. Read `AGENTS.md` first. When something here is done, take it out (the record goes
 in `docs/CHANGELOG.md`).
 
-## Resume here (2026-10-28 01:40 IST)
+## Resume here (2026-10-31 IST)
 
-- Live on Pages: 573c546, service worker `towcb-v16`: slice 1 (CHANGELOG §29), this docs layout and size gate (§30),
-  cave torches, the waterfall, the new player model, true Vivid colours for folded meshes (§31).
-- Committed on `main`, not pushed (cache `towcb-v17`): the player's hairline flicker fixed, every tribe member a
-  distinct look (Act 3 villagers in modern clothes), the river running in the ice age, a 15-block waterfall (§32).
-  Push when the user says.
-- Waiting for the user's play: all of it on a real phone (not measured on one yet).
+- Live on Pages: the bow and training post commit, service worker `towcb-v18` (CHANGELOG §33, §34): hold to
+  draw, honest crosshair, stuck arrows, the hunt in `games/hunt.js`, a training post at `SITES.trainingPost` (Scene
+  A practice stop, title-screen rounds, medals, a local board), an erratic running deer, hunt deer that bolt in
+  zigzags. The user played it in the browser ("it is fine").
+- Waiting for the user's play: the bow on a real phone; everything since slice 1 on one.
+- The 10-30 playground proposal (more game, a bigger world, from the textbook) is
+  `docs/plans/2026-10-30-playground.md` (ignored). Phase 1 of it is §33.
 
 ## Where things stand
 
@@ -31,7 +32,16 @@ in `docs/CHANGELOG.md`).
 
 ## Next, in order
 
-From the 27 Oct improvement brief (`docs/plans/2026-10-27-improvements.md`, git-ignored, on disk only), after slice 1:
+From the 30 Oct playground proposal (`docs/plans/2026-10-30-playground.md`), the user's call ("its a game +
+education. right now its just education and very little game"):
+
+1. **More rounds at the post:** birds, a rolling hoop, date targets (oldest first, no clock), specialist targets.
+2. **Grow the world east and south to about 224** (cost table in the proposal): grassland hunt with stalking, the
+   Painted Rocks collectible, the lake, the sal forest.
+3. **Compare without a server:** a date-seeded daily challenge and challenge codes; the Act 3 museum and trophy
+   hall; arrows lost at the post dug up in Act 3.
+
+Then the 27 Oct brief (`docs/plans/2026-10-27-improvements.md`):
 
 1. **Opening and text timing.** Opening cards down to one line, controls taught in the world, teaching text that
    stays until read (brief C1, C8).
@@ -45,7 +55,8 @@ From the 27 Oct improvement brief (`docs/plans/2026-10-27-improvements.md`, git-
 6. Then: camp and people (V5, V6), Act 2 declutter (V8), dig in layers (V11), `?beat=` jumps and a beat runner (W3),
    a taught-before-used check (W4), a floor-phone bench (P1), silent playtests (P2).
 
-Also open: split `act1.js` along its scenes before slices 2 to 4 grow it (frozen at 1,673 lines); the Hindi strings
+Also open: split `act1.js` along its scenes before slices 2 to 4 grow it (frozen at 1,547 lines); a leftover
+worktree branch `claude/infallible-almeida-b0bbe1` whose one fix is already on `main` (the user's call to delete); the Hindi strings
 swap; vendor the Spectral and Cinzel fonts for offline; retune the lit style for the new palette; the world edge is a
 flat wall into fog; `?fast` is dead (no act uses a countdown).
 

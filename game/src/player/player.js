@@ -496,7 +496,9 @@ export class Player {
       this.trauma = Math.max(0, this.trauma - TRAUMA_DECAY * dt);
       this._shakeT += dt;
     }
-    this._fovTarget = running && !this.gentleCamera ? FOV_RUN : FOV_REST;
+    // fovZoom (0..1) is the bow's draw: the view narrows as the string comes
+    // back, so a small target grows under the crosshair (games/bow.js)
+    this._fovTarget = (running && !this.gentleCamera ? FOV_RUN : FOV_REST) - (this.fovZoom ?? 0) * 18;
     const k = 1 - Math.exp(-dt * 6);
     const next = this._fov + (this._fovTarget - this._fov) * k;
     if (Math.abs(next - this._fov) > 0.01) {
@@ -544,8 +546,16 @@ export class Player {
     } else {
       this._solidTime = 0;
     }
-    this.yaw += inp.look.x * (this.lookScale ?? 1);
-    this.pitch = Math.max(-1.2, Math.min(1.35, this.pitch + inp.look.y * (this.lookScale ?? 1)));
+    // The bow (games/bow.js) sets three knobs while it is up: aimLookMul slows
+    // the look as the string comes back, moveMul slows the walk while drawing,
+    // and moveLock plants the feet at the training post's mark. Space draws
+    // the bow there, so it must not also jump.
+    if (this.moveLock || this.noJump) {
+      inp = { ...inp, jump: false, jumpHeld: false, move: this.moveLock ? { x: 0, y: 0 } : inp.move };
+    }
+    const look = (this.lookScale ?? 1) * (this.aimLookMul ?? 1);
+    this.yaw += inp.look.x * look;
+    this.pitch = Math.max(-1.2, Math.min(1.35, this.pitch + inp.look.y * look));
 
     // Camera lock (Settings): swing the camera around to sit behind the
     // direction of travel, so crossing the valley needs no dragging at all.
@@ -578,7 +588,7 @@ export class Player {
     const right = { x: -fwd.z, z: fwd.x };
 
     const inWater = isWater(this.world.get(Math.floor(this.pos.x), Math.floor(this.pos.y + 0.4), Math.floor(this.pos.z)));
-    const speed = PLAYER.SPEED * (inWater ? 0.55 : 1);
+    const speed = PLAYER.SPEED * (inWater ? 0.55 : 1) * (this.moveMul ?? 1);
     const targetVx = (fwd.x * inp.move.y + right.x * inp.move.x) * speed;
     const targetVz = (fwd.z * inp.move.y + right.z * inp.move.x) * speed;
     const accel = this.onGround || inWater ? 14 : 5;

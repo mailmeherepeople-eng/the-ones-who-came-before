@@ -27,6 +27,8 @@ import { recallBeat, flushRecall } from '../recall.js';
 import { gatherWithBasket } from './gathering.js';
 import { needsOnboarding, runOnboarding, tutorialCheckpoint, dressTrainingShelter } from './onboarding.js';
 import { syncEquipment } from '../ui/equipment.js';
+import { huntWithBow } from '../games/hunt.js';
+import { addTrainingPost, practiceAtPost } from '../games/range.js';
 
 export async function runAct1(G, resumeScene = null) {
   const scenes = [
@@ -496,56 +498,11 @@ async function wakeSequence(G) {
   }
 }
 
-// ---------- bow hunting (real arrows — replaces the old timing minigame) ----------
-const ARROW_SPEED = 22;   // blocks/s along the camera ray
-const ARROW_UPBIAS = 1.5; // blocks/s added to vy at launch
-const ARROW_GRAV = 12;    // blocks/s² downward
-const ARROW_LIFE = 3;     // seconds in flight before despawn
-const ARROW_HIT_R = 0.9;  // hit radius against a deer's body centre
+// ---------- bow hunting: the bow itself is games/bow.js, the hunt games/hunt.js ----------
 // One kill fed nobody. The tribe is six people, so the hunt asks for three
 // animals: enough that the player has to re-stalk a spooked herd rather than
 // land one lucky shot, and it makes the store box beat below carry real weight.
 const HUNT_TARGET = 3;
-const _arrowDir = new THREE.Vector3(); // scratch — synchronous use only
-const _ARROW_Z = new THREE.Vector3(0, 0, 1);
-
-// is any enabled interactable in range? main.js gives interactables first
-// claim on the one-frame interact edge — the bow only looses when none is.
-function interactableNear(G) {
-  for (const o of G.interactables) {
-    if (!o.enabled) continue;
-    if (Math.hypot(G.player.pos.x - o.x, G.player.pos.z - o.z) < (o.r ?? 2.6)) return true;
-  }
-  return false;
-}
-
-// thin arrow: dark shaft + pale fletch, oriented along its velocity. Fresh
-// geometries (disposeGroup disposes them per arrow); materials come from the
-// shared prop pool, which disposeGroup deliberately skips.
-function spawnArrow(G, arrows) {
-  const g = new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.55), P.PROP_MATS.woodDark));
-  const fletch = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.12), P.PROP_MATS.bone);
-  fletch.position.z = -0.24; // pale tail end
-  g.add(fletch);
-  g.position.set(G.player.pos.x, G.player.pos.y + 1.4, G.player.pos.z);
-  G.renderer.camera.getWorldDirection(_arrowDir);
-  const vel = _arrowDir.clone().multiplyScalar(ARROW_SPEED);
-  vel.y += ARROW_UPBIAS;
-  g.quaternion.setFromUnitVectors(_ARROW_Z, _arrowDir.copy(vel).normalize());
-  const arrow = { group: g, vel, life: 0, stuck: 0 };
-  G.renderer.scene.add(g);
-  G.props.push(arrow); // stage teardown disposes any leftovers
-  arrows.push(arrow);
-  return arrow;
-}
-
-function removeArrow(G, arrows, i) {
-  const a = arrows[i];
-  arrows.splice(i, 1);
-  G.props = G.props.filter((p) => p !== a);
-  P.disposeGroup(G.renderer.scene, a.group);
-}
 
 // ---------- SCENE A — Band ----------
 
@@ -688,6 +645,7 @@ async function sceneA(G) {
     }));
   }
   G.npcs.push(...deer);
+  const postTargets = addTrainingPost(G); // by the crossing, on the way to the plains
 
   // --- the band's own working day (npc/ambient.js) ---
   // A second, small herd on the meadow west of camp: this is the band
@@ -751,104 +709,20 @@ async function sceneA(G) {
     await takeFromChest(G, 'bow', S.act1.obj_store_bow);
     chest.openFor(1200);
 
+    // the training post on the way out: three hits on the painted targets,
+    // which is where the bow is taught (games/range.js)
+    if (!Save.activity('hunt').practised) {
+      objectiveCue(G, S.range.obj_practice, SITES.trainingPost);
+      await reach(G, SITES.trainingPost.x, SITES.trainingPost.z, 3);
+      setBeacon(G, null);
+      await practiceAtPost(G, postTargets);
+      Save.setActivity('hunt', { practised: true });
+    }
+
     objectiveCue(G, S.act1.obj_hunt, SITES.plains);
     await reach(G, SITES.plains.x, SITES.plains.z, 8);
     setBeacon(G, null); // you are here, clear the sightline for aiming
-    G.hud.hint(S.act1.aimHint, 7000);
-
-    // Sighting is an explicit mode now, not "press E and hope". Take Aim drops
-    // to first person with a crosshair and swaps the rail to Fire / Lower bow,
-    // so on a phone the whole hunt is two big thumb targets instead of a tap
-    // that competes with tap-to-interact.
-    let aiming = false;
-    const rail = () => {
-      if (!aiming) {
-        G.hud.setActions([{ label: S.ui.takeAim, primary: true, onClick: enterAim }]);
-      } else {
-        G.hud.setActions([
-          { label: S.ui.fire, primary: true, onClick: () => { fireRequested = true; } },
-          { label: S.ui.lowerBow, onClick: exitAim },
-        ]);
-      }
-    };
-    let fireRequested = false;
-    const enterAim = () => { aiming = true; G.player.setFirstPerson(true); rail(); };
-    const exitAim = () => { aiming = false; G.player.setFirstPerson(false); G.player.setAim(true); rail(); };
-    G.player.setAim(true);
-    rail();
-
-    // arrows simulated in the act tick; resolves once HUNT_TARGET deer are down
-    const arrows = [];
-    const downedList = await new Promise((resolve) => {
-      const bag = [];
-      for (const saved of Save.activity('hunt').kills ?? []) {
-        const d=deer[saved.index];
-        if(d) {d.pos.set(saved.x,saved.y,saved.z);d.down();bag.push(d);}
-      }
-      if (bag.length >= HUNT_TARGET) { resolve(bag); return; }
-      let hit = null; // set for one frame per kill, so a shot never double-counts
-      G.tick = (dt, inp) => {
-        // E / Enter still fires while aiming, for players on a keyboard
-        const wantShot = fireRequested || (aiming && inp.interact && !interactableNear(G));
-        fireRequested = false;
-        if (bag.length < HUNT_TARGET && wantShot) { Sound.playSfx('bow-loose'); spawnArrow(G, arrows); }
-        for (let i = arrows.length - 1; i >= 0; i--) {
-          const a = arrows[i];
-          if (a.stuck > 0) {
-            a.stuck -= dt;
-            if (a.stuck <= 0) removeArrow(G, arrows, i);
-            continue;
-          }
-          a.vel.y -= ARROW_GRAV * dt;
-          a.group.position.addScaledVector(a.vel, dt);
-          a.group.quaternion.setFromUnitVectors(_ARROW_Z, _arrowDir.copy(a.vel).normalize());
-          a.life += dt;
-          const p = a.group.position;
-          hit = null;
-          for (const d of deer) {
-            if (d.downed) continue;
-            if (Math.hypot(p.x - d.pos.x, p.y - (d.pos.y + 0.55), p.z - d.pos.z) < ARROW_HIT_R) {
-              hit = d;
-              d.down();
-              bag.push(d);
-              Save.setActivity('hunt',{kills:bag.map(animal=>({index:deer.indexOf(animal),x:animal.pos.x,y:animal.pos.y,z:animal.pos.z}))});
-              FX.puff(d.pos, { count: 10, size: 0.32, life: 0.6, color: 0xb9a77e });
-              for (const o of deer) {
-                if (o !== d && !o.downed && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < 8) {
-                  o.fleeFrom(p.x, p.z); // their home stays the plains, they drift back
-                }
-              }
-              removeArrow(G, arrows, i);
-              // the tribe needs more than one animal: keep hunting until the
-              // bag is full, and keep the count on screen so the goal is plain
-              if (bag.length >= HUNT_TARGET) { resolve(bag); return; }
-              G.hud.setObjective(S.act1.obj_huntN(bag.length, HUNT_TARGET));
-              G.audio?.blip?.();
-              break;
-            }
-          }
-          if (hit) continue;
-          // miss: stick in the ground for a beat, spook nearby deer
-          const gy2 = G.world.topAt(Math.floor(p.x), Math.floor(p.z)) + 1 + 0.15;
-          if (p.y <= gy2) {
-            p.y = gy2;
-            a.stuck = 0.7;
-            for (const d of deer) {
-              if (!d.downed && Math.hypot(d.pos.x - p.x, d.pos.z - p.z) < 5) d.fleeFrom(p.x, p.z);
-            }
-          } else if (a.life > ARROW_LIFE) {
-            removeArrow(G, arrows, i);
-          }
-        }
-      };
-    });
-
-    await wait(700); // the fall animation plays out
-    G.tick = null;
-    G.hud.clearActions();
-    G.player.setFirstPerson(false);
-    G.player.setAim(false);
-    while (arrows.length) removeArrow(G, arrows, arrows.length - 1);
+    const downedList = await huntWithBow(G, deer, HUNT_TARGET);
 
     // one carcass becomes one meat pickup; collect them all before carrying
     // the haul home, so the walk back happens once rather than three times

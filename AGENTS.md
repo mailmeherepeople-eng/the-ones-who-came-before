@@ -59,7 +59,7 @@ owner per file; hub files (`main.js`, `strings.js`, `act1.js`, `sw.js`) belong t
 - **Check the world editor opens, every pass.** Nothing imports it, so no check notices it broke. Press backtick.
 - `world/merge.js` folds static meshes: anything animated goes in `keep`, or it loses its transform (CL §12.1).
 - Every new runtime module goes in `game/sw.js` ASSETS (the gate checks); bump `CACHE` when shipped files change.
-- No `game/src` file over 1,500 lines. `act1.js` (1,673) and `dev/editor.js` (1,615) are frozen: shrink, never grow.
+- No `game/src` file over 1,500 lines. `act1.js` (1,547) and `dev/editor.js` (1,615) are frozen: shrink, never grow.
 
 ## Verification traps
 

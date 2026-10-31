@@ -41,11 +41,14 @@ export class Input {
       this._pointerLocked = document.pointerLockElement === canvas;
     });
     // drag-look fallback: pointer lock is not available everywhere (embedded
-    // browsers, iframes) — a held left-drag on the canvas must always rotate
+    // browsers, iframes) — a held left-drag on the canvas must always rotate.
+    // A right drag too: with the bow up the right button draws, and the
+    // archer must still be able to aim while holding it (games/bow.js).
     this._mouseDrag = false;
     canvas.addEventListener('mousedown', (e) => {
-      if (!this.isTouch && e.button === 0) this._mouseDrag = true;
+      if (!this.isTouch && (e.button === 0 || e.button === 2)) this._mouseDrag = true;
     });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // a right drag looks
     addEventListener('mouseup', () => { this._mouseDrag = false; });
     addEventListener('mousemove', (e) => {
       if (!this.enabled) return;
