@@ -103,6 +103,7 @@ export function equipBow(G) {
 export function bowFollowsEquip(G, bow) {
   return () => {
     const want = Inv.equippedTool() === 'bow';
+    bow.followsEquip = true;
     if (want && !bow.raised) { bow.raise(); G.hud.hint(bowHint(G), 7000); }
     else if (!want && bow.raised) { bow.lower(); G.hud.hint(S.range.equipHint, 6000); }
   };
@@ -142,6 +143,7 @@ export class Bow {
     this.ui.classList.add('on');
     this.ui.classList.toggle('touch', G.input.isTouch);
     document.body.classList.add('bow-up'); // css: Draw takes the jump button's corner
+    document.body.classList.toggle('bow-equip', !!this.followsEquip); // ui/equipment.js: Put away stays on screen
   }
 
   // Back down: third person. Arrows already loosed keep flying.
@@ -151,7 +153,7 @@ export class Bow {
     this._cancelDraw();
     this.vm.group.removeFromParent();
     this.ui.classList.remove('on');
-    document.body.classList.remove('bow-up');
+    document.body.classList.remove('bow-up', 'bow-equip');
     const p = this.G.player;
     p.setFirstPerson(false);
     p.noJump = false; p.aimLookMul = 1; p.fovZoom = 0; p.moveMul = 1;
@@ -163,7 +165,7 @@ export class Bow {
     if (!this.raised) return;
     this._cancelDraw();
     this.ui.classList.remove('on');
-    document.body.classList.remove('bow-up');
+    document.body.classList.remove('bow-up', 'bow-equip');
     const p = this.G.player;
     p.aimLookMul = 1; p.fovZoom = 0; p.moveMul = 1;
   }

@@ -1721,3 +1721,37 @@ automatically the crosshair should come."
   it was carried; at the plains it came up with no rail; the hunt ended and the bow went down. At 375x812 the hint,
   the equip control and Draw do not overlap. `check.mjs` all PASS; the editor opens (F2).
 
+## 36. Oldest first: a timeline round at the training post (2026-10-31 IST)
+
+§35 shipped in 06c6a81. Asked for the next step, the user picked "Date targets" (playground proposal: date
+targets, oldest first, no clock).
+
+### 36.1 The round
+
+- `games/dates.js`, a fourth round on the title's Training post, 12 arrows. Three standing targets carry dates on
+  clay plaques (unlit canvas text, readable at 375x812). The oldest standing one falls when hit. Any other shakes,
+  stays up, costs the streak, and the hint says which is older and why, in Act 2's words: "On the CE side, a
+  smaller number is earlier", "On the BCE side, a bigger number is farther back", "Every BCE year comes before
+  every CE year".
+- Sets get harder as they are cleared: CE (100 to 2000 CE), BCE (100 to 3000 BCE), both sides, then close to the
+  line (10 to 300 either side, so 200 BCE against 200 CE can come up). A clean set scores +10. Ring points times
+  1, 2, 2, 3 by set; a straw hit on the right target scores 1. The top panel builds "Your timeline: ..." as they
+  fall. No timer (CL 23).
+- Medals 100/170/250 from a scoring model: knowing the order averages 222 with good aim and 155 with ordinary aim;
+  knowing only CE dates 98; guessing 64.
+
+### 36.2 A fix to §35
+
+- With a story save in Act 1, the title's training post showed the equip control (Put away) while the bow was up,
+  and tapping it would have changed the story save's equipment. The control now shows in first person only under
+  `body.bow-equip`, which `bowFollowsEquip` sets in the story; the touch hint lift follows the same class.
+
+### 36.3 Verified
+
+- 2,000 generated sets: every one has three distinct years in its level's range, mixed sets always cross the
+  line, no year zero. The three explanations read right for each case.
+- Browser pane at 375x812, tapping: the menu fits four rounds; boards read; a shot out of turn stays up with the
+  right hint; the right one falls and starts the timeline line; a 12-arrow run went CE, BCE, then both, and ended
+  on the results card with medal and board. With an Act 1 save, the equip control is hidden at the title's post
+  and still shows at the story's practice stop. `check.mjs` all PASS; the editor opens. Cache `towcb-v20`.
+

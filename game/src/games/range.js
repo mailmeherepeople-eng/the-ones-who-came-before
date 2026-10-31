@@ -19,6 +19,7 @@ import { WORLD } from '../constants.js';
 import { Bow, bowHint, equipBow, bowFollowsEquip } from './bow.js';
 import { standTarget, swingTarget, runningTarget, dropTarget } from './targets.js';
 import { Scores } from './scores.js';
+import { playDatesRound } from './dates.js';
 import { activity } from '../ui/activity.js';
 import { wait } from '../ui/hud.js';
 import { SFX } from '../audio.js';
@@ -34,6 +35,11 @@ export const ROUNDS = [
   { id: 'still', arrows: 10, medals: [50, 110, 170] },
   { id: 'swing', arrows: 10, medals: [30, 65, 110] },
   { id: 'run', arrows: 10, medals: [30, 60, 110] },
+  // Oldest first (games/dates.js), from a scoring model (CL 36): knowing the
+  // order with good aim averages 222, with ordinary aim 155; knowing only CE
+  // dates 98; guessing the order 64. Bronze needs more than a guess, silver
+  // the order, gold the order and the centre rings.
+  { id: 'dates', arrows: 12, medals: [100, 170, 250] },
 ];
 const STREAK_FROM = 3, STREAK_BONUS = 5; // the third hit in a row on earns a bonus
 // near on the right, middle on the left, far in the centre: none of them
@@ -165,7 +171,9 @@ export async function runRange(G) {
   G.mode = 'ground';
   let round = await roundMenu(G);
   while (round) {
-    const played = await playRound(G, round);
+    const played = round.id === 'dates'
+      ? await playDatesRound(G, round, { mark, groundY, roundHud })
+      : await playRound(G, round);
     const next = await resultsCard(G, played.result);
     played.cleanup();
     if (next === 'menu') round = await roundMenu(G);
@@ -240,6 +248,7 @@ function roundHud(G, R, st) {
   G.hud.root.appendChild(el);
   let flashT = null;
   const api = {
+    el,
     render() {
       el.querySelector('.rh-score').textContent = S.range.scoreLabel(st.score);
       el.querySelector('.rh-left').textContent = S.range.arrowsLeft(st.left);

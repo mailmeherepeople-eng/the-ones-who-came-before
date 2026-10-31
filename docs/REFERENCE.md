@@ -63,6 +63,7 @@ systems; `acts/beats.js` checkpoints each beat, and a beat whose record exists i
 | `games/bow.js` | the shared bow: hold to draw, release, arcs zeroed on the crosshair, stuck arrows, hit feel, the bow in view |
 | `games/targets.js`, `hunt.js` | painted stand, swinging and running targets with ring scoring; the Act 1 hunt's shooting |
 | `games/range.js`, `scores.js` | the training post (title screen rounds, Scene A practice stop, lane clearing); local bests, medals, board |
+| `games/dates.js` | the Oldest first round: dated targets shot oldest first, sets that get harder, the why-older hint |
 | `acts/onboarding.js`, `gathering.js` | the 12-stage cave tutorial and valley reveal call; the resumable first gathering task |
 | `acts/act2.js`, `acts/act3.js` | Act 2 phases P1 to P6; Act 3 beats |
 | `sky/dial.js`, `interface.js` | the timeline ruler, steps and settling; Act 2 notebook panel and playback |
@@ -219,6 +220,11 @@ village (later slices change both).
 - **Training post** (`games/range.js`): the title's Training post button builds Scene B, clears the lanes (plants,
   and whole trees whose trunk is in the box; wild berry bushes stay; ground untouched), and runs rounds of 10
   arrows: Still (10, 20, 30 steps, x1 x2 x3), Swinging hide (x2, faster per hit), Running deer (x2, faster per hit; an erratic pace: it picks a new speed every 0.5 to 1.6 s, freezes, doubles back).
+  Oldest first (`games/dates.js`, 12 arrows): three dated targets at 8, 12, 16 steps, dates shuffled across them;
+  the oldest standing one falls when hit (ring points x1, x2, x2, x3 by set, straw 1), any other shakes, stays up and
+  the hint says which is older and why (CE, BCE, or across the line). Sets: CE, BCE, both, close to 1 BCE and
+  1 CE; +10 for a set with no wrong hit. The equip control never shows at this post (`body.bow-equip` is the
+  story's).
   Rings 10/7/4/2; a streak of 3 or more adds 5 a hit. Medals and a top-ten board per round in `towcb-range-v1`
   (`games/scores.js`), never in the story save. Leave reloads to the title. In Scene A the three still targets stand
   at the post as props, used by the practice stop.

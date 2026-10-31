@@ -1081,11 +1081,26 @@ S.range = {
   scoreLabel: (n) => `Score ${n}`,
   arrowsLeft: (n) => (n === 1 ? '1 arrow left' : `${n} arrows left`),
   menuTitle: 'Training post',
-  menuSub: 'Pick a round. Ten arrows each. Beat your best, then beat your friends.',
+  menuSub: 'Pick a round. Beat your best, then beat your friends.',
   rounds: {
     still: { name: 'Still targets', desc: 'Three targets at 10, 20 and 30 steps. The far ones score double and triple.' },
     swing: { name: 'Swinging hide', desc: 'A hide swings on a rope. Every hit swings it faster. Rings score double.' },
     run: { name: 'Running deer', desc: 'A wooden deer runs along a rope, and it never keeps one pace. Aim ahead of it. The rings on its heart score most.' },
+    dates: { name: 'Oldest first', desc: 'Each target carries a date. Shoot them in order, oldest first. Out of turn, a target will not fall.' },
+  },
+  // the Oldest first round (games/dates.js). Labels come in already written
+  // as years (fmtYear in constants.js).
+  dates: {
+    start: 'Read the dates. Shoot the oldest one first, then the next oldest.',
+    levels: ['CE dates', 'BCE dates', 'BCE and CE', 'Close to 1 BCE and 1 CE'],
+    setUp: (name) => `New targets: ${name}`,
+    notYet: 'Not yet!',
+    whyCE: (older, shot) => `${older} is older than ${shot}. On the CE side, a smaller number is earlier.`,
+    whyBCE: (older, shot) => `${older} is older than ${shot}. On the BCE side, a bigger number is farther back.`,
+    whyCross: (older, shot) => `${older} is older than ${shot}. Every BCE year comes before every CE year.`,
+    inOrder: 'In order!',
+    clean: 'Timeline in order! +10',
+    line: (labels) => `Your timeline: ${labels.join(' ▸ ')}`,
   },
   best: (n) => `Best ${n}`,
   notPlayed: 'Not played yet',

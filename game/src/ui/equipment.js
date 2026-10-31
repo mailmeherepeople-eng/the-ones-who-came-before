@@ -21,10 +21,11 @@ export function installEquipment(G) {
   select.setAttribute('aria-label', S.onboarding.selectTool);
   G.hud.root.append(el);
   let signature = '', displaySignature = '';
-  // first person hides it, except with the bow up: there it is the switch
-  // that puts the bow away (games/bow.js bowFollowsEquip)
+  // first person hides it, except with the story's bow up: there it is the
+  // switch that puts the bow away (games/bow.js bowFollowsEquip). Never at
+  // the title's training post, where it would toggle the story save's bow.
   const allowed = () => Save.data.act === 1 && G.mode === 'ground' && G.input.enabled && !G.hud.root.dataset.modal &&
-    (!G.player._fpsOn || document.body.classList.contains('bow-up'));
+    (!G.player._fpsOn || document.body.classList.contains('bow-equip'));
   const toggle = () => {
     if (!allowed() || !Inv.toggleTool()) return;
     syncEquipment(G);

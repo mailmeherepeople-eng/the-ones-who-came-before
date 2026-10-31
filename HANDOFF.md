@@ -5,8 +5,8 @@ in `docs/CHANGELOG.md`).
 
 ## Resume here (2026-10-31 IST)
 
-- Live on Pages: the bow (dd65fa8, §33, §34) and the crosshair on equip, no Take Aim (§35, the commit after it),
-  service worker `towcb-v19`. The bow: hold to
+- Live on Pages: the bow (dd65fa8, §33, §34), the crosshair on equip (06c6a81, §35), the Oldest first date round
+  (§36, the commit after it; the user played it: "its good"), service worker `towcb-v20`. The bow: hold to
   draw, honest crosshair, stuck arrows, the hunt in `games/hunt.js`, a training post at `SITES.trainingPost` (Scene
   A practice stop, title-screen rounds, medals, a local board), an erratic running deer, hunt deer that bolt in
   zigzags. The user played it in the browser ("it is fine").
@@ -36,7 +36,7 @@ in `docs/CHANGELOG.md`).
 From the 30 Oct playground proposal (`docs/plans/2026-10-30-playground.md`), the user's call ("its a game +
 education. right now its just education and very little game"):
 
-1. **More rounds at the post:** birds, a rolling hoop, date targets (oldest first, no clock), specialist targets.
+1. **More rounds at the post:** birds, a rolling hoop, specialist targets (date targets built, §36).
 2. **Grow the world east and south to about 224** (cost table in the proposal): grassland hunt with stalking, the
    Painted Rocks collectible, the lake, the sal forest.
 3. **Compare without a server:** a date-seeded daily challenge and challenge codes; the Act 3 museum and trophy
