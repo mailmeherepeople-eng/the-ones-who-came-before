@@ -20,6 +20,8 @@ import { FX } from '../fx/fx.js';
 import { isSolid } from '../world/blocks.js';
 import { foldStatic, MERGED_MAT } from '../world/merge.js';
 import { S } from '../strings.js';
+import { Inv } from '../inventory.js';
+import { syncEquipment } from '../ui/equipment.js';
 
 export const BOW = {
   DRAW_TIME: 0.55,  // seconds from rest to full draw
@@ -88,6 +90,22 @@ function orient(obj, vel) {
 // The hint under the crosshair, in the words of the device in hand.
 export function bowHint(G) {
   return G.input.isTouch ? S.range.hintTouch : S.range.hintKeys;
+}
+
+// In the story the bow is up whenever it is equipped (the user, 2026-10-31:
+// "when a player equips the bow and arrow, automatically the crosshair should
+// come"). The equip control (button or Q) is the one switch: put it away to
+// walk in third person, equip it again to aim. equipBow() puts it in hand at
+// the start of a shooting beat; call the returned function every tick.
+export function equipBow(G) {
+  if (Inv.selectTool('bow', true)) syncEquipment(G);
+}
+export function bowFollowsEquip(G, bow) {
+  return () => {
+    const want = Inv.equippedTool() === 'bow';
+    if (want && !bow.raised) { bow.raise(); G.hud.hint(bowHint(G), 7000); }
+    else if (!want && bow.raised) { bow.lower(); G.hud.hint(S.range.equipHint, 6000); }
+  };
 }
 
 // A target is anything with hitTest(p0, p1): given a segment of an arrow's

@@ -1703,3 +1703,21 @@ erratically. not in the same rhythm. that is more realistic."
 - Verified in Scene A's world on the plains, four bolts stepped by hand: zigzags of about 3 blocks either side,
   2 to 4 stops, 4 to 7 s each; the bear's flee is unchanged. `check.mjs` all PASS; the editor opens.
 
+## 35. Equip the bow and the crosshair comes (2026-10-31 IST)
+
+§33 and §34 shipped in dd65fa8 ("push it. it is fine"). With it: "when a player equips the bow and arrow,
+automatically the crosshair should come."
+
+- The hunt and the practice stop no longer have Take Aim and Lower bow. The bow is up (first person, crosshair,
+  Draw) whenever it is equipped, and each beat equips it as it starts (`games/bow.js` `equipBow`,
+  `bowFollowsEquip`). Putting it away with the equip control (button or Q) lowers it, with a hint that equipping
+  brings the aim back. Walking between beats it is carried, not raised: the second hunt is a ruse with a bear, and
+  a first-person chase is not the beat.
+- The equip control stays on screen in first person while the bow is up (`ui/equipment.js`), since it is now the
+  way down. On touch it sits above Draw, so the bow hint moves above it.
+- `S.ui.takeAim`, `S.ui.lowerBow` and `S.range.huntHint` are gone; `S.range.equipHint` is new. Cache `towcb-v19`.
+- Verified in the browser pane from a save at the hunt: taking the bow from the chest, the post raised it on
+  arrival; Put away lowered it, Equip raised it; three scripted hits finished the practice; walking to the plains
+  it was carried; at the plains it came up with no rail; the hunt ended and the bow went down. At 375x812 the hint,
+  the equip control and Draw do not overlap. `check.mjs` all PASS; the editor opens (F2).
+

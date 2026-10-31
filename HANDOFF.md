@@ -5,7 +5,8 @@ in `docs/CHANGELOG.md`).
 
 ## Resume here (2026-10-31 IST)
 
-- Live on Pages: the bow and training post commit, service worker `towcb-v18` (CHANGELOG §33, §34): hold to
+- Live on Pages: the bow (dd65fa8, §33, §34) and the crosshair on equip, no Take Aim (§35, the commit after it),
+  service worker `towcb-v19`. The bow: hold to
   draw, honest crosshair, stuck arrows, the hunt in `games/hunt.js`, a training post at `SITES.trainingPost` (Scene
   A practice stop, title-screen rounds, medals, a local board), an erratic running deer, hunt deer that bolt in
   zigzags. The user played it in the browser ("it is fine").

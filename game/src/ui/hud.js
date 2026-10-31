@@ -65,7 +65,7 @@ export class HUD {
   }
 
   // Right-hand action rail: big labelled buttons stacked above the jump
-  // control, for verbs the interact pill cannot express (Take Aim, Fire).
+  // control, for verbs the interact pill cannot express (Fire, Shoot again).
   // Thumb-reachable on a phone and clickable on desktop, so neither platform
   // needs a special case.
   //

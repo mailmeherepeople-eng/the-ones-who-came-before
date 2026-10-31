@@ -16,7 +16,7 @@ import { SITES, groundHeight } from '../world/terrain.js';
 import { buildSceneB } from '../world/states.js';
 import { B, isSolid } from '../world/blocks.js';
 import { WORLD } from '../constants.js';
-import { Bow, bowHint } from './bow.js';
+import { Bow, bowHint, equipBow, bowFollowsEquip } from './bow.js';
 import { standTarget, swingTarget, runningTarget, dropTarget } from './targets.js';
 import { Scores } from './scores.js';
 import { activity } from '../ui/activity.js';
@@ -124,10 +124,11 @@ export async function practiceAtPost(G, targets, need = 3) {
     },
     onMiss: () => bow.popup(S.range.miss, -1),
   });
-  bow.raise();
-  G.hud.hint(bowHint(G), 9000);
+  equipBow(G); // equipped means aiming (bow.js)
+  const follow = bowFollowsEquip(G, bow);
   await new Promise((res) => {
     G.tick = (dt) => {
+      follow();
       bow.update(dt);
       if (hits >= need && !bow.inFlight()) res();
     };

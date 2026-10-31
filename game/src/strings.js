@@ -236,8 +236,6 @@ export const S = {
     setVividNote: 'Bold storybook colours, the game\'s usual look. Turn this off for softer, realistic light.',
     setLockCamera: 'Lock camera behind me',
     setLockCameraNote: 'The camera swings around to stay behind you as you walk, so you do not have to keep dragging. Dragging still works whenever you want it.',
-    takeAim: 'Take Aim',
-    lowerBow: 'Lower bow',
     talk: 'Talk',
   },
 
@@ -1073,7 +1071,7 @@ S.range = {
   drawBtn: 'Draw', drawSub: 'hold, then let go',
   hintTouch: 'Drag to aim. Hold Draw to pull the string back, then let go to shoot. A full pull flies straight and fast.',
   hintKeys: 'Drag to aim (or click once and just move the mouse). Hold Space or the right mouse button to pull the string back, then let go to shoot.',
-  huntHint: 'Tap Take Aim, then draw and let go. The arrow flies to the centre of your sight.',
+  equipHint: 'Bow put away. Equip it again and your aim comes back.',
   obj_practice: 'Practise at the training post by the river',
   obj_practiceN: (n, total) => `Hit the painted targets (${n}/${total})`,
   practiceDone: 'A full pull flies true. The herd is out on the plains.',

@@ -1689,6 +1689,8 @@ body.large-text .discovery-body>p,body.large-text .lesson-intro,body.large-text 
 body.bow-up #touch-jump { display: none !important; }
 body.bow-up #hud-actions { bottom: max(150px, calc(env(safe-area-inset-bottom) + 142px)); }
 body.bow-up #hud-hint { bottom: max(132px, calc(env(safe-area-inset-bottom) + 124px)); width: 64vw; font-size: 13px; color: #e8d6b0; }
+/* touch: the equip control (Put away) sits above Draw in the story, so the hint goes over both */
+body.bow-up:not(.no-touch) #hud-hint { bottom: max(232px, calc(env(safe-area-inset-bottom) + 224px)); }
 body.move-locked #joystick { display: none !important; }
 .bow-ring {
   position: fixed; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px;

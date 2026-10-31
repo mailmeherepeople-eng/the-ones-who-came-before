@@ -21,7 +21,10 @@ export function installEquipment(G) {
   select.setAttribute('aria-label', S.onboarding.selectTool);
   G.hud.root.append(el);
   let signature = '', displaySignature = '';
-  const allowed = () => Save.data.act === 1 && G.mode === 'ground' && G.input.enabled && !G.hud.root.dataset.modal && !G.player._fpsOn;
+  // first person hides it, except with the bow up: there it is the switch
+  // that puts the bow away (games/bow.js bowFollowsEquip)
+  const allowed = () => Save.data.act === 1 && G.mode === 'ground' && G.input.enabled && !G.hud.root.dataset.modal &&
+    (!G.player._fpsOn || document.body.classList.contains('bow-up'));
   const toggle = () => {
     if (!allowed() || !Inv.toggleTool()) return;
     syncEquipment(G);

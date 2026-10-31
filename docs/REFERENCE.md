@@ -105,7 +105,7 @@ Engine details worth knowing:
 | Interact | E or Enter, or click the prompt pill | tap the world or the pill |
 | Jump | Space | jump button |
 | Equip / put away | Q, or the equipment button | equipment button; a selector appears with several tools |
-| Bow | Take Aim (rail); drag to aim (or click once: the mouse is caught and aims as it moves); hold Space, F, E or the right button to draw (the left too once caught), let go to shoot; Lower bow (rail) | Take Aim; hold the round Draw button (bottom right), let go; a tap on the world never shoots |
+| Bow | equipped means aiming in the hunt and at the post (Q puts it away and lowers it); drag to aim (or click once: the mouse is caught and aims as it moves); hold Space, F, E or the right button to draw (the left too once caught), let go to shoot | the same with the equip button (Put away, above Draw); hold the round Draw button (bottom right), let go; a tap on the world never shoots |
 | Camera distance | wheel (2.2 to 7.5 blocks) | pinch |
 | Act menu | Alt+M, or Settings (confirms before wiping progress) | Settings |
 | World editor | backtick, Ctrl+E, F2, or `?edit` (dev) | `?edit` |
@@ -151,7 +151,7 @@ card ("Make a life here. Leave something behind.") and the era card. A resumed g
 
 | Scene | Beats |
 |---|---|
-| A, Ice (about 38,000 years ago) | Wake lying in the training cave, tap to rise (once per story). 12-stage tutorial: look, walk, back, strafe left and right, jump the sill, pick up the basket, equip, put away, equip, exit, reach camp (Skip practice exists). Valley reveal on stepping out (about 13.6 s, skippable, once). Gather: basket equipped, 12 berries, deposit in the store box, return the basket. Hunt: borrow the bow, stop at the training post for three hits on the painted targets (once, `hunt.practised`), reach the plains, Take Aim, draw and release, down 3 deer, take and deposit the meat. Second hunt is a ruse: the bear appears 73 blocks from camp, run to the fire, return the bow. Fish: borrow the rod, timing ring at one of 4 spots, deposit, return. Fire circle: the elder speaks in pictograms; recall `band`. Knapping (timing, 3 strikes). Cave painting on a rock canvas, saved verbatim and mounted on the shelter wall. Three shells, beads at the knapping stone. Trade with a strange band; recall `huntGather`. Depletion and the move. The burial: place beads and blade; "Perhaps they believed something continued." |
+| A, Ice (about 38,000 years ago) | Wake lying in the training cave, tap to rise (once per story). 12-stage tutorial: look, walk, back, strafe left and right, jump the sill, pick up the basket, equip, put away, equip, exit, reach camp (Skip practice exists). Valley reveal on stepping out (about 13.6 s, skippable, once). Gather: basket equipped, 12 berries, deposit in the store box, return the basket. Hunt: borrow the bow, stop at the training post for three hits on the painted targets (once, `hunt.practised`), reach the plains (the crosshair comes up because the bow is equipped), draw and release, down 3 deer, take and deposit the meat. Second hunt is a ruse: the bear appears 73 blocks from camp, run to the fire, return the bow. Fish: borrow the rod, timing ring at one of 4 spots, deposit, return. Fire circle: the elder speaks in pictograms; recall `band`. Knapping (timing, 3 strikes). Cave painting on a rock canvas, saved verbatim and mounted on the shelter wall. Three shells, beads at the knapping stone. Trade with a strange band; recall `huntGather`. Depletion and the move. The burial: place beads and blade; "Perhaps they believed something continued." |
 | B, Thaw (to 10,000 BCE) | Cinematic glimpse; the world thaws; protected caption on the last Ice Age |
 | C, Roots (7,000 BCE) | Plant 4 fields, lead the goats into the pen, the granary question (no one sack is yours), recall `lostTongues`, the chieftain's waterskin task, the water dispute and the lean week |
 | D, Fire and Clay (to 5,400 BCE) | Shape a pot and engrave your maker's mark (saved), weave a basket in one tap, shelf both in your hut, the copper trader, the grain delivery run to the neighbour village, recall `farming`, the lingering shot |
@@ -214,7 +214,8 @@ village (later slices change both).
   `moveMul`); `player.noJump` while raised, `moveLock` at the post. The bow in view is camera-attached, unlit,
   depth-test off, sized from the camera's FOV and aspect (4 draw calls). Sounds are synthesized (`audio.js`); a
   recorded `sfx/bow-loose` would win. The overlay `#ui-root > .bow-ui` must stay `pointer-events: none` (only the Draw
-  button takes presses), or it eats every look drag (CL §34).
+  button takes presses), or it eats every look drag (CL §34). In the story the bow is up whenever it is equipped
+  (`equipBow`, `bowFollowsEquip`, CL §35); the equip control stays on screen while it is up, as the way to put it away.
 - **Training post** (`games/range.js`): the title's Training post button builds Scene B, clears the lanes (plants,
   and whole trees whose trunk is in the box; wild berry bushes stay; ground untouched), and runs rounds of 10
   arrows: Still (10, 20, 30 steps, x1 x2 x3), Swinging hide (x2, faster per hit), Running deer (x2, faster per hit; an erratic pace: it picks a new speed every 0.5 to 1.6 s, freezes, doubles back).

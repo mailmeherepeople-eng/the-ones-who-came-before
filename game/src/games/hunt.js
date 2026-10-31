@@ -1,8 +1,9 @@
 // The Act 1 hunt's shooting, on the shared bow (games/bow.js). Moved out of
 // acts/act1.js, which is frozen at its size (AGENTS.md).
 //
-// Unchanged from before: Take Aim is an explicit mode (first person) and
-// Lower bow leaves it; the tribe needs `need` deer; a kill scatters the herd
+// The bow is up (first person, crosshair) whenever it is equipped; putting it
+// away with the equip control lowers it (bow.js bowFollowsEquip). The tribe
+// needs `need` deer; a kill scatters the herd
 // near it and a miss in the grass spooks the deer near where it landed; kills
 // are saved as they happen so a reload resumes with the bodies where they fell.
 // New: hold to draw and let go to shoot, arrows that land where the crosshair
@@ -11,7 +12,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { S } from '../strings.js';
 import { Save } from '../save.js';
 import { FX } from '../fx/fx.js';
-import { Bow, bowHint } from './bow.js';
+import { Bow, equipBow, bowFollowsEquip } from './bow.js';
 import { wait } from '../ui/hud.js';
 
 const BODY_UP = 0.62;  // the body's centre above a deer's feet
@@ -68,23 +69,20 @@ export async function huntWithBow(G, deer, need) {
     },
   });
 
-  // Take Aim and Lower bow, two big thumb targets on the right
-  const rail = () => G.hud.setActions(bow.raised
-    ? [{ label: S.ui.lowerBow, onClick: () => { bow.lower(); rail(); } }]
-    : [{ label: S.ui.takeAim, primary: true, onClick: () => { bow.raise(); rail(); G.hud.hint(bowHint(G), 7000); } }]);
-  rail();
+  // Equipped means aiming: the crosshair comes with the bow (bow.js)
+  equipBow(G);
+  const follow = bowFollowsEquip(G, bow);
   G.hud.setObjective(S.act1.obj_huntN(bag.length, need));
-  G.hud.hint(S.range.huntHint, 7000);
 
   await new Promise((res) => {
     G.tick = (dt) => {
+      follow();
       bow.update(dt);
       if (bag.length >= need) res();
     };
   });
   await wait(700); // the last one falls; arrows still in the air land
   G.tick = null;
-  G.hud.clearActions();
   G.hud.hideHint();
   bow.stop();
   return bag;
