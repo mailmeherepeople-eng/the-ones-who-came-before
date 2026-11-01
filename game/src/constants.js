@@ -77,8 +77,8 @@ export function fmtNum(n) {
 }
 
 export const WORLD = {
-  SIZE_X: 160,
-  SIZE_Z: 160,
+  SIZE_X: 224, // grown east and south (2026-11-01, CL 39); the old valley is the first 128
+  SIZE_Z: 224,
   CORE_SIZE: 128, // preserve the original valley's river and terrain seed
   SIZE_Y: 24,
   CHUNK: 16,

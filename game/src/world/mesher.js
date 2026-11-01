@@ -100,6 +100,26 @@ export class ChunkMesher {
     return this.texMat;
   }
 
+  // Ground cameras skip chunks whose nearest edge is past `far` blocks: the
+  // grown world (CL 39) put whole forests out there, already 85% fogged at
+  // 140, and drawing them cost a third of the frame. High cameras (Act 2's
+  // diorama, the sky glimpses) see everything, as before.
+  cullFar(cam, far = 140, high = 30) {
+    const all = cam.position.y > high;
+    const f2 = far * far;
+    for (const e of this.chunks.values()) {
+      let show = all;
+      if (!show) {
+        const dx = Math.max(e.x0 - cam.position.x, 0, cam.position.x - (e.x0 + CHUNK));
+        const dz = Math.max(e.z0 - cam.position.z, 0, cam.position.z - (e.z0 + CHUNK));
+        show = dx * dx + dz * dz < f2;
+      }
+      if (show === e.shown) continue;
+      e.shown = show;
+      for (const m of [e.solid, e.water, e.cross, e.tex]) if (m) m.visible = show;
+    }
+  }
+
   disposeAll() {
     for (const { solid, water, cross, tex } of this.chunks.values()) {
       for (const m of [solid, water, cross, tex]) {
@@ -334,7 +354,7 @@ export class ChunkMesher {
       }
     }
 
-    const entry = { solid: null, water: null, cross: null, tex: null };
+    const entry = { solid: null, water: null, cross: null, tex: null, x0, z0, shown: true };
     if (pos.length) entry.solid = this.makeMesh(pos, col, idxArr, this.solidMat, null, sunA, swayA);
     if (wpos.length) entry.water = this.makeMesh(wpos, wcol, widx, this.waterMat);
     if (xpos.length) entry.cross = this.makeMesh(xpos, xcol, xidx, this.crossMat, null, xsun, xsway);

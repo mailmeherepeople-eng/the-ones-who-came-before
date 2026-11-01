@@ -3,18 +3,17 @@
 Cap 6 KB, only what is current. Read `AGENTS.md` first. When something here is done, take it out (the record goes
 in `docs/CHANGELOG.md`).
 
-## Resume here (2026-11-01 IST)
+## Resume here (2026-11-01 night IST)
 
-- Live once pushed: the band camp's task board in any order (§37, `act1.js` split by scene), the board as a painted
-  hide and a mouse caught only while aiming (§38), cache `towcb-v21`. The user played it ("its fine").
-- Live on Pages: the bow (dd65fa8, §33, §34), the crosshair on equip (06c6a81, §35), the Oldest first date round
-  (§36, the commit after it; the user played it: "its good"), service worker `towcb-v20`. The bow: hold to
-  draw, honest crosshair, stuck arrows, the hunt in `games/hunt.js`, a training post at `SITES.trainingPost` (Scene
-  A practice stop, title-screen rounds, medals, a local board), an erratic running deer, hunt deer that bolt in
-  zigzags. The user played it in the browser ("it is fine").
-- Waiting for the user's play: the bow on a real phone; everything since slice 1 on one.
-- The 10-30 playground proposal (more game, a bigger world, from the textbook) is
-  `docs/plans/2026-10-30-playground.md` (ignored). Phase 1 of it is §33.
+- **Start with `docs/plans/2026-11-01-handoff-for-tomorrow.md`** (ignored; copy in the vault, `10 Projects/NCERT
+  History Game/2026-11-01 Handoff for tomorrow.md`): the user's play checklist for 27 Oct to 1 Nov, every change
+  by area, their words and open threads (the diorama idea, the playground ideas, the 27 Oct brief).
+- Live, waiting for the user's play: the 224 world (§39), the 19-issue phone playtest (§40: phone rig, device
+  setting, follow camera on phones, bow anywhere, both bow views, the bear boss and dodge, world look, herds, 30 s
+  sweep), bow round 2 (§41: mouse look, click to shoot, rabbits, wary animals, health bars, Skyrim stance, tabs),
+  real arrow drop and the Oblivion Remastered first-person bow (§42). Cache `towcb-v23`.
+- Open questions to the user: first person as the default bow view; medals at the post under arrow drop; mouse
+  look not yet tried with a real mouse; nothing played on a real phone since the playtest.
 
 ## Where things stand
 
@@ -35,15 +34,15 @@ in `docs/CHANGELOG.md`).
 
 ## Next, in order
 
-0. **Task boards for the hamlet and the village** (the user's "tasks in any order", 10-31): plant, goats and the
-   chief's errand in any order; pot and basket in any order. Same arms as the camp (CL §37).
+0. **Task boards for the hamlet and the village** (the user's order, 11-01: map first, then these): plant, goats and
+   the chief's errand in any order; pot and basket in any order. Same arms as the camp (CL §37).
 
 From the 30 Oct playground proposal (`docs/plans/2026-10-30-playground.md`), the user's call ("its a game +
 education. right now its just education and very little game"):
 
 1. **More rounds at the post:** birds, a rolling hoop, specialist targets (date targets built, §36).
-2. **Grow the world east and south to about 224** (cost table in the proposal): grassland hunt with stalking, the
-   Painted Rocks collectible, the lake, the sal forest.
+2. **Fill the new land** (grown in §39): the grassland hunt with stalking, paintings in the Painted Rocks' shelters
+   as collectibles, a lake fishing contest, a forest trail race.
 3. **Compare without a server:** a date-seeded daily challenge and challenge codes; the Act 3 museum and trophy
    hall; arrows lost at the post dug up in Act 3.
 

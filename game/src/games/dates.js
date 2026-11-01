@@ -138,7 +138,7 @@ export async function playDatesRound(G, R, kit) {
 
   const bow = new Bow(G, {
     targets: () => live(),
-    canShoot: () => st.left > 0 && nextSet <= 0,
+    canShoot: () => st.left > 0 && nextSet <= 0 && (kit.behindLine?.(G) ?? true),
     onLoose: () => { st.left--; st.flying++; hud.render(); },
     onHit: (h) => {
       st.flying--;

@@ -8,27 +8,52 @@ import { QUALITY_TIER } from './constants.js';
 
 const KEY = 'towcb-settings-v1';
 
+// A touchscreen is a guess (constants.js says why); the player can correct it
+// in Settings, and every control and instruction follows (engine/input.js).
+const TOUCH_GUESS = (() => {
+  try { return matchMedia('(pointer: coarse)').matches; } catch { return false; }
+})();
+
 // The panel is built from this list, so adding a setting is one entry here
 // plus one string. `apply` runs on load and on every change.
 export const SETTINGS = [
+  {
+    // 2026-11-01: "the instructions should change based on the device. maybe
+    // we can keep a setting where the person picks the device they are using"
+    id: 'touchControls', tab: 'controls',
+    label: () => S.ui.setTouch,
+    note: () => S.ui.setTouchNote,
+    def: TOUCH_GUESS,
+  },
   ...['largeText', 'gentleCamera', 'assisted', 'sensitivity', 'autoAdvance'].map(id => ({
     id, label: () => S.revision[id], note: () => S.revision[id + 'Note'],
+    tab: { largeText: 'display', gentleCamera: 'display', assisted: 'play', sensitivity: 'controls', autoAdvance: 'play' }[id],
     def: id === 'gentleCamera' ? (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches) : false,
   })),
   {
-    id: 'lockCamera',
+    // on for everyone since 2026-11-01 ("Behind me everywhere"): a free
+    // camera on a phone "feels horrible"
+    id: 'lockCamera', tab: 'controls',
     label: () => S.ui.setLockCamera,
     note: () => S.ui.setLockCameraNote,
+    def: true,
+  },
+  {
+    // 2026-11-01: "show me how both will look. Over the shoulder as well as
+    // Through the eyes" (games/archer.js)
+    id: 'aimEyes', tab: 'controls',
+    label: () => S.ui.setAimEyes,
+    note: () => S.ui.setAimEyesNote,
     def: false,
   },
   {
-    id: 'sound',
+    id: 'sound', tab: 'sound',
     label: () => S.ui.setSound,
     note: () => S.ui.setSoundNote,
     def: true,
   },
   {
-    id: 'music',
+    id: 'music', tab: 'sound',
     label: () => S.ui.setMusic,
     note: () => S.ui.setMusicNote,
     def: true,
@@ -37,7 +62,7 @@ export const SETTINGS = [
     // Rich tier: the shadow map, cloud shadows and the post pass
     // (engine/renderer.js setRich). On by default only where the capability
     // guess says the GPU can take it; the baked lighting runs everywhere.
-    id: 'rich',
+    id: 'rich', tab: 'display',
     label: () => S.ui.setRich,
     note: () => S.ui.setRichNote,
     def: QUALITY_TIER === 'high',
@@ -48,12 +73,17 @@ export const SETTINGS = [
     // device. Off falls back to the realistic lit pipeline. A style choice,
     // not a performance tier (vivid is the cheaper of the two: it skips the
     // shadow map, see renderer.setShadowsAllowed).
-    id: 'vivid',
+    id: 'vivid', tab: 'display',
     label: () => S.ui.setVivid,
     note: () => S.ui.setVividNote,
     def: true,
   },
 ];
+
+// The settings panel's tabs, in order (2026-11-01: "make it a proper menu.
+// with proper tabs like controls, display, sound"). The actions on the
+// Controls and My story tabs are buttons added by ui/hud.js.
+export const SETTING_TABS = ['controls', 'display', 'sound', 'play', 'story'];
 
 const DEFAULTS = Object.fromEntries(SETTINGS.map((s) => [s.id, s.def]));
 
@@ -61,7 +91,8 @@ const DEFAULTS = Object.fromEntries(SETTINGS.map((s) => [s.id, s.def]));
 // one. Settings are saved whole, so a player who changed ANY toggle has the
 // old default for every other toggle written down as if they had chosen it.
 // Version 2 (2026-10-27): vivid became the default look.
-const LOOK_VERSION = 2;
+// Version 3 (2026-11-01): the camera follows behind you by default.
+const LOOK_VERSION = 3;
 
 function load() {
   try {
@@ -69,7 +100,8 @@ function load() {
     if (!raw) return { ...DEFAULTS, lookVersion: LOOK_VERSION };
     const saved = JSON.parse(raw);
     if ((saved.lookVersion ?? 1) < LOOK_VERSION) {
-      delete saved.vivid; // never chosen, only inherited: take the new default
+      if ((saved.lookVersion ?? 1) < 2) delete saved.vivid; // never chosen, only inherited: take the new default
+      delete saved.lockCamera; // the same, for the camera (version 3)
       saved.lookVersion = LOOK_VERSION;
       try { localStorage.setItem(KEY, JSON.stringify({ ...DEFAULTS, ...saved })); } catch { /* private mode */ }
     }

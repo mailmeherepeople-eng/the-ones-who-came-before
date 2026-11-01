@@ -16,7 +16,8 @@ import { SITES, groundHeight } from '../world/terrain.js';
 import { buildSceneB } from '../world/states.js';
 import { B, isSolid } from '../world/blocks.js';
 import { WORLD } from '../constants.js';
-import { Bow, bowHint, equipBow, bowFollowsEquip } from './bow.js';
+import * as THREE from '../../vendor/three.module.js';
+import { Bow, bowHint } from './bow.js';
 import { standTarget, swingTarget, runningTarget, dropTarget } from './targets.js';
 import { Scores } from './scores.js';
 import { playDatesRound } from './dates.js';
@@ -112,42 +113,6 @@ export function addTrainingPost(G) {
   return targets;
 }
 
-// Three hits on the painted faces, as many arrows as it takes.
-export async function practiceAtPost(G, targets, need = 3) {
-  let hits = 0;
-  G.hud.setObjective(S.range.obj_practiceN(0, need));
-  G.player.yaw = Math.PI / 2; // east, down the lanes
-  G.player.pitch = 0;
-  G.player.moveLock = true;
-  document.body.classList.add('move-locked');
-  const bow = new Bow(G, {
-    targets: () => targets,
-    onHit: (h) => {
-      if (h.points <= 0) { bow.popup(S.range.straw, -1); return; }
-      hits++;
-      bow.popup(h.tier === 2 ? S.range.bull : S.range.hit, h.tier);
-      G.hud.setObjective(S.range.obj_practiceN(Math.min(hits, need), need));
-    },
-    onMiss: () => bow.popup(S.range.miss, -1),
-  });
-  equipBow(G); // equipped means aiming (bow.js)
-  const follow = bowFollowsEquip(G, bow);
-  await new Promise((res) => {
-    G.tick = (dt) => {
-      follow();
-      bow.update(dt);
-      if (hits >= need && !bow.inFlight()) res();
-    };
-  });
-  await wait(450);
-  G.tick = null;
-  bow.stop();
-  G.player.moveLock = false;
-  document.body.classList.remove('move-locked');
-  G.hud.hideHint();
-  await G.hud.narrator(S.range.practiceDone);
-}
-
 // ---------- the title screen's training post ----------
 
 export async function runRange(G) {
@@ -165,14 +130,13 @@ export async function runRange(G) {
   G.player.pitch = 0;
   G.player.setModelHidden(false);
   G.player.equip('bow');
-  G.player.moveLock = true;
-  document.body.classList.add('move-locked');
+  shootingLine(G);
   G.input.setEnabled(true);
   G.mode = 'ground';
   let round = await roundMenu(G);
   while (round) {
     const played = round.id === 'dates'
-      ? await playDatesRound(G, round, { mark, groundY, roundHud })
+      ? await playDatesRound(G, round, { mark, groundY, roundHud, behindLine })
       : await playRound(G, round);
     const next = await resultsCard(G, played.result);
     played.cleanup();
@@ -180,6 +144,26 @@ export async function runRange(G) {
     else if (next === 'leave') round = null;
   }
   location.reload(); // back to the title, clean
+}
+
+// The shooting line (2026-11-01): you walk freely while you shoot, "even
+// during the training", but an arrow only counts from behind the painted line
+// across the lanes, so the board's scores still mean something. Step over it
+// and the bow will not loose until you step back.
+const LINE_X = () => mark().x + 0.7;
+export const behindLine = (G) => G.player.pos.x <= LINE_X();
+function shootingLine(G) {
+  const m = mark();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 9), new THREE.MeshBasicMaterial({ color: 0xb4532f }));
+  mesh.position.set(LINE_X(), groundY(G, m.x, m.z) + 0.03, m.z);
+  G.renderer.scene.add(mesh);
+}
+function lineWatch(G) {
+  let over = false;
+  return () => {
+    const now = !behindLine(G);
+    if (now !== over) { over = now; if (now) G.hud.hint(S.range.stepBack, 0); else G.hud.hint(bowHint(G), 3000); }
+  };
 }
 
 async function playRound(G, R) {
@@ -191,7 +175,7 @@ async function playRound(G, R) {
   const hud = roundHud(G, R, st);
   const bow = new Bow(G, {
     targets: () => targets,
-    canShoot: () => st.left > 0,
+    canShoot: () => st.left > 0 && behindLine(G),
     onLoose: () => { st.left--; st.flying++; hud.render(); },
     onHit: (h) => {
       st.flying--;
@@ -214,8 +198,10 @@ async function playRound(G, R) {
   });
   bow.raise();
   G.hud.hint(bowHint(G), 6000);
+  const watch = lineWatch(G);
   await new Promise((res) => {
     G.tick = (dt) => {
+      watch();
       bow.update(dt);
       if (bow.hitStop <= 0) for (const t of targets) t.update?.(dt);
       if (st.left === 0 && st.flying === 0) res();

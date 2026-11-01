@@ -1843,3 +1843,162 @@ body.move-locked #joystick { display: none !important; }
 .tp-row.next { opacity: 0.8; }
 .tp-go { min-height: 40px; padding: 6px 12px; font-size: 13px; }
 
+
+/* ============================================================
+   Phone pass, 2026-11-01 (the user's phone playtest: "everything is
+   too big. the instructions take up half the screen", "too many
+   elements on the screen at once"). Budget: HUD at most a fifth of
+   the screen, the middle kept clear, controls in the bottom corners.
+   ============================================================ */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* the objective line folds to one line; a tap opens or folds it (ui/hud.js) */
+#hud-objective { cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+#hud-objective.tucked {
+  max-width: min(56vw, 300px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 6px 14px; font-size: 12px; opacity: 0.86;
+}
+
+/* Jump: the word, with a small arrow over it */
+#touch-jump { flex-direction: column; gap: 0; width: 66px; height: 66px; font: 700 13px var(--font-ui); letter-spacing: 0.02em; }
+#touch-jump svg { width: 18px; height: 18px; margin-bottom: 1px; opacity: 0.9; }
+
+/* the cave lessons: pictures of the phone's own controls */
+.training-keys .ctl-stick {
+  position: relative; display: inline-block; width: 38px; height: 38px; border-radius: 50%;
+  border: 2px solid rgba(243, 233, 214, 0.45); background: rgba(243, 233, 214, 0.06);
+}
+.training-keys .ctl-stick i {
+  position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%;
+  background: rgba(255, 238, 200, 0.85); animation: ctl-push 1.5s ease-in-out infinite;
+}
+.ctl-stick[data-dir=up] i { --dx: 0px; --dy: -9px; }
+.ctl-stick[data-dir=down] i { --dx: 0px; --dy: 9px; }
+.ctl-stick[data-dir=left] i { --dx: -9px; --dy: 0px; }
+.ctl-stick[data-dir=right] i { --dx: 9px; --dy: 0px; }
+@keyframes ctl-push { 0%, 20% { transform: none; } 55%, 85% { transform: translate(var(--dx), var(--dy)); } }
+.training-keys .ctl-btn, .training-keys .ctl-pill {
+  display: inline-grid; place-items: center; min-width: 38px; height: 38px; padding: 0 12px; border-radius: 19px;
+  border: 2px solid rgba(243, 233, 214, 0.45); background: rgba(243, 233, 214, 0.08); color: #f3e5cb;
+  font: 700 12px var(--font-ui);
+}
+.training-keys .ctl-pill { border-color: var(--accent); color: var(--accent); background: rgba(26, 19, 12, 0.8); }
+.training-keys .ctl-drag { display: inline-grid; place-items: center; width: 52px; height: 38px; color: #f3e5cb; }
+.training-keys .ctl-drag svg { width: 48px; height: 32px; animation: ctl-drag 1.8s ease-in-out infinite; }
+@keyframes ctl-drag { 0%, 100% { transform: translateX(-5px); } 50% { transform: translateX(5px); } }
+.training-keys { align-items: center; }
+@media (prefers-reduced-motion: reduce) { .training-keys .ctl-stick i, .training-keys .ctl-drag svg { animation: none; } }
+
+/* the lesson card folds to its heading */
+.training-card header { align-items: center; }
+.training-fold {
+  margin-left: auto; display: grid; place-items: center; width: 32px; height: 32px; margin-right: -8px;
+  border: 0; background: none; color: #d5b783; cursor: pointer; border-radius: 8px;
+}
+.training-fold svg { width: 18px; height: 18px; transition: transform 0.2s; }
+.training-card.folded .training-fold svg { transform: rotate(180deg); }
+.training-card.folded .training-track, .training-card.folded .training-instruction,
+.training-card.folded .training-keys, .training-card.folded footer { display: none; }
+.training-card.folded { padding-bottom: 10px; }
+.training-card.folded h2 { cursor: pointer; margin: 4px 0 0; font-size: 15px; }
+.training-skip[hidden] { display: none; }
+
+/* phones: smaller, tighter, out of the middle */
+@media (max-width: 520px) {
+  #hud-objective { padding: 6px 14px; font-size: 12.5px; max-width: 74vw; line-height: 1.35; }
+  #hud-settings { transform: scale(0.86); transform-origin: top left; }
+  .training-card { top: max(54px, env(safe-area-inset-top)); width: min(360px, calc(100vw - 24px)); padding: 9px 14px 2px; border-radius: 14px; }
+  .training-card header { font-size: 10px; }
+  .training-track { margin: 6px 0 8px; }
+  .training-card h2 { font-size: 16px; margin-bottom: 4px; }
+  .training-instruction { font-size: 12.5px; line-height: 1.4; }
+  .training-keys { margin: 7px 0 0; gap: 6px; }
+  .training-card footer button { min-height: 40px; font-size: 12px; }
+  #hud-prompt { font-size: 13px; padding: 7px 15px; bottom: 30%; }
+  #hud-prompt .p-icon .icon { width: 20px; height: 20px; }
+  .narrator { font-size: 14.5px; padding: 12px 16px; max-width: 88vw; line-height: 1.5; }
+  #joystick { width: 108px; height: 108px; left: 18px; }
+  #joystick .nub { width: 44px; height: 44px; }
+  #touch-jump { right: 22px; width: 62px; height: 62px; font-size: 12px; }
+  .equipment-toggle { min-height: 48px; padding: 6px 10px; gap: 9px; border-radius: 12px; }
+  .equipment-toggle strong { font-size: 12px; }
+  .equipment-toggle small { font-size: 11px; margin-top: 1px; }
+  .equipment-icon .icon { width: 22px; height: 22px; }
+  body:not(.no-touch) #equipment-control { right: 12px; bottom: 116px; max-width: 170px; }
+  #hud-hint { font-size: 11.5px; }
+  body.bow-up #hud-hint { width: 56vw; font-size: 12px; left: 18px; transform: none; text-align: left; bottom: max(150px, calc(env(safe-area-inset-bottom) + 142px)); }
+  body.bow-equip:not(.no-touch) #hud-hint { bottom: max(150px, calc(env(safe-area-inset-bottom) + 142px)); }
+  .bow-draw { width: 92px; height: 92px; }
+  .range-hud { padding: 6px 12px; min-width: 0; }
+  .rh-score { font-size: 19px; }
+}
+/* short phones still get the control pictures (only keyboard keycaps hide) */
+@media (max-height: 650px) { body:not(.no-touch) .training-keys { display: flex; margin: 6px 0 0; } }
+
+/* ---------- the great bear (games/bear.js): a boss bar, two hearts, Dodge ---------- */
+.boss-ui { position: absolute; inset: 0; pointer-events: none !important; z-index: 23; display: none; }
+.boss-ui.on { display: block; }
+.boss-bar {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: max(150px, calc(env(safe-area-inset-bottom) + 142px));
+  width: min(560px, 70vw); text-align: left;
+}
+.boss-bar b {
+  display: block; font: 600 15px var(--font-title); letter-spacing: 0.08em; color: #efe2c8;
+  text-shadow: 0 1px 3px #000, 0 0 10px rgba(0, 0, 0, 0.7); margin-bottom: 4px;
+}
+.boss-track { position: relative; height: 9px; background: rgba(10, 6, 4, 0.82); border: 1px solid rgba(214, 190, 150, 0.55); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
+.boss-track i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; }
+.boss-track .trail { background: #e8c27a; transition: width 0.6s ease-out; }
+.boss-track .fill { background: linear-gradient(#b8231b, #7a120d); transition: width 0.12s; }
+.boss-hearts { position: absolute; top: max(62px, calc(env(safe-area-inset-top) + 54px)); left: 16px; display: flex; gap: 6px; }
+.boss-hearts span {
+  width: 22px; height: 22px; background: rgba(40, 20, 16, 0.75); border: 2px solid rgba(240, 220, 190, 0.6);
+  clip-path: polygon(50% 92%, 6% 46%, 10% 18%, 30% 8%, 50% 24%, 70% 8%, 90% 18%, 94% 46%);
+}
+.boss-hearts span.on { background: #d8382a; }
+.boss-banner {
+  position: absolute; left: 0; right: 0; top: 38%; text-align: center; opacity: 0;
+  font: 600 clamp(17px, 4.6vw, 30px) var(--font-title); letter-spacing: 0.12em; color: #f2e6cc;
+  text-shadow: 0 2px 6px #000, 0 0 24px rgba(0, 0, 0, 0.8);
+}
+.boss-banner.show { animation: boss-banner 2.6s ease forwards; }
+.boss-banner.victory { color: #f3c96b; font-size: clamp(22px, 6vw, 40px); }
+@keyframes boss-banner { 0% { opacity: 0; letter-spacing: 0.3em; } 15% { opacity: 1; letter-spacing: 0.12em; } 80% { opacity: 1; } 100% { opacity: 0; } }
+body.hurt #app::after { animation: hurt 0.5s ease-out; }
+@keyframes hurt { 0% { box-shadow: inset 0 0 120px 40px rgba(200, 20, 10, 0.7); } 100% { box-shadow: inset 0 0 0 0 rgba(200, 20, 10, 0); } }
+#touch-dodge { display: none; }
+body.boss-fight:not(.no-touch) #touch-dodge {
+  display: flex; align-items: center; justify-content: center; position: absolute; z-index: 22;
+  right: max(126px, calc(env(safe-area-inset-right) + 122px)); bottom: max(34px, calc(env(safe-area-inset-bottom) + 26px));
+  width: 66px; height: 66px; border-radius: 50%; touch-action: none;
+  background: radial-gradient(circle at 40% 35%, rgba(120, 160, 200, 0.35), rgba(40, 60, 80, 0.55) 70%);
+  border: 2px solid rgba(190, 220, 245, 0.6); color: #eef4fa; font: 700 13px var(--font-ui);
+}
+body.boss-fight #hud-objective { opacity: 0.55; }
+@media (max-width: 520px) { .boss-bar { width: 76vw; bottom: max(132px, calc(env(safe-area-inset-bottom) + 124px)); } .boss-bar b { font-size: 13px; } }
+@media (prefers-reduced-motion: reduce) { .boss-banner.show { animation: none; opacity: 1; } body.hurt #app::after { animation: none; } }
+/* the bow up: Put away sits clear above Draw */
+@media (max-width: 520px) { body.bow-up:not(.no-touch) #equipment-control { bottom: max(136px, calc(env(safe-area-inset-bottom) + 128px)); } }
+/* the fight: hearts under the gear, the bar clear above Put away */
+.boss-hearts { top: max(112px, calc(env(safe-area-inset-top) + 104px)); left: 20px; }
+@media (max-width: 520px) { .boss-bar { bottom: max(198px, calc(env(safe-area-inset-bottom) + 190px)); } }
+/* the sweep out of the cave: a small Skip, top right, after 2 s */
+.reveal-skip {
+  position: absolute; top: max(14px, env(safe-area-inset-top)); right: 14px; z-index: 30; opacity: 0; pointer-events: none;
+  padding: 7px 16px; min-height: 36px; border-radius: 999px; border: 1px solid rgba(243, 233, 214, 0.45);
+  background: rgba(10, 6, 3, 0.55); color: #f3e9d6; font: 600 13px var(--font-ui); transition: opacity 0.4s;
+}
+.reveal-skip.on { opacity: 0.85; pointer-events: auto; }
+#ui-root:has(.reveal-skip) #hud-objective, #ui-root:has(.reveal-skip) #hud-settings { opacity: 0; pointer-events: none; }
+
+/* Settings in tabs (ui/hud.js openSettings, 2026-11-01) */
+.settings-tabs { display: flex; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid #7a644066; overflow-x: auto; scrollbar-width: none; }
+.settings-tab {
+  flex: 1 0 auto; min-height: 40px; padding: 6px 10px; border: 0; border-bottom: 3px solid transparent; background: none;
+  color: #c9b989; font: 600 13px var(--font-ui); cursor: pointer; white-space: nowrap;
+}
+.settings-tab.on { color: var(--ink); border-bottom-color: var(--accent); }
+.settings-row[hidden], .settings-actions > [hidden] { display: none; }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.settings-actions .btn { margin: 0; flex: 1 1 45%; }
+.settings-list:empty { display: none; }

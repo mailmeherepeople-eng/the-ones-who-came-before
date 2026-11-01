@@ -440,8 +440,18 @@ const _V = new THREE.Vector3(); // reused — no per-frame allocation
 // update returns immediately. Squared so the check needs no sqrt. 46 blocks is
 // comfortably past the 120-block fog/far plane's useful read at ground level,
 // and well past any distance a deer reads as more than a speck.
-const FAR_SLEEP = 46;
+// 2026-11-01: 64, with herds spread over the grown map; a deer at 60 blocks
+// is still a shape on the grassland, and the user saw "animals ... just on the
+// left on one side" when the far ones vanished.
+const FAR_SLEEP = 64;
 const FAR_SLEEP_SQ = FAR_SLEEP * FAR_SLEEP;
+
+// What wild animals are wary of: the player's feet (acts set it). A wary
+// animal bolts when you come within its `wary` blocks (2026-11-01: "make
+// animals run away when we approach them"), so a hunt is a stalk and a shot
+// from range, not a walk up.
+let THREAT = null;
+export function setThreat(pos) { THREAT = pos; }
 
 // Who the distance gate measures from. Animals are constructed as
 // `new Animal(scene, opts)` with no camera (unlike Npc, which is handed one),
@@ -1059,16 +1069,22 @@ export class Animal {
     // A big animal that saunters at you is far more frightening than a small
     // one that sprints, and the player (5.2 blocks/s) can always out-walk it,
     // which keeps this a tension beat with no way to actually lose.
-    this.speed = opts.speed ?? (this.kind === 'predator' ? 1.7 : 1.6);
+    this.speed = opts.speed ?? (this.kind === 'predator' ? 1.7 : this.kind === 'hare' ? 2.3 : 1.6);
+    // Where to drink (world/terrain.js WATER_EDGES): now and then the animal
+    // walks to the nearest water within reach of home and drinks, head down.
+    this.drinkSpots = opts.drinkSpots ?? null;
+    this.wary = opts.wary ?? 0;
+    this._waryCd = 0;
+    this._thirst = 10 + Math.random() * 40;
     this.followTarget = null;
     this.fleeing = false;
     this.frozen = false;
 
     const K = this.kind;
-    this._r = K === 'predator' ? 0.62 : K === 'cattle' ? 0.36 : 0.3;
-    this._shR = K === 'predator' ? 0.95 : K === 'cattle' ? 0.55 : 0.45;
+    this._r = K === 'predator' ? 0.62 : K === 'cattle' ? 0.36 : K === 'hare' ? 0.18 : 0.3;
+    this._shR = K === 'predator' ? 0.95 : K === 'cattle' ? 0.55 : K === 'hare' ? 0.24 : 0.45;
 
-    const colors = { deer: 0x9a7448, goat: 0xd8d3c8, cattle: 0x6b4d3a, predator: 0x5b3d24 };
+    const colors = { deer: 0x9a7448, goat: 0xd8d3c8, cattle: 0x6b4d3a, predator: 0x5b3d24, hare: 0xa8865c };
     const c = colors[K] ?? 0x9a7448;
     const dark = shade(c, 0.7);
 
@@ -1079,6 +1095,7 @@ export class Animal {
     // the chest. Standing it is about 1.9 blocks tall, so it reads as taller
     // than the player from any angle.
     else if (K === 'predator') { bw = 1.05; bh = 1.0; blen = 1.85; by = 1.16; hw = 0.62; hh = 0.54; hd = 0.66; hy = 1.3; legH = 0.72; legW = 0.27; }
+    else if (K === 'hare') { bw = 0.22; bh = 0.22; blen = 0.38; by = 0.26; hw = 0.17; hh = 0.17; hd = 0.18; hy = 0.4; legH = 0.15; legW = 0.07; }
     else if (K === 'goat') { bw = 0.36; bh = 0.38; blen = 0.7; by = 0.62; hw = 0.24; hh = 0.26; hd = 0.28; hy = 0.8; legH = 0.44; legW = 0.09; }
     else { bw = 0.4; bh = 0.4; blen = 0.8; by = 0.68; hw = 0.26; hh = 0.28; hd = 0.3; hy = 0.88; legH = 0.48; legW = 0.09; }
 
@@ -1097,6 +1114,12 @@ export class Animal {
       this.head.add(box(0.05, 0.3, 0.05, 0x6d5028, -0.1, 0.26, -0.04)); // antlers
       this.head.add(box(0.05, 0.3, 0.05, 0x6d5028, 0.1, 0.26, -0.04));
       this._tail = box(0.13, 0.16, 0.05, 0xe8e2d4, 0, by + 0.08, -blen / 2 - 0.02); // white tail patch
+    } else if (K === 'hare') {
+      this.head.add(box(0.05, 0.24, 0.04, c, -0.05, 0.18, -0.04)); // long ears
+      this.head.add(box(0.05, 0.24, 0.04, c, 0.05, 0.18, -0.04));
+      this.head.add(box(0.035, 0.16, 0.02, 0xd8b8a0, -0.05, 0.18, -0.015));
+      this.head.add(box(0.035, 0.16, 0.02, 0xd8b8a0, 0.05, 0.18, -0.015));
+      this._tail = box(0.09, 0.09, 0.07, 0xeee6d8, 0, by + 0.06, -blen / 2 - 0.02); // white scut
     } else if (K === 'goat') {
       const h1 = box(0.05, 0.2, 0.05, 0x8d8d8d, -0.08, 0.18, -0.03);
       h1.rotation.x = -0.8; // curved-back horns
@@ -1232,6 +1255,20 @@ export class Animal {
     return true;
   }
 
+  // The nearest water within reach of home (40 blocks), as a walk target.
+  _goDrink() {
+    let best = null, bd = 40 * 40;
+    for (const w of this.drinkSpots) {
+      const d = (w.x - this.home.x) ** 2 + (w.z - this.home.z) ** 2;
+      if (d < bd) { bd = d; best = w; }
+    }
+    if (!best) return false;
+    this._target = { x: best.x + 0.5, z: best.z + 0.5, scripted: true, drink: best };
+    this._detour = null; this._detourCount = 0;
+    this._stuckT = 0; this._stuckX = this.pos.x; this._stuckZ = this.pos.z;
+    return true;
+  }
+
   // Permanent down-state: all AI/movement stops, a quick ~0.4s side-fall
   // plays in update(), then the body stays put as a carcass (the act disposes
   // it and places meat). animal.downed flags the state; goTo/fleeFrom become
@@ -1278,6 +1315,11 @@ export class Animal {
       }
     }
     if (!this.group.visible) this.group.visible = true;
+    if (this.wary && THREAT && !this.fleeing && !this.frozen) {
+      this._waryCd = Math.max(0, this._waryCd - dt);
+      const tx = this.pos.x - THREAT.x, tz = this.pos.z - THREAT.z;
+      if (this._waryCd <= 0 && tx * tx + tz * tz < this.wary * this.wary) { this.fleeFrom(THREAT.x, THREAT.z); this._waryCd = 1.2; }
+    }
     let moving = false;
     if (!this.frozen) {
       this._wt -= dt;
@@ -1290,12 +1332,21 @@ export class Animal {
         if (d > 1.8) { tx = this.followTarget.x; tz = this.followTarget.z; scripted = true; isFollow = true; }
       } else if (this._target) {
         if (Math.hypot(this._target.x - this.pos.x, this._target.z - this.pos.z) < 0.6) {
+          const drink = this._target.drink;
+          if (drink && !this.fleeing) {
+            // at the water: face it and drink, head down, a while
+            this._yawTarget = Math.atan2(drink.wx + 0.5 - this.pos.x, drink.wz + 0.5 - this.pos.z);
+            this._grazeT = 4 + Math.random() * 3; this._grazeCd = 8;
+            this._wt = this._grazeT;
+          }
           if (!(this.fleeing && this._fleeLeg())) {
             this._target = null; this.fleeing = false; this._flee = null; this._detour = null; this._detourCount = 0;
           }
         } else {
           tx = this._target.x; tz = this._target.z; scripted = !!this._target.scripted;
         }
+      } else if (this._wt <= 0 && this.drinkSpots?.length && (this._thirst -= 1) <= 0 && this._goDrink()) {
+        this._thirst = 6 + Math.random() * 8; // wander picks between drinks
       } else if (this._wt <= 0) {
         this._wt = 2 + Math.random() * 5;
         // pick a wander spot, skipping precarious ledge lips (few tries, then wait)
@@ -1390,6 +1441,7 @@ export class Animal {
       this.head.rotation.x = 0.18 * this._prowl;
     }
     if (moving && this.fleeing) figY += Math.abs(Math.sin(this._phase * 0.5)) * 0.08;
+    if (this.kind === 'hare' && moving) figY += Math.abs(Math.sin(this._phase * 0.5)) * 0.22; // it hops
     this.fig.position.y = figY;
 
     // breathing

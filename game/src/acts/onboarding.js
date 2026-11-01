@@ -59,6 +59,24 @@ export function practiceMovement(key, inp, distance) {
   return direction ? Math.min(distance,0.4) : 0;
 }
 
+// Small pictures of the controls actually on a phone's screen: the movement
+// stick pushed the right way, the Jump and Equip buttons, a finger dragging
+// the world. Never arrow keys, which a phone does not have (2026-11-01: "it
+// shows movement arrows on the phone. when there are no movement buttons").
+const STICK_DIR={forward:'up',back:'down',left:'left',right:'right',jump:'up',exit:'up',camp:'up'};
+const DRAG='<span class="ctl-drag"><svg viewBox="0 0 48 32"><path d="M8 16h32M14 10l-6 6 6 6M34 10l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="16" r="6" fill="currentColor" opacity=".55"/></svg></span>';
+function touchPictures(key){
+  const stick=d=>`<span class="ctl-stick" data-dir="${d}"><i></i></span>`;
+  const btn=t=>`<span class="ctl-btn">${t}</span>`;
+  if(key==='look')return DRAG;
+  if(key==='jump')return stick('up')+btn(text.jumpAction);
+  if(key==='basket')return `<span class="ctl-pill">${text.takeBasket}</span>`;
+  if(key==='equip'||key==='ready')return btn(text.equipAction);
+  if(key==='stow')return btn(text.putAway);
+  if(key==='exit'||key==='camp')return stick('up')+DRAG;
+  return stick(STICK_DIR[key]??'up');
+}
+
 export async function runOnboarding(G) {
   if (!needsOnboarding()) return;
   let step = safeStep(Save.activity('onboarding').step);
@@ -66,7 +84,14 @@ export async function runOnboarding(G) {
   const el=document.createElement('section');
   el.className='training-card';
   el.setAttribute('aria-label',text.title);
-  el.innerHTML=`<header><span>${text.title}</span><span class="training-progress"></span></header><div class="training-track"><i></i></div><h2></h2><p class="training-instruction"></p><div class="training-keys" aria-hidden="true"></div><footer><button type="button" class="training-help">${text.help}</button><button type="button" class="training-skip">${text.skip}</button></footer>`;
+  el.innerHTML=`<header><span>${text.title}</span><span class="training-progress"></span><button type="button" class="training-fold" aria-expanded="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></header><div class="training-track"><i></i></div><h2></h2><p class="training-instruction"></p><div class="training-keys" aria-hidden="true"></div><footer><button type="button" class="training-help">${text.help}</button><button type="button" class="training-skip">${text.skip}</button></footer>`;
+  // The card folds to its one-line heading (2026-11-01: "the instructions
+  // should be collapsible"); a tap on the heading or the chevron opens it.
+  const fold=el.querySelector('.training-fold');
+  const setFolded=(on)=>{el.classList.toggle('folded',on);fold.setAttribute('aria-expanded',String(!on));fold.setAttribute('aria-label',on?text.unfold:text.fold);};
+  setFolded(false);
+  fold.onclick=()=>setFolded(!el.classList.contains('folded'));
+  el.querySelector('h2').onclick=()=>{if(el.classList.contains('folded'))setFolded(false);};
   const heading=el.querySelector('h2'), instruction=el.querySelector('.training-instruction');
   heading.setAttribute('aria-live','polite');
   root.append(el);
@@ -115,10 +140,10 @@ export async function runOnboarding(G) {
     instruction.textContent=text[`${key}${G.input.isTouch?'Touch':'Key'}`];
     el.querySelector('.training-progress').textContent=text.progress(step+1,TRAINING_STEPS.length);
     el.querySelector('.training-track i').style.width=`${step/TRAINING_STEPS.length*100}%`;
-    const keycaps=G.input.isTouch ? (['look','exit','camp'].includes(key)?['↔']:['equip','stow','ready'].includes(key)?['✓']:key==='jump'?['↑','↥']:key==='basket'?['☝']:['↑','←','↓','→'])
-      : ({look:['↔'],forward:['W','↑'],back:['S','↓'],left:['A','←'],right:['D','→'],jump:['W','Space'],basket:['E'],equip:['Q'],stow:['Q'],ready:['Q'],exit:['W','A','S','D'],camp:['W','A','S','D']})[key];
-    el.querySelector('.training-keys').replaceChildren(...keycaps.map(k=>{const node=document.createElement('kbd');node.textContent=k;return node;}));
+    el.querySelector('.training-keys').innerHTML=G.input.isTouch ? touchPictures(key)
+      : ({look:['↔'],forward:['W','↑'],back:['S','↓'],left:['A','←'],right:['D','→'],jump:['W','Space'],basket:['E'],equip:['Q'],stow:['Q'],ready:['Q'],exit:['W','A','S','D'],camp:['W','A','S','D']})[key].map(k=>`<kbd>${k}</kbd>`).join('');
     pickup.enabled=key==='basket';
+    el.querySelector('.training-skip').hidden=key==='exit'||key==='camp';
     basket.group.visible=!Inv.has('player','basket');
     distance=0;looked=0;jumped=false;idle=0;last.copy(G.player.pos);
     el.classList.remove('training-nudge');
@@ -138,17 +163,23 @@ export async function runOnboarding(G) {
     Save.setActivity('onboarding',{revealSeen:true});
     return valleyReveal(G,{gentle:!!G.player.gentleCamera||reducedMotion.matches});
   };
-  function finish(skipped=false){
+  function finish(){
     if(finished)return;
     finished=true;
-    if(skipped){
-      if(!Inv.has('player','basket'))getBasket();
-      Inv.selectTool('basket',true);syncEquipment(G);
-      const at=SITES.trainingExit;G.player.teleport(at.x,at.z,Math.PI/2);
-    }
-    Save.setActivity('onboarding',{started:true,done:true,step:TRAINING_STEPS.length,skipped});Save.persist();
-    if(skipped){el.hidden=true;playReveal().then(resolveDone);return;}
+    Save.setActivity('onboarding',{started:true,done:true,step:TRAINING_STEPS.length});Save.persist();
     resolveDone();
+  }
+  // Skip practice: the lessons go, the walk out stays (2026-11-01: "pressing
+  // skip instructions takes us directly to the outside and that should not be
+  // a thing"). You get the basket in hand and the light shows the way out; the
+  // valley reveal still plays when you step into the daylight.
+  function skip(){
+    if(TRAINING_STEPS[step]==='exit'||TRAINING_STEPS[step]==='camp')return;
+    if(!Inv.has('player','basket'))getBasket();
+    Inv.selectTool('basket',true);syncEquipment(G);
+    Save.setActivity('onboarding',{skipped:true});
+    step=TRAINING_STEPS.indexOf('exit');
+    paint();setFolded(true);
   }
   function advance(){
     SFX.blip();
@@ -175,7 +206,9 @@ export async function runOnboarding(G) {
     panel.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
   }
   el.querySelector('.training-help').onclick=showHelp;
-  el.querySelector('.training-skip').onclick=()=>finish(true);
+  el.querySelector('.training-skip').onclick=skip;
+  // a player who switches phone and computer in Settings sees the right controls at once
+  const offTouch=G.input.onTouchChange?.(()=>paint());
   if(step>=7 && !Inv.has('player','basket'))getBasket();
   if(step===7 || step===9) Inv.selectTool('basket',false);
   if(step===8) Inv.selectTool('basket',true);
@@ -213,7 +246,7 @@ export async function runOnboarding(G) {
   };
   try{await done;}finally{
     hintScope?.close();root.querySelector('.training-help-panel')?.remove();
-    G.tutorialUpdate=null;G.tutorialActive=false;
+    G.tutorialUpdate=null;G.tutorialActive=false;offTouch?.();
     G.interactables=G.interactables.filter(o=>o!==pickup);
     root.classList.remove('training-active','training-reveal');el.remove();
     setBeacon(G,null);disposeGroup(scene,group);FX.setMotes('snow');G.hud.hidePrompt();

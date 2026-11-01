@@ -39,15 +39,16 @@ let beaconPosition;const realPillar=FX.pillar;FX.pillar=p=>{beaconPosition=p;ret
 try{setBeacon({},anchor);assert.deepEqual(beaconPosition,anchor);}finally{FX.pillar=realPillar;}
 console.log('PASS berry models share geometry and colours; harvest preserves foliage; beacon follows the actual plant centre and height');
 // Expansion must not move the old river or regenerate the established terrain.
-assert.equal(WORLD.SIZE_X*WORLD.SIZE_Z,25600);
+assert.equal(WORLD.SIZE_X*WORLD.SIZE_Z,224*224); // grown east and south, 2026-11-01 (CL 39)
 for(let z=0;z<128;z++) {
   const rx=60+14*Math.sin(z/128*Math.PI*1.35+.9)+3*noise2(z*.07,3.7);
   assert.equal(riverX(z),rx);
   for(let x=0;x<128;x++) {
     let h=7.5+noise2(x*.06,z*.06)*2.2+noise2(x*.16,z*.16)*1.1;
     h-=Math.max(0,3.2-Math.abs(x-rx)*.35);
-    const ex=Math.min(x,127-x),ez=127-z;
-    if(ex<10)h+=(10-ex)*.55;if(ez<10)h+=(10-ez)*.5;if(z<18)h+=(18-z)*1.15;
+    // the west edge hills and the north cliff; the old east and south ridges
+    // at the 128 boundary were taken out when the world grew (CL 39)
+    if(x<10)h+=(10-x)*.55;if(z<18)h+=(18-z)*1.15;
     assert.equal(groundHeight(x,z),Math.max(2,Math.min(20,Math.round(h))));
   }
 }
@@ -219,3 +220,74 @@ const before=save.export();
 await assert.rejects(()=>save.import('{"version":1,"act":1,"beat":"a","records":[{"id":"painting","type":"painting","data":{"png":"javascript:alert(1)"}}],"cards":[]}'));
 assert.equal(save.export(),before);
 console.log('PASS slot isolation, partial activity persistence and unsafe import rejection');
+
+// The grown world (2026-11-01, CL 39): every new place is reachable on foot
+// from the camp, in the ice age and after, stepping up at most one block at
+// a time (no jumps), dropping at most three, with two blocks of headroom,
+// swimming where there is water. A walk over standing cells in 3D, so it goes
+// under the forest canopy and into the rock shelters and the bear's den.
+{
+  const { NEW_LAND, ROCK_SHELTERS, WATER_EDGES } = await import('../src/world/terrain.js');
+  for (const ice of [true, false]) {
+    const w = new VoxelWorld(); buildBase(w, { ice });
+    const SX = WORLD.SIZE_X, SZ = WORLD.SIZE_Z, SY = WORLD.SIZE_Y, WL = WORLD.WATER_LEVEL;
+    const solid = (x, y, z) => isSolid(w.get(x, y, z));
+    const stand = (x, y, z) => y > 0 && y < SY - 1 && (solid(x, y - 1, z) || w.get(x, y - 1, z) === B.WATER) && !solid(x, y, z) && !solid(x, y + 1, z);
+    const id = (x, y, z) => (y * SZ + z) * SX + x;
+    const seen = new Uint8Array(SX * SY * SZ), q = new Int32Array(SX * SY * SZ);
+    const c0 = SITES.campA, y0 = w.topAt(c0.x, c0.z) + 1;
+    let head = 0, tail = 0;
+    seen[id(c0.x, y0, c0.z)] = 1; q[tail++] = id(c0.x, y0, c0.z);
+    while (head < tail) {
+      const i = q[head++], x = i % SX, z = Math.floor(i / SX) % SZ, y = Math.floor(i / (SX * SZ));
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= SX || nz >= SZ) continue;
+        for (let ny = y + 1; ny >= y - 3; ny--) {
+          if (!stand(nx, ny, nz)) { if (ny <= y && solid(nx, ny + 1, nz)) break; continue; }
+          if (ny > y && solid(x, y + 2, z)) break; // no room to step up
+          const j = id(nx, ny, nz);
+          if (!seen[j]) { seen[j] = 1; q[tail++] = j; }
+          break;
+        }
+      }
+    }
+    const at = (p, y) => seen[id(p.x, y, p.z)] === 1;
+    const near = (p, r = 3) => {
+      for (let z = p.z - r; z <= p.z + r; z++) for (let x = p.x - r; x <= p.x + r; x++) for (let y = 1; y < SY - 1; y++) if (seen[id(x, y, z)]) return true;
+      return false;
+    };
+    for (const k of ['grassland', 'lookoutHill', 'paintedRocks', 'salForest', 'plains', 'trainingPost', 'village', 'bearCaveMouth']) {
+      assert.ok(near(SITES[k], k === 'bearCaveMouth' ? 0 : 3), `${k} must be reachable on foot from the camp (ice ${ice})`);
+    }
+    const L = NEW_LAND.lake;
+    assert.ok(near({ x: L.x - L.rx - 2, z: L.z }), `the lake shore must be reachable (ice ${ice})`);
+    assert.equal(w.get(L.x, WL - 1, L.z), B.WATER, 'the lake holds water');
+    assert.ok(w.topAt(SITES.lookoutHill.x, SITES.lookoutHill.z) >= 17, 'Lookout Hill stands over the valley');
+    // the Painted Rocks: at least five walk-in shelters, a roof over every
+    // floor cell, a solid back wall, and each one reached on foot
+    assert.ok(ROCK_SHELTERS.length >= 5, 'at least five rock shelters');
+    for (const s of ROCK_SHELTERS) {
+      assert.ok(at(s, s.y), `shelter at ${s.x},${s.z} must be reachable on foot (ice ${ice})`);
+      assert.ok(s.h >= 2 && s.h <= 4 && s.depth >= 4 && s.depth <= 8, 'shelter proportions');
+      for (let y = s.y; y < s.y + s.h; y++) assert.ok(!solid(s.x, y, s.z) && solid(s.wall.x, y, s.wall.z), `shelter ${s.x},${s.z} headroom and back wall`);
+      assert.ok(solid(s.x, s.y + s.h, s.z), `shelter ${s.x},${s.z} has a roof`);
+    }
+    // the bear's den: the chamber has room for a bear (1.6 tall, 2.4 long)
+    // and is reached on foot through the mouth
+    const D = SITES.bearCave;
+    assert.ok(at(D, D.y), `the bear's den must be reachable on foot (ice ${ice})`);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      assert.ok(solid(D.x + dx, D.y - 1, D.z + dz) && !solid(D.x + dx, D.y, D.z + dz) && !solid(D.x + dx, D.y + 1, D.z + dz), 'room for the bear in the den');
+    }
+    assert.ok(solid(D.x, D.y + 3, D.z) && solid(D.x, D.y + 5, D.z), 'the den has a rock roof');
+    // drinking places: dry ground with open water beside it, all reachable
+    assert.ok(WATER_EDGES.length >= 20 && WATER_EDGES.length <= 40, `20 to 40 drinking places (got ${WATER_EDGES.length})`);
+    assert.ok(WATER_EDGES.filter((e) => Math.hypot(e.x - L.x, e.z - L.z) < 40).length >= 8, 'drinking places round the lake');
+    for (const e of WATER_EDGES) {
+      assert.ok(at(e, e.y) && w.get(e.x, e.y, e.z) !== B.WATER, `drinking place ${e.x},${e.z} must be dry and reachable (ice ${ice})`);
+      assert.ok(w.get(e.wx, WL, e.wz) === B.WATER && Math.abs(e.wx - e.x) + Math.abs(e.wz - e.z) === 1, `drinking place ${e.x},${e.z} has water beside it`);
+    }
+  }
+  console.log("PASS the grown world: grassland, Lookout Hill, the Painted Rocks and their shelters, the bear's den, the sal forest, the lake and every drinking place reachable on foot");
+}

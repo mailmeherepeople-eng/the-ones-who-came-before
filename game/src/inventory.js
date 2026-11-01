@@ -33,6 +33,7 @@ export const ITEMS = {
   // harvests, bound for the store box
   berry: { kind: 'harvest', emoji: '🫐' },
   meat: { kind: 'harvest', emoji: '🍖', equip: 'meat' },
+  rabbit: { kind: 'harvest', emoji: '🐇', equip: 'meat' }, // half a meat (games/freebow.js)
   fish: { kind: 'harvest', emoji: '🐟' },
   firewood: { kind: 'harvest', emoji: '🪵', equip: 'firewood' },
 };

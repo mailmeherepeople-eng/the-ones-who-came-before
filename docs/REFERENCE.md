@@ -13,7 +13,7 @@ is condensed from the changelog, and anything doubtful is marked (unverified).
 | Platform | browser, phone first (cheap Android at 30 fps is the floor), desktop works; offline after first load |
 | Engine | Three.js 0.185 vendored in `game/vendor/`, vanilla JS ES modules, no build step, no npm dependencies |
 | Look | Vivid (flat storybook palette with soft baked light) is the default everywhere; the lit pipeline is a setting |
-| World | one 160 x 24 x 160 voxel valley across all three acts; 16 x 16 column chunks; water level 5 |
+| World | one 224 x 24 x 224 voxel valley across all three acts; 16 x 16 column chunks; water level 5 |
 | Saves | `towcb-save-v1`, full snapshots in localStorage and IndexedDB; settings separate (`towcb-settings-v1`) |
 | Deploy | GitHub Pages serves `main` (repo root, so `/game/`, `/game-baseline/`, `/compare.html`). A push is a deploy |
 | Offline | `game/sw.js`, network-first, cache `towcb-v15`, off on localhost; `.m4a` clips cached on first play only |
@@ -106,25 +106,39 @@ Engine details worth knowing:
 | Action | Desktop | Touch |
 |---|---|---|
 | Move | WASD or arrows | left joystick |
-| Look | drag with either mouse button; the pointer stays free (the mouse is caught only while the bow is up, and let go for any text, choice or panel) | drag the right side |
+| Look | move the mouse: the first click on the world catches it, any text, choice or panel lets it go (CL §41); drag works where the mouse cannot be caught | drag the right side; the camera follows behind you |
 | Interact | E or Enter, or click the prompt pill | tap the world or the pill |
-| Jump | Space | jump button |
+| Jump | Space | Jump button |
+| Dodge (while the bear is out) | Shift | Dodge button |
 | Equip / put away | Q, or the equipment button | equipment button; a selector appears with several tools |
-| Bow | equipped means aiming in the hunt and at the post (Q puts it away and lowers it); drag to aim (or click once: the mouse is caught and aims as it moves); hold Space, F, E or the right button to draw (the left too once caught), let go to shoot | the same with the equip button (Put away, above Draw); hold the round Draw button (bottom right), let go; a tap on the world never shoots |
+| Bow | in the band camp, equipped means aiming, anywhere (`games/freebow.js`); Q puts it away; the mouse aims; hold the left button (right where the mouse is not caught) to draw, let go to shoot; Space still jumps; arrows fly the crosshair's line and drop with distance (CL §42), so aim high far out | hold the round Draw button and slide the same thumb to aim, let go; Put away sits above Draw; a tap on the world never shoots |
 | Camera distance | wheel (2.2 to 7.5 blocks) | pinch |
 | Act menu | Alt+M, or Settings (confirms before wiping progress) | Settings |
 | World editor | backtick, Ctrl+E, F2, or `?edit` (dev) | `?edit` |
 | Focus | Tab moves between controls normally | |
 
 - Prompts show an SVG icon and a verb ("Pick berries"). Narrator boxes sit centred, not at the bottom edge.
-- Settings (gear, top left): larger text, gentle camera (default from reduced motion), assisted timing, slower look,
-  auto-advance narration, lock camera behind me, sound, music, Rich graphics, Vivid style, Controls refresher,
+- Settings (gear, top left) in five tabs: Controls, Display, Sound, Play, My story (CL §41). They hold: larger text, gentle camera (default from reduced motion), assisted timing, slower look,
+  auto-advance narration, phone or tablet controls (guessed, the player's answer wins), camera follows behind me (on
+  by default), aim the bow through my eyes (off: over the shoulder), sound, music, Rich graphics, Vivid style, Controls refresher,
   chapter notebook, story export and import.
 
 ## 4. The world
 
-- 160 x 160 blocks. The original 128-block valley keeps its river formula and terrain seed (`CORE_SIZE`); an eastern
-  grove and a southern meadow lie beyond the old boundary ridges.
+- 11-01 (CL §40.4): the old boundary ridges are gone; sal forest of tall boles and layered crowns; the Painted Rocks
+  are four bedded tors with walk-in shelters; the bear's den (`SITES.bearCave`, `bearCaveMouth`); a trail east;
+  `WATER_EDGES` for drinking. Nine deer in four herds far from the post and rabbits, all wary (they bolt when you come close, CL §41); rabbits
+  are half a meat; 36 wild berry bushes over the map, shells along the river.
+
+- 224 x 224 blocks (CL §39). The original 128-block valley keeps its river formula, terrain seed and heights
+  (`CORE_SIZE`, locked by `regression.mjs`). Beyond the old boundary ridges (`NEW_LAND` in `world/terrain.js`): the
+  open grassland east (176,70), Lookout Hill (204,38, top about y 19), the Painted Rocks (202,98: twelve sandstone
+  outcrops, eight with a small shelter, listed in `ROCK_SHELTERS`), the lake south-east (190,192, shallow, sand shores
+  that step one block at a time, an ice rim in the cold eras) and the sal forest south (80,192) with the river running
+  through it. The eastern grove and southern meadow are still there. `regression.mjs` walks from the camp to every one
+  of them, no jumps, in the ice age and after.
+- Ground cameras skip terrain chunks whose nearest edge is past 140 blocks (`ChunkMesher.cullFar`, called each frame
+  from `main.js`); cameras above y 30 (Act 2, the sky glimpses) draw everything. The far plane and fog are unchanged.
 - Central-Indian palette: monsoon green over red laterite, rose-buff sandstone cliffs, dark sandstone in caves,
   murram paths, mud walls and golden thatch, kans grass by the river. Trees: sal, banyan (walk-through `B.ROOTS`
   aerial roots), peepal, date palm, babul, the odd snag (CL §29.2, §29.3).
@@ -156,7 +170,7 @@ card ("Make a life here. Leave something behind.") and the era card. A resumed g
 
 | Scene | Beats |
 |---|---|
-| A, Ice (about 38,000 years ago) | Wake lying in the training cave, tap to rise (once per story). 12-stage tutorial: look, walk, back, strafe left and right, jump the sill, pick up the basket, equip, put away, equip, exit, reach camp (Skip practice exists). Valley reveal on stepping out (about 13.6 s, skippable, once). Then the task board (`sceneA.js`, CL §37): eight tasks in any order, one at a time; doing the thing starts it. Gather (basket equipped near a bush, or a wild pick): 12 berries, deposit in the store box, return the basket. Hunt (take the bow): the training post's three hits (once, `hunt.practised`), the plains (the crosshair comes with the equipped bow), down 3 deer, take and deposit the meat, then the ruse: the band wants more, the bear appears 73 blocks from camp, run to the fire, return the bow. Fish (take the rod): timing ring at one of 4 spots, deposit, return. Knap (the knapping stone): timing, 3 strikes. Paint (the shelter wall): a rock canvas saved verbatim and mounted. Beads (pick up a shell): three shells, drill at the knapping stone. Trade (after beads and gather; visitors wait by the tents): recall `huntGather`. Fire circle (after gather and three other tasks): the elder in pictograms; recall `band`. Depletion and the move. The burial: place beads and blade; "Perhaps they believed something continued." |
+| A, Ice (about 38,000 years ago) | Wake lying in the training cave, tap to rise (once per story). 12-stage tutorial: look, walk, back, strafe left and right, jump the sill, pick up the basket, equip, put away, equip, exit, reach camp (Skip practice exists). Valley reveal on stepping out (about 13.6 s, skippable, once). Then the task board (`sceneA.js`, CL §37): eight tasks in any order, one at a time; doing the thing starts it. Gather (basket equipped near a bush, or a wild pick): 12 berries, deposit in the store box, return the basket. Hunt (take the bow): the bow is up anywhere it is equipped; the post's three hits are optional; deer take two arrows and drop meat where they fall; three meat in the store box; then the band wants more, east past the great bear's den (`games/bear.js`, a boss: bar, two hearts, Dodge, wake by the fire if downed); return the bow. Fish (take the rod): timing ring at one of 4 spots, deposit, return. Knap (the knapping stone): timing, 3 strikes. Paint (the shelter wall): a rock canvas saved verbatim and mounted. Beads (pick up a shell): three shells, drill at the knapping stone. Trade (after beads and gather; visitors wait by the tents): recall `huntGather`. Fire circle (after gather and three other tasks): the elder in pictograms; recall `band`. Depletion and the move. The burial: place beads and blade; "Perhaps they believed something continued." |
 | B, Thaw (to 10,000 BCE) | Cinematic glimpse; the world thaws; protected caption on the last Ice Age |
 | C, Roots (7,000 BCE) | Plant 4 fields, lead the goats into the pen, the granary question (no one sack is yours), recall `lostTongues`, the chieftain's waterskin task, the water dispute and the lean week |
 | D, Fire and Clay (to 5,400 BCE) | Shape a pot and engrave your maker's mark (saved), weave a basket in one tap, shelf both in your hut, the copper trader, the grain delivery run to the neighbour village, recall `farming`, the lingering shot |
@@ -312,6 +326,7 @@ Usage is in `docs/EDITOR.md`. Architecture:
 | `?q=high` / `?q=low` | force the quality tier |
 | `?tp=x,z` | one-shot teleport once ground mode starts |
 | `?edit`, backtick, Ctrl+E, F2 | the world editor |
+| `node game/tools/phone-rig.mjs <scenario>` | the phone rig: iPhone SE and 15 (WebKit), Galaxy S8 and A55 (Chromium), by touch, pictures in `docs/shots/rig/`; setup lines at the top of the file (CL §40.1) |
 | `?data`, `?pilot` | teacher results; classroom identity |
 | `?fast` | 3-second countdowns, but no act uses a countdown now, so it does nothing visible |
 | Alt+M | act menu (also in Settings) |

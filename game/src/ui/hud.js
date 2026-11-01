@@ -1,7 +1,7 @@
 // HUD + dialog primitives every act uses: objective line, interact prompt,
 // narrator boxes, full-screen cards, choice prompts, fader, satchel counter.
 import { S } from '../strings.js';
-import { Settings, SETTINGS } from '../settings.js';
+import { Settings, SETTINGS, SETTING_TABS } from '../settings.js';
 import { Sound, voiceIdFor } from '../sound.js';
 import { iconFor } from './icons.js';
 import { SFX } from '../audio.js';
@@ -58,6 +58,15 @@ export class HUD {
     this.satchelEl.addEventListener('click', () => this.onSatchel && this.onSatchel());
     this.codexEl.addEventListener('click', () => this.onCodex && this.onCodex());
     this.root.querySelector('#zoom-out-btn').addEventListener('click', () => this.onZoomOut && this.onZoomOut());
+    // The task line folds to one short line 7 s after it changes, and a tap
+    // opens or folds it (2026-11-01: "the instruction on top always remains at
+    // the top. the instructions should be collapsible"). pointerdown stops
+    // here so the tap never starts a look-drag on the canvas.
+    this.objectiveEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.objectiveEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._tuck(!this.objectiveEl.classList.contains('tucked'));
+    });
     this.settingsBtn = this.root.querySelector('#hud-settings');
     this.settingsBtn.addEventListener('click', () => this.openSettings());
     this._settingsPanel = null;
@@ -97,13 +106,38 @@ export class HUD {
     el.innerHTML = `
       <div class="settings-panel" role="dialog" aria-label="${S.ui.settingsTitle}">
         <h3>${S.ui.settingsTitle}</h3>
+        <div class="settings-tabs" role="tablist"></div>
         <div class="settings-list"></div>
+        <div class="settings-actions"></div>
         <button class="btn primary set-close">${S.ui.close}</button>
       </div>`;
+    // Five tabs (settings.js SETTING_TABS): the switches for that tab, then
+    // its buttons. The last tab picked is remembered for the session.
     const list = el.querySelector('.settings-list');
+    const actions = el.querySelector('.settings-actions');
+    const tabsEl = el.querySelector('.settings-tabs');
+    let tab = (() => { try { return sessionStorage.getItem('towcb-settings-tab'); } catch { return null; } })();
+    if (!SETTING_TABS.includes(tab)) tab = 'controls';
+    const tabBtns = SETTING_TABS.map((t) => {
+      const b = document.createElement('button');
+      b.className = 'settings-tab';
+      b.setAttribute('role', 'tab');
+      b.textContent = S.ui.settingsTabs[t];
+      b.addEventListener('click', () => show(t));
+      tabsEl.appendChild(b);
+      return b;
+    });
+    const show = (t) => {
+      tab = t;
+      try { sessionStorage.setItem('towcb-settings-tab', t); } catch { /* private mode */ }
+      SETTING_TABS.forEach((x, i) => { tabBtns[i].classList.toggle('on', x === t); tabBtns[i].setAttribute('aria-selected', String(x === t)); });
+      for (const row of list.children) row.hidden = row.dataset.tab !== t;
+      for (const b of actions.children) b.hidden = b.dataset.tab !== t;
+    };
     for (const s of SETTINGS) {
       const row = document.createElement('label');
       row.className = 'settings-row';
+      row.dataset.tab = s.tab ?? 'play';
       row.innerHTML = `
         <input type="checkbox">
         <span class="settings-text"><span class="settings-label"></span><span class="settings-note"></span></span>`;
@@ -129,11 +163,12 @@ export class HUD {
     scope.cleanup(() => el.removeEventListener('keydown', onEsc));
     this.root.appendChild(el);
     this._settingsPanel = el;
-    const action = (label, fn) => {
+    const action = (label, fn, at = 'story') => {
       const b = document.createElement('button'); b.className = 'btn small'; b.textContent = label;
-      b.addEventListener('click', fn); el.querySelector('.settings-panel').appendChild(b);
+      b.dataset.tab = at;
+      b.addEventListener('click', fn); actions.appendChild(b);
     };
-    action(S.onboarding.controls, async () => { close(); await this.card([this.input?.isTouch ? S.onboarding.controlsTouch : S.onboarding.controlsBody]); });
+    action(S.onboarding.controls, async () => { close(); await this.card([this.input?.isTouch ? S.onboarding.controlsTouch : S.onboarding.controlsBody]); }, 'controls');
     action(S.revision.journal, async () => { const { downloadJournal } = await import('./journal.js'); downloadJournal(); });
     action(S.textbook.title, async () => { close(); const { chapterNotebook } = await import('./chapterNotebook.js'); await chapterNotebook(this.root); });
     action(S.revision.actMenu, () => { close(); this.onActMenu?.(); });
@@ -154,6 +189,7 @@ export class HUD {
       });
       file.click();
     });
+    show(tab);
   }
 
   setObjective(text) {
@@ -162,8 +198,20 @@ export class HUD {
     this.hideHint();
     if (!text) { this.objectiveEl.classList.add('fade-out'); return; }
     if (Save.data.objective !== text) { Save.data.objective = text; Save.persist(); }
+    const changed = this.objectiveEl.textContent !== text || this.objectiveEl.classList.contains('fade-out');
     this.objectiveEl.textContent = text;
     this.objectiveEl.classList.remove('fade-out');
+    if (changed) this._tuck(false);
+  }
+
+  // tucked = one short line; open = the whole task, folding itself again in 7 s
+  _tuck(on) {
+    clearTimeout(this._tuckTimer);
+    if (this.objectiveEl.parentElement !== this.root) on = false; // Act 2's notebook holds it open
+
+    this.objectiveEl.classList.toggle('tucked', on);
+    this.objectiveEl.setAttribute('aria-expanded', String(!on));
+    if (!on) this._tuckTimer = setTimeout(() => this._tuck(true), 7000);
   }
 
   // Icon plus what the action actually IS ("Pick berries"), instead of a bare

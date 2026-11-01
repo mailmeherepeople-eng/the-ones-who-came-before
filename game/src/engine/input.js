@@ -10,11 +10,13 @@ export class Input {
     this.jump = false;
     this.interactPressed = false;
     this.equipPressed = false;
+    this.dodgePressed = false;
     this.zoomDelta = 0; // +out, -in
     this.enabled = true;
-    this.isTouch = matchMedia('(pointer: coarse)').matches;
+    this.isTouch = matchMedia('(pointer: coarse)').matches; // Settings may correct it (setTouch)
     this.keys = new Set();
     this._pointerLocked = false;
+    this._touchListeners = new Set();
 
     if (!this.isTouch) document.body.classList.add('no-touch');
 
@@ -26,6 +28,7 @@ export class Input {
       if (!this.enabled) return;
       if (e.code === 'KeyE' || e.code === 'Enter') this.interactPressed = true;
       if (e.code === 'KeyQ') this.equipPressed = true;
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.dodgePressed = true;
       if (e.code === 'Space') { this.jump = true; e.preventDefault(); }
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -39,7 +42,12 @@ export class Input {
     // "kids will not remember to press escape every time"). Anything that
     // puts text or a choice up lets go (release(), ui/hud.js, ui/activity.js);
     // a click on the world takes it back while it is still wanted.
-    this.captureWanted = false;
+    // 2026-11-01, round 2: "the camera should move with the mouse. not with
+    // the character. mouse moves the camera" (answer: always, like Skyrim).
+    // On a computer the mouse is wanted in the world all the time: the first
+    // click on the world catches it, and every text box, choice and panel
+    // still lets it go by itself (release()), so nobody needs Escape.
+    this.captureWanted = !this.isTouch;
     canvas.addEventListener('click', () => {
       if (!this.isTouch && this.enabled && this.captureWanted && !this._pointerLocked) {
         canvas.requestPointerLock?.()?.catch?.(() => {});
@@ -83,12 +91,22 @@ export class Input {
 
     this.jumpEl = document.createElement('button');
     this.jumpEl.id = 'touch-jump';
-    this.jumpEl.textContent = '↥';
-    this.jumpEl.setAttribute('aria-label', S.onboarding.jumpAction);
+    // the word, not an arrow (2026-11-01: "Jump should be written instead of
+    // the up arrow")
+    this.jumpEl.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span></span>';
+    this.jumpEl.querySelector('span').textContent = S.onboarding.jumpAction;
     uiRoot.appendChild(this.jumpEl);
     this.jumpEl.addEventListener('touchstart', (e) => { e.preventDefault(); this.jump = true; this._jumpTouchHeld = true; });
     this.jumpEl.addEventListener('touchend', () => { this._jumpTouchHeld = false; });
     this.jumpEl.addEventListener('touchcancel', () => { this._jumpTouchHeld = false; });
+
+    // Dodge: on screen only while something is fighting you (css: body.boss-fight)
+    this.dodgeEl = document.createElement('button');
+    this.dodgeEl.id = 'touch-dodge';
+    this.dodgeEl.textContent = S.ui.dodge;
+    uiRoot.appendChild(this.dodgeEl);
+    this.dodgeEl.addEventListener('touchstart', (e) => { e.preventDefault(); this.dodgePressed = true; });
+    this.dodgeEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); if (e.pointerType !== 'touch') this.dodgePressed = true; });
 
     this._joyTouch = null;
     this._lookTouch = null;
@@ -192,6 +210,7 @@ export class Input {
   clearEdges() {
     this.interactPressed = false;
     this.equipPressed = false;
+    this.dodgePressed = false;
     this.jump = false;
   }
 
@@ -203,7 +222,8 @@ export class Input {
     if (!this.enabled) {
       this.lookDelta.x = 0; this.lookDelta.y = 0;
       this.jump = false; this.interactPressed = false; this.equipPressed = false; this.zoomDelta = 0;
-      return { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, jump: false, jumpHeld: false, interact: false, zoom: 0 };
+      this.dodgePressed = false;
+      return { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, jump: false, jumpHeld: false, interact: false, dodge: false, zoom: 0 };
     }
     // keyboard always contributes (touch-primary hybrids can have keyboards);
     // the joystick wins whenever it is deflected
@@ -222,8 +242,10 @@ export class Input {
       jumpHeld: this.keys.has('Space') || !!this._jumpTouchHeld,
       interact: this.interactPressed,
       equip: this.equipPressed,
+      dodge: this.dodgePressed,
       zoom: this.zoomDelta,
     };
+    this.dodgePressed = false;
     this.lookDelta.x = 0; this.lookDelta.y = 0;
     this.jump = false;
     this.interactPressed = false;
@@ -232,16 +254,30 @@ export class Input {
     return out;
   }
 
-  // Ask for the mouse (the bow is up) or give it back for good.
+  // Ask for the mouse now (the bow came up), or, with false, nothing: the
+  // world always wants the mouse on a computer (see captureWanted).
   capture(on) {
-    this.captureWanted = on;
     if (on && !this.isTouch && !this._pointerLocked) this.canvas.requestPointerLock?.()?.catch?.(() => {});
-    if (!on && this._pointerLocked) document.exitPointerLock?.();
   }
   // Let go for now (a box or a choice is up); a click on the world takes it back.
   release() {
     if (this._pointerLocked) document.exitPointerLock?.();
   }
+
+  // Phone or computer, from Settings (the player's own answer beats the
+  // guess). Everything that shows a control or names one asks isTouch when it
+  // draws; onTouchChange lets the open ones redraw.
+  setTouch(on) {
+    on = !!on;
+    if (on === this.isTouch) return;
+    this.isTouch = on;
+    this.captureWanted = !on;
+    document.body.classList.toggle('no-touch', !on);
+    if (!on) { this._joyTouch = null; this._lookTouch = null; this.move.x = 0; this.move.y = 0; }
+    this.setEnabled(this.enabled);
+    for (const fn of this._touchListeners) fn(on);
+  }
+  onTouchChange(fn) { this._touchListeners.add(fn); return () => this._touchListeners.delete(fn); }
 
   setEnabled(on) {
     this.enabled = on;

@@ -1,12 +1,13 @@
-// The bow, shared by the Act 1 hunt (games/hunt.js) and the training post
+// The bow, shared by the band camp (games/freebow.js) and the training post
 // (games/range.js).
 //
 // 2026-10-30: "shooting the animals with arrows does not feel satisfying. the
 // aiming is weird, the shooting is weird." What this changes:
-//  - The arrow lands where the crosshair points. At release a ray from the
-//    camera finds what the crosshair is on, and the arrow is launched on the
-//    arc that lands there. The old arrow left the head with an upward kick
-//    under heavy gravity and fell 1.8 blocks short at 15 blocks.
+//  - The arrow leaves along the crosshair's line and falls under its own
+//    light gravity (2026-11-01, after Skyrim): on the crosshair up close, a
+//    little low at 30 blocks, well low at 60, so a far shot is aimed high.
+//    (Until then the game solved an arc onto whatever the crosshair was on,
+//    which made every shot land: "using bow and arrow should involve skill".)
 //  - Hold to draw, let go to shoot. A tap on the world never shoots, so a
 //    small aiming nudge on a phone no longer looses an arrow.
 //  - The draw is the skill. A full draw flies fast and true; a short one
@@ -22,13 +23,21 @@ import { foldStatic, MERGED_MAT } from '../world/merge.js';
 import { S } from '../strings.js';
 import { Inv } from '../inventory.js';
 import { syncEquipment } from '../ui/equipment.js';
+import { Settings } from '../settings.js';
+import { eyesView, shoulderPose } from './archer.js';
 
 export const BOW = {
-  DRAW_TIME: 0.55,  // seconds from rest to full draw
+  DRAW_TIME: 0.85,  // seconds from rest to full draw (Oblivion Remastered's raise and draw, 2026-11-01)
   MIN_DRAW: 0.18,   // a shorter pull is a cancel, not a shot
-  SPEED_MIN: 24,    // blocks per second at MIN_DRAW
-  SPEED_MAX: 54,    // and at full draw
-  GRAVITY: 9.8,
+  // Real arrow flight (2026-11-01: "no matter the distance, if we aim, it hits
+  // exactly at the center ... the player has to aim slightly upwards if target
+  // is far away"). After Skyrim's arrows (3600 units/s, about 51 m/s, gravity
+  // 0.35 of the world's, about 3.4 m/s^2, no upward tilt): full draw drops
+  // about 0.14 m at 15 m, 0.5 m at 30 m, 2 m at 60 m. A short pull flies slow
+  // and falls short, the Oblivion way (speed grows with the draw).
+  SPEED_MIN: 17.5,  // blocks per second at MIN_DRAW
+  SPEED_MAX: 50,    // and at full draw
+  GRAVITY: 3.0,     // arrows only; the player still falls at the world's 9.8
   WOBBLE: 0.06,     // radians of scatter at the weakest draw, none at full
   LIFE: 4,          // seconds in the air before a lost arrow is dropped
   GROUND_LIFE: 6,   // a miss stays stuck in the ground this long
@@ -70,17 +79,6 @@ function arrowMesh() {
   const m = new THREE.Mesh(arrowGeometry(), MERGED_MAT);
   m.userData.shared = true;
   return m;
-}
-
-// The arc from `from` that lands on `to` at speed v: the flatter of the two
-// solutions. Out of reach, the 45 degree shot (the farthest it can go).
-function launch(from, to, v, g) {
-  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
-  const d = Math.hypot(dx, dz);
-  if (d < 0.01) return null;
-  const v2 = v * v, disc = v2 * v2 - g * (g * d * d + 2 * dy * v2);
-  const a = disc < 0 ? Math.PI / 4 : Math.atan((v2 - Math.sqrt(disc)) / (g * d));
-  return new THREE.Vector3((dx / d) * v * Math.cos(a), v * Math.sin(a), (dz / d) * v * Math.cos(a));
 }
 
 function orient(obj, vel) {
@@ -130,16 +128,26 @@ export class Bow {
   }
 
   // Up to the eye: first person, the bow in view, the draw control on screen.
+  // Two looks (games/archer.js): over the shoulder (the default: you see
+  // your archer draw) or through the eyes (Settings, aimEyes).
   raise() {
     if (this.raised) return;
     this._build();
     this.raised = true;
     const { G } = this;
     const cam = G.renderer.camera;
-    if (!cam.parent) G.renderer.scene.add(cam); // the bow in view rides on the camera
-    cam.add(this.vm.group);
-    G.player.setFirstPerson(true);
-    G.player.noJump = true;
+    this.eyes = !!Settings.get('aimEyes');
+    if (this.eyes) {
+      this.vm = eyesView();
+      if (!cam.parent) G.renderer.scene.add(cam); // the bow in view rides on the camera
+      cam.add(this.vm.group);
+      G.player.setFirstPerson(true);
+    } else {
+      this.vm = shoulderPose();
+      G.player.setShoulder(true, this.vm);
+    }
+    this.vm.kick = 0;
+    G.player.aimHeld = true;
     this.ui.classList.add('on');
     this.ui.classList.toggle('touch', G.input.isTouch);
     document.body.classList.add('bow-up'); // css: Draw takes the jump button's corner
@@ -152,12 +160,14 @@ export class Bow {
     if (!this.raised) return;
     this.raised = false;
     this._cancelDraw();
-    this.vm.group.removeFromParent();
+    const p = this.G.player;
+    if (this.eyes) p.setFirstPerson(false); else p.setShoulder(false);
+    this.vm?.dispose();
+    this.vm = null;
     this.ui.classList.remove('on');
     document.body.classList.remove('bow-up', 'bow-equip');
     this.G.input.capture?.(false);
-    const p = this.G.player;
-    p.setFirstPerson(false);
+    p.aimHeld = false;
     p.noJump = false; p.aimLookMul = 1; p.fovZoom = 0; p.moveMul = 1;
   }
 
@@ -180,7 +190,6 @@ export class Bow {
     if (!this._built) return;
     this._built = false;
     this._abort.abort();
-    this.vm.dispose();
     this.ui.remove();
   }
 
@@ -215,7 +224,6 @@ export class Bow {
   _build() {
     if (this._built) return;
     this._built = true;
-    this.vm = buildViewmodel();
     const ui = this.ui = document.createElement('div');
     ui.className = 'bow-ui';
     ui.innerHTML = '<svg class="bow-ring" viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="26"/>' +
@@ -231,13 +239,26 @@ export class Bow {
     this._abort = new AbortController();
     const sig = { signal: this._abort.signal };
     const btn = ui.querySelector('.bow-draw');
+    // The button is also a look surface: the thumb that holds Draw can slide
+    // to aim, and lifting shoots (2026-11-01: "if you press and hold the shoot
+    // button, if the player moves finger, they should be able to change the
+    // direction where they are looking as well"). Same feel as dragging the
+    // world (engine/input.js), and sliding off the button never cancels.
+    let px = 0, py = 0, pid = null;
     btn.addEventListener('pointerdown', (e) => {
       e.preventDefault(); e.stopPropagation();
       try { btn.setPointerCapture(e.pointerId); } catch { /* an id the browser no longer tracks */ }
       this._held.button = true;
+      pid = e.pointerId; px = e.clientX; py = e.clientY;
+    }, sig);
+    btn.addEventListener('pointermove', (e) => {
+      if (!this._held.button || e.pointerId !== pid) return;
+      const inp = this.G.input;
+      if (inp.enabled) { inp.lookDelta.x += (e.clientX - px) * 0.0052; inp.lookDelta.y += (e.clientY - py) * 0.0048; }
+      px = e.clientX; py = e.clientY;
     }, sig);
     for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-      btn.addEventListener(ev, () => { this._held.button = false; }, sig);
+      btn.addEventListener(ev, () => { this._held.button = false; pid = null; }, sig);
     }
     btn.addEventListener('contextmenu', (e) => e.preventDefault(), sig);
     const canvas = this.G.input.canvas;
@@ -256,9 +277,10 @@ export class Bow {
 
   _drawStep(dt) {
     const { G } = this;
-    const k = G.input.keys;
     const free = G.input.enabled && !G.hud.root.dataset.modal;
-    const held = free && (this._held.button || this._held.mouse || k.has('Space') || k.has('KeyF') || k.has('KeyE'));
+    // a click draws and shoots, nothing else (2026-11-01: "only clicking should
+    // make the arrow fire. not space and e"), so Space jumps with the bow up
+    const held = free && (this._held.button || this._held.mouse);
     if (held && !this.drawing && this.reload <= 0 && this.canShoot()) {
       this.drawing = true;
       this.draw = 0;
@@ -274,7 +296,10 @@ export class Bow {
     }
     const p = G.player, d = this.drawing ? this.draw : 0;
     p.aimLookMul = 1 - 0.55 * d;
-    p.fovZoom = d;
+    // the subtle zoom at full draw (Oblivion Remastered): about a tenth, only
+    // as the string comes the last of the way back
+    const z = Math.min(1, Math.max(0, (d - 0.6) / 0.4));
+    p.fovZoom = 0.42 * z * z * (3 - 2 * z);
     p.moveMul = this.drawing ? this.walkWhileDrawing : 1;
     const C = 163.4; // the ring's circumference, 2 pi 26
     this._ring.style.strokeDashoffset = String(C * (1 - d));
@@ -295,12 +320,16 @@ export class Bow {
     cam.getWorldPosition(_o);
     cam.getWorldDirection(_p);
     const dir = _p.clone();
-    const aim = this._aimPoint(_o, dir);
-    // leaves just under the eye, so you see it go
-    const from = _o.clone().addScaledVector(dir, 0.6);
-    from.y -= 0.06;
+    const aim = this._aimPoint(_o, dir); // what the crosshair is on (or a point down the line)
+    // leaves just under the eye, so you see it go; over the shoulder, from
+    // just in front of the archer on the sight line
+    const from = _o.clone().addScaledVector(dir, this.eyes ? 0.6 : G.player._camDistSmooth + 0.7);
+    if (this.eyes) from.y -= 0.06;
     const speed = BOW.SPEED_MIN + (BOW.SPEED_MAX - BOW.SPEED_MIN) * draw;
-    const vel = launch(from, aim, speed, BOW.GRAVITY) ?? dir.multiplyScalar(speed);
+    // straight at that point, no arc solved: gravity does the rest, so close
+    // shots land on the crosshair and far ones fall below it
+    const toAim = aim.clone().sub(from);
+    const vel = (toAim.lengthSq() > 4 ? toAim.normalize() : dir.clone()).multiplyScalar(speed);
     const wob = BOW.WOBBLE * (1 - draw) ** 2;
     if (wob > 0) {
       vel.applyAxisAngle(_Y, (Math.random() * 2 - 1) * wob);
@@ -311,7 +340,7 @@ export class Bow {
     mesh.position.copy(from);
     orient(mesh, vel);
     G.renderer.scene.add(mesh);
-    this.arrows.push({ mesh, vel, life: 0, state: 'fly' });
+    this.arrows.push({ mesh, vel, life: 0, state: 'fly', draw });
     this._trim();
     this.reload = BOW.RELOAD;
     // a recorded clip wins if one is ever added (audio/sfx/bow-loose.m4a)
@@ -436,103 +465,9 @@ export class Bow {
 
   _view(dt) {
     if (!this.vm || !this.raised) return;
-    this.vm.kick = Math.max(0, this.vm.kick - dt * 6);
-    this.vm.set(this.drawing ? this.draw : 0, this.reload <= 0 && this.canShoot(), this._t, this.vm.kick, this.G.renderer.camera);
+    this.vm.kick = Math.max(0, this.vm.kick - dt * (this.eyes ? 1.9 : 6)); // the release snap runs about half a second
+    const draw = this.drawing ? this.draw : 0, nocked = this.reload <= 0 && this.canShoot();
+    if (this.eyes) this.vm.set(draw, nocked, this._t, this.vm.kick, this.G.renderer.camera);
+    else this.vm.set(draw, nocked, this.G.player.pitch, this.vm.kick);
   }
-}
-
-// ---------- the bow in view ----------
-// Unlit colours and no depth test: it is drawn last, over the world, so it
-// never clips into a tree trunk at your elbow and reads the same in both
-// visual styles.
-function buildViewmodel() {
-  const flat = { depthTest: false, depthWrite: false, fog: false };
-  const solid = new THREE.MeshBasicMaterial({ vertexColors: true, ...flat });
-  const stringMat = new THREE.MeshBasicMaterial({ color: 0xf1e6c8, ...flat });
-  const geos = [];
-  const group = new THREE.Group();
-  const add = (mesh, order = 1000) => { mesh.renderOrder = order; mesh.frustumCulled = false; return mesh; };
-  // Parts that never move against each other are built as coloured boxes and
-  // folded into one mesh (world/merge.js), then drawn unlit: the limbs and
-  // grip are one draw call, the arrow on the string another.
-  const fold = (build) => {
-    const tmp = new THREE.Group(), src = [];
-    const part = (g, color) => {
-      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color }));
-      src.push(m);
-      tmp.add(m);
-      return m;
-    };
-    build(part);
-    foldStatic(tmp);
-    for (const m of src) { m.geometry.dispose(); m.material.dispose(); }
-    const geo = tmp.children[0].geometry;
-    geos.push(geo);
-    return add(new THREE.Mesh(geo, solid));
-  };
-  // the limbs: grip at the origin, tips curling back toward the archer (+z)
-  const L = 0.34, pts = [];
-  for (let i = -4; i <= 4; i++) {
-    const y = (i / 4) * L;
-    pts.push(new THREE.Vector3(0, y, 0.11 * (y / L) ** 2));
-  }
-  const seg = (part, a, b, w, color) => {
-    const m = part(new THREE.BoxGeometry(w, a.distanceTo(b), w), color);
-    m.position.copy(a).add(b).multiplyScalar(0.5);
-    m.quaternion.setFromUnitVectors(_Y, b.clone().sub(a).normalize());
-  };
-  group.add(fold((part) => {
-    for (let i = 0; i < pts.length - 1; i++) seg(part, pts[i], pts[i + 1], 0.026, 0x6b4423);
-    seg(part, new THREE.Vector3(0, -0.05, 0), new THREE.Vector3(0, 0.05, 0), 0.042, 0xa4472b);
-  }));
-  const top = pts[pts.length - 1], bot = pts[0];
-  // the string: two halves meeting at the nock, re-aimed every frame
-  const unit = new THREE.BoxGeometry(0.006, 1, 0.006);
-  geos.push(unit);
-  const s1 = add(new THREE.Mesh(unit, stringMat), 1001), s2 = add(new THREE.Mesh(unit, stringMat), 1001);
-  group.add(s1, s2);
-  // the arrow on the string, pointing away along -z from the nock
-  const arrow = fold((part) => {
-    const box = (w, h, d, color, z, rz = 0) => { const m = part(new THREE.BoxGeometry(w, h, d), color); m.position.z = z; m.rotation.z = rz; };
-    box(0.02, 0.02, 0.7, 0xcdb48a, -0.35);
-    box(0.05, 0.035, 0.08, 0x3a3530, -0.72);
-    box(0.006, 0.06, 0.11, 0xb4532f, -0.08);
-    box(0.006, 0.06, 0.11, 0xb4532f, -0.08, Math.PI / 2);
-  });
-  arrow.renderOrder = 1002;
-  group.add(arrow);
-  const nock = new THREE.Vector3();
-  const place = (m, a, b) => {
-    m.position.copy(a).add(b).multiplyScalar(0.5);
-    m.scale.set(1, a.distanceTo(b), 1);
-    m.quaternion.setFromUnitVectors(_Y, _d.copy(b).sub(a).normalize());
-  };
-  const BRACE = 0.13; // the string at rest, this far behind the grip
-  return {
-    group,
-    kick: 0,
-    set(draw, nocked, t, kick, cam) {
-      // Sized from the view, not fixed: a portrait phone sees a narrow slice
-      // of the world, and a bow of fixed size filled half its screen. This
-      // keeps it about half the screen's height, low and a little left,
-      // canted the way an archer holds it, on any screen and at any zoom.
-      const D = 0.5;
-      const halfH = D * Math.tan((cam.fov * Math.PI) / 360), halfW = halfH * cam.aspect;
-      const s = (halfH / 0.68) * 0.85;
-      group.scale.setScalar(s);
-      group.position.set(-Math.min(halfW * 0.42, halfH * 0.75), -halfH * 0.36 + Math.sin(t * 1.6) * 0.003 * s, -D - kick * 0.04 * s);
-      group.rotation.set(0, 0, 0.22 + Math.sin(t * 23) * 0.004 * draw);
-      nock.set(0, 0, BRACE + draw * 0.2);
-      place(s1, top, nock);
-      place(s2, bot, nock);
-      arrow.visible = nocked;
-      arrow.position.copy(nock);
-    },
-    dispose() {
-      group.removeFromParent();
-      for (const g of geos) g.dispose();
-      solid.dispose();
-      stringMat.dispose();
-    },
-  };
 }

@@ -9,29 +9,26 @@
 // where it stopped.
 //
 // `ctx` is the scene: { G, chest, deer, postTargets, berryProps, elder,
-// visitors, shells }.
+// visitors, shells, freeBow, bear }.
 import * as THREE from '../../vendor/three.module.js';
 import { YEARS } from '../constants.js';
 import { S } from '../strings.js';
 import { Save } from '../save.js';
 import { SITES, riverX } from '../world/terrain.js';
 import { FX } from '../fx/fx.js';
-import { Animal } from '../npc/npc.js';
 import * as P from '../world/props.js';
 import { timingGame } from '../ui/minigames.js';
 import { paintingGame } from '../ui/paint.js';
 import { wait } from '../ui/hud.js';
-import { Sound } from '../sound.js';
 import { Inv } from '../inventory.js';
 import { objectiveCue, setBeacon, nearestSite } from '../ui/objective.js';
 import { teach } from '../codex.js';
 import { recallBeat } from '../recall.js';
 import { gatherWithBasket } from './gathering.js';
-import { huntWithBow } from '../games/hunt.js';
-import { practiceAtPost } from '../games/range.js';
+import { equipBow } from '../games/bow.js';
 import {
   addProp, groundY, fxAt, recordTell, interactOnce, reach, until, syncEquip,
-  takeFromChest, putInStore, returnToChest,
+  takeFromChest, putInStore, returnToChest, storeBoxAt,
 } from './act1kit.js';
 
 // One kill fed nobody. The tribe is six people, so the hunt asks for three
@@ -49,97 +46,72 @@ export function runGather(ctx) {
 }
 
 // ---------- hunt, then the bear ----------
+// 2026-11-01: the bow works anywhere once it is in hand (games/freebow.js),
+// deer take two arrows and drop their meat where they fall, and the practice
+// at the post is there if you want it, never in the way. The hunt is done when
+// three pieces of meat are in the store box, wherever they came from.
 export async function runHunt(ctx) {
-  const { G, chest, deer } = ctx;
+  const { G, chest, freeBow, bear } = ctx;
   if (!Save.getRecord('hunted')) {
     if (!Inv.has('player', 'bow')) await takeFromChest(G, 'bow', S.act1.obj_store_bow);
     chest.openFor(1200);
-
-    // the training post on the way out: three hits on the painted targets,
-    // which is where the bow is taught (games/range.js)
-    if (!Save.activity('hunt').practised) {
-      objectiveCue(G, S.range.obj_practice, SITES.trainingPost);
-      await reach(G, SITES.trainingPost.x, SITES.trainingPost.z, 3);
-      setBeacon(G, null);
-      await practiceAtPost(G, ctx.postTargets);
-      Save.setActivity('hunt', { practised: true });
+    equipBow(G); // in hand and up: the crosshair comes with it
+    // a rabbit is half a meat (2026-11-01)
+    const food = (where) => Inv.count(where, 'meat') + Inv.count(where, 'rabbit') / 2;
+    if (Save.activity('hunt').base === undefined) {
+      Save.setActivity('hunt', { base: food('store') });
+      if (!Save.activity('hunt').practised) G.hud.toast(S.act1.huntPracticeTip, 5200);
     }
-
-    objectiveCue(G, S.act1.obj_hunt, SITES.plains);
-    await reach(G, SITES.plains.x, SITES.plains.z, 8);
-    setBeacon(G, null); // you are here, clear the sightline for aiming
-    const downedList = await huntWithBow(G, deer, HUNT_TARGET);
-
-    // one carcass becomes one meat pickup; collect them all before carrying
-    // the haul home, so the walk back happens once rather than three times
-    const meats = [];
-    const deerIds = new Map(deer.map((animal, index) => [animal, index]));
-    for (const d of downedList) {
-      const at = { x: d.pos.x, y: d.pos.y, z: d.pos.z };
-      d.dispose();
-      G.npcs = G.npcs.filter((n) => n !== d);
-      const k = deer.indexOf(d);
-      if (k >= 0) deer.splice(k, 1);
-      const id = deerIds.get(d);
-      if (!(Save.activity('hunt').collected ?? []).includes(id)) meats.push({ id, at, prop: addProp(G, P.makeMeat(at.x, at.y, at.z)) });
+    const base = Save.activity('hunt').base;
+    const stored = () => Math.min(HUNT_TARGET, food('store') - base);
+    const shown = (n) => (n % 1 ? `${Math.floor(n)}½` : `${n}`);
+    // the objective follows what you are doing: hunting, picking up, carrying home
+    let last = '';
+    while (stored() < HUNT_TARGET) {
+      const n = shown(stored()), carrying = food('player'), lying = freeBow.meatsLying();
+      const key = `${n}|${carrying}|${lying}`;
+      if (key !== last) {
+        last = key;
+        if (carrying > 0) objectiveCue(G, S.act1.obj_meatHome(n, HUNT_TARGET), storeBoxAt());
+        else if (lying > 0) objectiveCue(G, S.act1.obj_meatPick(n, HUNT_TARGET), freeBow.nearestMeat(G.player.pos));
+        else objectiveCue(G, S.act1.obj_huntN(n, HUNT_TARGET), nearestSite(G, ctx.deer.filter((d) => !d.downed).map((d) => d.pos)));
+      }
+      await wait(300);
     }
-    for (let i = 0; i < meats.length; i++) {
-      const m = meats[i];
-      objectiveCue(G, S.act1.obj_meatN(i + 1, meats.length), m.at);
-      await interactOnce(G, { id: `meat${i}`, x: m.at.x, z: m.at.z, r: 2.6, prompt: '🍖', label: S.act1.takeMeat });
-      P.disposeGroup(G.renderer.scene, m.prop.group);
-      G.props = G.props.filter((pp) => pp !== m.prop);
-      Inv.add('player', 'meat', 1);
-      Save.setActivity('hunt', { collected: [...(Save.activity('hunt').collected ?? []), m.id] });
-      syncEquip(G); // the bow is still the tool, so the bow is still what shows
-      FX.floaties({ x: m.at.x, y: m.at.y + 0.5, z: m.at.z }, { color: 0xffd9a0, count: 12, size: 0.11, life: 1.6, rise: 1.0 });
-    }
-    await G.hud.narrator(S.act1.huntSuccess);
-    // The meat goes in the box. The BOW DOES NOT go back yet, and that is the
-    // hinge the bear turns on.
-    await putInStore(G, 'meat', S.act1.obj_depositMeat, S.act1.depositMeatDone);
+    setBeacon(G, null);
     FX.confetti({ x: G.player.pos.x, y: G.player.pos.y + 1.2, z: G.player.pos.z }, { count: 18 });
+    await G.hud.narrator(S.act1.huntSuccess);
     Save.addRecord({ id: 'hunted', type: 'camp', pos: { ...SITES.plains }, made: YEARS.SCENE_A_YEAR, data: { label: 'hunt', count: HUNT_TARGET } });
   }
 
-  // The second hunt is a ruse (CL 15.2). The band asks for more meat, so you
-  // walk back out to the plains still carrying the bow. There is no second
-  // hunt: reaching the plains is what spawns the bear, far from camp, which is
-  // the only way the run home is a run at all. It stays part of the hunt task
-  // so the bow is still in your hands when it comes.
+  // The second outing (CL 15.2, reworked 2026-11-01). The band wants more, so
+  // you head east with the bow still in hand, and the trail runs past the
+  // great bear's den (games/bear.js). Whatever happens there (you run to the
+  // fire, you fall and wake by it, or you bring the bear down) the bow goes
+  // back to the chest after, and that is the end of the hunt.
   if (!Save.getRecord('bear')) {
     if (!Inv.has('player', 'bow')) await takeFromChest(G, 'bow', S.act1.obj_store_bow);
+    equipBow(G);
     await G.hud.narrator(S.act1.moreMeat);
-    objectiveCue(G, S.act1.obj_huntMore, SITES.plains);
-    await reach(G, SITES.plains.x, SITES.plains.z, 9);
-
-    // it takes its time: slow enough that walking away always works, spawned
-    // far enough out that you get a good look at the size before it closes
-    await G.hud.narrator(S.act1.predatorNear);
-    const predator = new Animal(G.renderer.scene, {
-      kind: 'predator', x: G.player.pos.x + 11, z: G.player.pos.z + 9, world: G.world, wander: 2, speed: 1.7,
-    });
-    G.npcs.push(predator);
-    Sound.playSfx('bear-roar');
-    Sound.playMusic('act1.chase', { fade: 0.4 });
-    G.player.addTrauma(0.6); // the roar lands in the camera too
-    FX.flash(fxAt(G, predator.pos.x, predator.pos.z, 1.0), { color: 0xff5a4a, size: 1.7, life: 0.2 });
-    FX.puff(predator.pos, { count: 10, size: 0.32, life: 0.6, color: 0xb0a184 });
-    predator.followTarget = G.player.pos;
-    // the hunt objective is dropped outright; there is only one thing to do now
-    objectiveCue(G, S.act1.predatorChase, SITES.fire, 0xff8a6a); // safety marker: the fire
-    await reach(G, SITES.fire.x, SITES.fire.z, 5);
-    setBeacon(G, null); // safe — the fire beacon has done its job
-    predator.followTarget = null;
-    predator.fleeFrom(SITES.fire.x, SITES.fire.z);
-    Sound.playMusic('act1.camp', { fade: 2.0 }); // back to safety
-    FX.puff(predator.pos, { count: 12, size: 0.34, life: 0.7, color: 0xb0a184 });
-    FX.ring(fxAt(G, SITES.fire.x, SITES.fire.z), { color: 0xffc98a, radius: 3.2, life: 0.8 });
-    await G.hud.narrator(S.act1.predatorSafe);
-
+    bear.setScripted(true);
+    let how = null;
+    bear.onGone = (reason) => { how = reason; };
+    if (bear.state === 'dead') how = 'slain';
+    if (!how) {
+      objectiveCue(G, S.act1.obj_huntMore, SITES.grassland);
+      await until(() => bear.state !== 'den' && bear.state !== 'home' || Math.hypot(G.player.pos.x - SITES.grassland.x, G.player.pos.z - SITES.grassland.z) < 10);
+      if (bear.state === 'den' || bear.state === 'home') bear.wake(); // walked round it: it comes anyway
+      objectiveCue(G, S.act1.predatorChase, SITES.fire, 0xff8a6a); // the fire is safety
+      await until(() => how !== null);
+    }
+    bear.onGone = null;
+    bear.setScripted(false);
+    setBeacon(G, null);
+    if (how === 'slain') await G.hud.narrator(S.bear.slainStory);
+    else if (how !== 'down') await G.hud.narrator(S.act1.predatorSafe);
     // and only now, out of breath, are you reminded it was never yours
     await returnToChest(G, 'bow', S.act1.obj_returnBow, S.act1.returnBowDone);
-    Save.addRecord({ id: 'bear', type: 'camp', pos: { ...SITES.fire }, made: YEARS.SCENE_A_YEAR, data: { label: 'bear' } });
+    Save.addRecord({ id: 'bear', type: 'camp', pos: { ...SITES.fire }, made: YEARS.SCENE_A_YEAR, data: { label: 'bear', how } });
   }
 }
 

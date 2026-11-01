@@ -67,6 +67,7 @@ export function douseFires() {
 // anything else. Set by Scene A (setStations) before any task.
 let STORE_BOX = null;
 let STORE_BOX_AT = null;
+export const storeBoxAt = () => STORE_BOX_AT;
 
 let STORE_A = null;
 export function setStations({ chestAt, boxAt, box }) {

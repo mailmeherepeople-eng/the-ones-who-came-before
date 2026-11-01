@@ -2,6 +2,7 @@
 // optionally swap the world state mid-flight, drop back down. Foreshadows
 // Act 2's full dial (design doc §4).
 import * as THREE from '../../vendor/three.module.js';
+import { S } from '../strings.js';
 import { fmtYear } from '../constants.js';
 import { wait } from '../ui/hud.js';
 
@@ -98,27 +99,41 @@ export async function skyGlimpse(G, {
 // player who has seen it never sits through it. With gentle camera (the
 // reduced-motion setting) there is no flight: one still wide shot, a cut in
 // and a cut back.
+// The sweep out of the cave (2026-11-01: "when we step out of the cave, i
+// want a full camera sweep of the whole area. the whole map should be shown
+// artistically. also show animals hopping, people working, berry shrubs").
+// One smooth flight over the grown map, about 30 s: the camp, the plains and
+// their herd, the bear's knoll, Lookout Hill and the grassland, the Painted
+// Rocks, the lake, the sal forest, down the river and home. `fly` is where the
+// camera is, `gaze` what it looks at, keyed together; the gaze leads a little
+// so the shot always looks ahead of where it is going. The world keeps living
+// underneath (main.js 'cinema' mode): herds graze, hares hop, the band works.
 const REVEAL = {
-  rise: [new THREE.Vector3(26, 25, 13), new THREE.Vector3(30, 24, 16), new THREE.Vector3(36, 22, 20)],
-  // where the camera looks while it drifts: near camp and river, the valley
-  // floor, the plains, then down the valley to the south. (The waterfall is
-  // not on the path: the reveal always plays in the ice age, when the falls
-  // are a frozen curtain lost in the cold haze from up here.)
-  look: [
-    new THREE.Vector3(44, 9, 30), new THREE.Vector3(62, 6, 52),
-    new THREE.Vector3(96, 8, 50), new THREE.Vector3(84, 6, 98),
-  ],
+  fly: [
+    [30, 26, 16], [62, 30, 34], [118, 33, 30], [176, 36, 40], [214, 33, 84],
+    [210, 31, 150], [168, 30, 214], [104, 33, 208], [44, 33, 168], [40, 31, 96], [36, 26, 44],
+  ].map((v) => new THREE.Vector3(...v)),
+  gaze: [
+    [44, 9, 30], [96, 8, 50], [150, 11, 44], [204, 17, 40], [202, 13, 100],
+    [190, 7, 190], [150, 8, 192], [82, 12, 192], [56, 9, 150], [60, 8, 80], [40, 10, 28],
+  ].map((v) => new THREE.Vector3(...v)),
+  SWEEP_MS: 24500,
   still: { pos: new THREE.Vector3(30, 24, 15), look: new THREE.Vector3(66, 6, 58) },
 };
 
 export async function valleyReveal(G, { gentle = false } = {}) {
   const cam = G.renderer.camera;
   const prevMode = G.mode;
-  G.mode = 'ui';
+  G.mode = 'cinema'; // the world lives on, the player and camera are ours
   G.input.setEnabled(false);
   G.hud.hidePrompt();
   const boxEl = document.createElement('div');
   boxEl.className = 'sky-letterbox';
+  // a small Skip after 2 s (a tap anywhere skips too)
+  const skipEl = document.createElement('button');
+  skipEl.className = 'reveal-skip';
+  skipEl.textContent = S.ui.skipSweep;
+  G.hud.root.appendChild(skipEl);
   G.hud.root.appendChild(boxEl);
 
   // Where the rig wants the camera when we hand back: let syncCamera place
@@ -139,7 +154,7 @@ export async function valleyReveal(G, { gentle = false } = {}) {
   const skip = (e) => { if (armed && !e.repeat) skipped = true; };
   window.addEventListener('keydown', skip);
   window.addEventListener('pointerdown', skip);
-  const armTimer = setTimeout(() => { armed = true; }, 1000);
+  const armTimer = setTimeout(() => { armed = true; skipEl.classList.add('on'); }, 2000);
 
   try {
     if (gentle) {
@@ -148,8 +163,8 @@ export async function valleyReveal(G, { gentle = false } = {}) {
       const t0 = performance.now();
       while (!skipped && performance.now() - t0 < 3500) await wait(100);
     } else {
-      const path = new THREE.CatmullRomCurve3(REVEAL.rise);
-      const gaze = new THREE.CatmullRomCurve3(REVEAL.look);
+      const path = new THREE.CatmullRomCurve3(REVEAL.fly, false, 'centripetal');
+      const gaze = new THREE.CatmullRomCurve3(REVEAL.gaze, false, 'centripetal');
       const pos = new THREE.Vector3(), at = new THREE.Vector3(), q = new THREE.Quaternion();
       // 1. lift off the shoulder to the first viewpoint, already turning to
       //    the valley (3.2 s)
@@ -162,12 +177,12 @@ export async function valleyReveal(G, { gentle = false } = {}) {
         cam.position.lerpVectors(from, firstPos, k);
         cam.quaternion.slerpQuaternions(fromQ, firstQ, k);
       }, () => skipped);
-      // 2. the slow pan: drift along the cliff edge while the gaze sweeps the
-      //    valley (8 s, eased so it starts and ends without a jolt)
+      // 2. the flight over the whole map, eased at both ends; the gaze runs
+      //    a little ahead of the camera along its own curve
       if (!skipped) {
-        await tween(8000, (t) => {
+        await tween(REVEAL.SWEEP_MS, (t) => {
           const k = ease(t);
-          path.getPoint(k, pos); gaze.getPoint(k, at);
+          path.getPoint(k, pos); gaze.getPoint(Math.min(1, k + 0.03), at);
           cam.position.copy(pos);
           cam.quaternion.copy(quatLooking(pos, at, q));
         }, () => skipped);
@@ -189,6 +204,7 @@ export async function valleyReveal(G, { gentle = false } = {}) {
     window.removeEventListener('keydown', skip);
     window.removeEventListener('pointerdown', skip);
     boxEl.remove();
+    skipEl.remove();
     G.player.syncCamera();
     G.input.setEnabled(true);
     G.mode = prevMode;

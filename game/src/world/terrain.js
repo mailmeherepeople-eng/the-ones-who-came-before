@@ -1,7 +1,7 @@
 // Deterministic valley terrain. One valley, one river, a north cliff with a
 // rock shelter, plains east, meadow west (design doc §4).
 import { WORLD } from '../constants.js';
-import { B, isOpaque } from './blocks.js';
+import { B, isOpaque, isSolid, isCross } from './blocks.js';
 
 const { SIZE_X: SX, SIZE_Z: SZ, SIZE_Y: SY, WATER_LEVEL } = WORLD;
 
@@ -24,7 +24,9 @@ export const SITES = {
     { x: 24, z: 44 }, { x: 28, z: 52 }, { x: 22, z: 58 }, { x: 32, z: 62 },
     { x: 26, z: 68 }, { x: 34, z: 48 },
   ],
-  shells: [{ x: 56, z: 40 }, { x: 58, z: 52 }, { x: 54, z: 63 }],
+  // three shells along the river, near, middle and far (2026-11-01: "spread
+  // things out ... same with the deer, the shells")
+  shells: [{ x: 67, z: 44 }, { x: 52, z: 112 }, { x: 64, z: 178 }],
   plains: { x: 96, z: 48 }, // herds
   // the archer's mark at the training post (games/range.js). Its lanes run
   // east over flat ground (height 10 from x 84 to 116, z 34 to 39)
@@ -47,7 +49,32 @@ export const SITES = {
   timelineHomes: { x: 89, z: 49 }, // visible in the portrait sky camera, away from the old mound
   timelineMarket: { x: 86, z: 65 },
   timelineFields: { x: 95, z: 83 },
+  // the land beyond the old valley (2026-11-01: "more to explore + room to hunt.
+  // give some place for kids to roam around"). Shapes in NEW_LAND below.
+  grassland: { x: 176, z: 70 },     // open, gently rolling: room to stalk a herd
+  lookoutHill: { x: 204, z: 38 },   // the high point, a view over the whole valley
+  paintedRocks: { x: 202, z: 98 },  // before the big west shelter of the Painted Rocks (ROCK_SHELTERS)
+  lake: { x: 190, z: 192 },
+  salForest: { x: 80, z: 192 },
 };
+
+// The new land's shapes. None of it reaches the old valley (x and z under
+// WORLD.CORE_SIZE), whose heights regression.mjs locks.
+export const NEW_LAND = {
+  grass: { x0: 150, x1: 198, z0: 26, z1: 150 },
+  lookout: { x: 204, z: 38, r: 19, rise: 11 },
+  rocks: { x0: 186, x1: 219, z0: 74, z1: 124 },
+  lake: { x: 190, z: 192, rx: 23, rz: 17 },
+  // the sal stand: an ellipse with a ragged edge (forestCore), thinning to
+  // scattered young trees outside it
+  forest: { x: 78, z: 193, rx: 62, rz: 25 },
+};
+
+// The bear's den (carveBearDen): a standable cell in the chamber, and the
+// standable cell just outside the mouth, which looks south-west at the trail
+// from the plains to the grassland. y is the standing height inside.
+SITES.bearCave = { x: 151, z: 41, y: groundHeight(151, 41) + 1 };
+SITES.bearCaveMouth = { x: 146, z: 46 };
 
 // ---- tiny deterministic value noise ----
 function hash2(x, z) {
@@ -75,16 +102,40 @@ export function groundHeight(x, z) {
   // valley dip toward the river
   const dr = Math.abs(x - riverX(z));
   h -= Math.max(0, 3.2 - dr * 0.35);
-  // edge hills
-  // Old boundary ridges stay in place; their far slopes lead to the new land.
+  // edge hills, at the world's outer edge only (west, east, south; the north
+  // is the cliff). The old valley's own east and south ridges, where the world
+  // used to end at 128, are gone (2026-11-01: "there is an unnecessary ridge
+  // where the old boundary used to be. that needs to go"), so the valley runs
+  // straight on into the new land.
   const core = WORLD.CORE_SIZE;
-  const ex = x < core ? Math.min(x, core - 1 - x) : Math.min(SX - 1 - x, x - core);
-  const ez = z < core ? core - 1 - z : Math.min(SZ - 1 - z, z - core);
+  const ex = Math.min(x, SX - 1 - x), ez = SZ - 1 - z;
   if (ex < 10) h += (10 - ex) * 0.55;
   if (ez < 10) h += (10 - ez) * 0.5;
   // north cliff
   if (z < 18) h += (18 - z) * 1.15;
+  if (x >= core || z >= core) h += newLandRise(x, z, n);
+  // the two southern corners: the edge ridges meet as the taller of the two,
+  // not their sum, which stood up as a stepped pyramid
+  if (ex < 10 && ez < 10) h -= Math.min((10 - ex) * 0.55, (10 - ez) * 0.5);
   return Math.max(2, Math.min(SY - 4, Math.round(h)));
+}
+
+// soft membership in a rectangle: 1 inside, easing to 0 over `edge` blocks
+function inRect(x, z, r, edge = 8) {
+  const d = Math.max(r.x0 - x, x - r.x1, r.z0 - z, z - r.z1);
+  return d <= 0 ? 1 : d >= edge ? 0 : 1 - smooth(d / edge);
+}
+// what the new land adds to the base height (never the old valley)
+function newLandRise(x, z, n) {
+  let dh = 0;
+  // the grassland rolls gently: most of the noise taken out
+  dh -= (n - 1.6) * 0.75 * inRect(x, z, NEW_LAND.grass);
+  // Lookout Hill: a broad cone, about one block of rise per block or less
+  const L = NEW_LAND.lookout, dl = Math.hypot(x - L.x, z - L.z);
+  if (dl < L.r) dh += L.rise * smooth(1 - dl / L.r);
+  // the Painted Rocks stand on a low sandstone shelf
+  dh += 1.6 * inRect(x, z, NEW_LAND.rocks, 6);
+  return dh;
 }
 
 /**
@@ -140,12 +191,375 @@ export function buildBase(world, opts = {}) {
     }
   }
 
+  carveLake(world, ice);
   carveShelter(world);
   carveFossilCliff(world);
   carveWaterfall(world);
   scatterVegetation(world, lush, ice);
   carveTrainingCave(world, ice);
+  raisePaintedRocks(world, ice);
+  carveBearDen(world, ice);
+  layTrails(world);
+  plantSalForest(world, ice);
   dressOutlands(world, lush, ice);
+  collectWaterEdges(world);
+}
+
+// ---- the lake (south-east) -----------------------------------------------------
+// A wide, shallow lake with sand shores that step up one block at a time, so
+// every edge can be walked in and out of. In the ice age a shelf of ice rims
+// it and the middle stays open, like the river.
+function carveLake(world, ice) {
+  const K = NEW_LAND.lake;
+  for (let z = K.z - K.rz * 2; z <= K.z + K.rz * 2; z++) {
+    for (let x = K.x - K.rx * 2; x <= K.x + K.rx * 2; x++) {
+      if (x < 0 || x >= SX || z < 0 || z >= SZ) continue;
+      const wob = (noise2(x * 0.15 + 3.1, z * 0.15 + 8.4) - 0.5) * 0.25;
+      const e = ((x - K.x) / K.rx) ** 2 + ((z - K.z) / K.rz) ** 2 + wob;
+      const h0 = world.topAt(x, z);
+      if (e < 1) {
+        const bed = WATER_LEVEL - (e < 0.55 ? 3 : 2);
+        for (let y = 0; y < SY; y++) {
+          world.setRaw(x, y, z, y < bed - 2 ? B.STONE : y < bed ? B.DIRT : y === bed ? B.SAND : y <= WATER_LEVEL ? B.WATER : B.AIR);
+        }
+        if (ice && e > 0.5 && hash2(x * 5 + 3, z * 3 + 1) < 0.85) world.setRaw(x, WATER_LEVEL, z, B.ICE);
+      } else if (e < 1.9) {
+        // the shore: at most one block above the water at the edge, then one
+        // more block per step outward, never above the land around it
+        const cap = WATER_LEVEL + 1 + Math.floor((e - 1) * 5);
+        if (h0 > cap) setSurface(world, x, z, cap, e < 1.35 ? B.SAND : B.GRASS, B.DIRT);
+      }
+    }
+  }
+}
+
+// ---- bedded sandstone: the Painted Rocks, outcrops, the bear's knoll ----------
+// Sandstone weathers along its beds: horizontal layers one to three blocks
+// thick, each a little offset from the one below. Where a soft bed wears back
+// under a hard one the upper bed juts out, and that is an overhang, a mushroom
+// rock or a rock shelter (Bhimbetka). A tor is a stack of such beds; T.prof(h,
+// H) is a bed's width (1 = full) at h blocks over the base. Every cell it lays
+// goes into `cells` (index -> bed number) so paintBeds can colour it after the
+// shelters are cut.
+const DIRS = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] };
+function raiseTor(world, T, cells) {
+  const top = Math.min(22, T.base + T.H);
+  for (let y = T.base, k = 0; y <= top; k++) {
+    const y1 = Math.min(top, y + Math.floor(hash2(T.seed + k * 7, 31) * 3));
+    const f = T.prof((y + y1) / 2 - T.base, top - T.base) * (0.92 + hash2(T.seed + k * 5, 37) * 0.16);
+    const ox = k ? (hash2(T.seed + k * 11, 41) - 0.5) * 3.2 : 0, oz = k ? (hash2(T.seed + k * 13, 43) - 0.5) * 3.2 : 0;
+    const ax = T.rx * f, az = T.rz * f;
+    for (let dz = -Math.ceil(az + 2); dz <= az + 2; dz++) for (let dx = -Math.ceil(ax + 2); dx <= ax + 2; dx++) {
+      const u = Math.abs(dx - ox) / ax, v = Math.abs(dz - oz) / az;
+      const X = T.x + dx, Z = T.z + dz;
+      if ((u ** 2.6 + v ** 2.6) ** (1 / 2.6) + (noise2(X * 0.4 + T.seed, Z * 0.4 + y * 0.9) - 0.5) * 0.35 >= 1) continue;
+      // the lowest bed is seated on the ground wherever the ground is lower
+      const from = k ? y : Math.min(y, world.topAt(X, Z) + 1);
+      for (let yy = from; yy <= y1; yy++) { world.setRaw(X, yy, Z, B.ROCK); cells.set(world.idx(X, yy, Z), k); }
+    }
+    y = y1 + 1;
+  }
+}
+// colour by orientation: pale weathered tops, beds alternating rose and buff
+// on the faces (so the layers read), dark undersides and the odd dark streak
+// where water runs down a face
+function paintBeds(world, cells, P) {
+  for (const [i, k] of cells) {
+    const x = i % SX, z = Math.floor(i / SX) % SZ, y = Math.floor(i / (SX * SZ));
+    if (!isOpaque(world.get(x, y, z))) continue;
+    let id;
+    if (!isOpaque(world.get(x, y + 1, z))) id = P.top;
+    else if (!isOpaque(world.get(x, y - 1, z))) id = P.under;
+    else id = hash2(x * 7 + z * 3, 17) < 0.07 ? P.under : P.faces[k % 2];
+    world.setRaw(x, y, z, id);
+  }
+}
+// a walk-in shelter cut into a tor's side under its jutting upper beds: a flat
+// floor at ground level, `h` of headroom, `d` deep, a flat roof two beds thick
+// out to the tor's widest bed, side walls only at the back so the front reads
+// as an overhang. Returns its ROCK_SHELTERS entry.
+function cutShelter(world, T, S, cells) {
+  const [dx, dz] = DIRS[S.face], px = -dz, pz = dx, hw = S.w >> 1, b = T.base;
+  const ax = T.x + px * S.off, az = T.z + pz * S.off;
+  let E = 0; // the roof's reach: the tor's last cell out over the shelter
+  const over = (t) => [0, 1, 2, 3].some((k) => cells.has(world.idx(ax + dx * t, b + S.h + k, az + dz * t)));
+  while (E < 20 && over(E + 1)) E++;
+  const back = E - S.d, ov = S.ov;
+  // a solid cell keeps its own bed's colour; a new one takes a bed by height
+  const put = (X, y, Z, id) => {
+    const i = world.idx(X, y, Z);
+    world.setRaw(X, y, Z, id);
+    if (id === B.AIR) cells.delete(i); else if (!cells.has(i)) cells.set(i, (y >> 1) & 1);
+  };
+  for (let q = -hw - 1; q <= hw + 1; q++) {
+    // the back wall curves: deepest on the centre line, shallower to the sides
+    const side = Math.abs(q) > hw, bq = back + Math.round((Math.abs(q) / (hw + 0.5)) ** 2 * 2);
+    for (let t = back; t <= E + 3; t++) {
+      const X = ax + dx * t + px * q, Z = az + dz * t + pz * q, k = hash2(X * 5 + t, Z * 3 + q);
+      if (t <= E) for (let y = b + S.h; y <= b + S.h + 1; y++) put(X, y, Z, B.ROCK); // the roof
+      const wallEnd = E - ov + (k < 0.4 ? 1 : 0);
+      if ((!side && t <= bq) || (side && t <= wallEnd)) { for (let y = b - 1; y < b + S.h; y++) put(X, y, Z, B.ROCK); continue; }
+      if (side) continue;
+      for (let y = b; y < b + S.h; y++) put(X, y, Z, B.AIR);
+      // the ceiling worn a block higher here and there (never on the centre line)
+      if (q && t < E - 1 && t > bq + 1 && k < 0.3) put(X, b + S.h, Z, B.AIR);
+      for (let y = b + S.h; t > E && y <= b + S.h + 2; y++) put(X, y, Z, B.AIR);
+      // a dusty floor, smoke-dark toward the back
+      world.setRaw(X, b - 1, Z, t <= bq + 2 && k < 0.6 ? B.ROCK_DARK : k < 0.35 ? B.SAND : B.STONE);
+      for (let y = b - 3; y < b - 1; y++) if (!isSolid(world.get(X, y, Z))) world.setRaw(X, y, Z, B.STONE);
+    }
+  }
+  const mid = back + Math.ceil(S.d / 2) + 1;
+  return {
+    x: ax + dx * mid, z: az + dz * mid, y: b, face: S.face,
+    wall: { x: ax + dx * back, z: az + dz * back }, w: 2 * hw + 1, depth: S.d, h: S.h,
+    mouth: { x: ax + dx * (E + 1), z: az + dz * (E + 1) },
+  };
+}
+
+// ---- the Painted Rocks (east) --------------------------------------------------
+// After Bhimbetka: a sandstone ridge running north to south, worn into four
+// tors that are plainly one mass (low saddles of the same beds join them).
+// Their upper beds jut out over softer ones, and seven walk-in shelters sit
+// under the overhangs. The middle tor is the tallest, and stands over the
+// scrub and trees crowding the ridge's foot. SITES.paintedRocks is the ground
+// just outside the big west shelter.
+// ROCK_SHELTERS entries (for whatever paints them later), all cell coordinates:
+//   x, z, y   a floor cell in the middle of the shelter; y is the standing
+//             height (the first air block over the floor)
+//   face      'n' | 's' | 'e' | 'w': the way the back wall's face looks, which
+//             is out through the mouth
+//   wall      { x, z } the back wall's column on the centre line (solid from
+//             y to y + h - 1); the ceiling is y + h, solid over the whole floor
+//   w, depth, h   inside width, depth from the roof's edge on the centre
+//             line (the back wall curves forward toward the sides), headroom
+//   mouth     { x, z } the first cell outside the roof's edge, on the centre line
+export const ROCK_SHELTERS = [];
+const TORS = [
+  { x: 199, z: 81, rx: 6, rz: 8, H: 10, seed: 401, sh: [{ face: 'w', off: 0, w: 5, d: 6, h: 3, ov: 3 }, { face: 'n', off: 0, w: 5, d: 5, h: 3, ov: 3 }] },
+  { x: 210, z: 98, rx: 7.5, rz: 9, H: 12, seed: 433, sh: [{ face: 'w', off: 0, w: 7, d: 7, h: 4, ov: 4 }, { face: 's', off: -1, w: 5, d: 6, h: 3, ov: 3 }] },
+  { x: 201, z: 112, rx: 6, rz: 7, H: 10, seed: 467, sh: [{ face: 'w', off: 1, w: 5, d: 6, h: 3, ov: 3 }, { face: 'e', off: 2, w: 5, d: 5, h: 3, ov: 3 }] },
+  { x: 207, z: 122, rx: 5, rz: 4.5, H: 8, seed: 491, sh: [{ face: 'w', off: 0, w: 5, d: 5, h: 3, ov: 3 }] },
+];
+// plinth, a soft waist the shelters are cut into, the hard jutting cap, a
+// smaller crown
+const torProfile = (h, H) => (h < 1.5 ? 0.82 : h < 4.5 ? 0.6 : h < H - 1.5 ? (h > H * 0.62 && h < H * 0.78 ? 0.86 : 1.02) : 0.7);
+function raisePaintedRocks(world, ice) {
+  ROCK_SHELTERS.length = 0;
+  const cells = new Map();
+  for (const T of TORS) T.base = groundHeight(T.x, T.z) + 1;
+  // the saddles first, so the tors' own beds sit over them
+  for (let i = 1; i < TORS.length; i++) {
+    const a = TORS[i - 1], c = TORS[i], L = Math.hypot(c.x - a.x, c.z - a.z);
+    for (let s = 0; s <= L; s += 0.5) {
+      const mx = a.x + (c.x - a.x) * s / L, mz = a.z + (c.z - a.z) * s / L;
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        const d = Math.hypot(dx, dz), X = Math.round(mx + dx), Z = Math.round(mz + dz);
+        if (d > 3) continue;
+        const g = world.topAt(X, Z), top = Math.min(a.base, c.base) + (d < 1.5 ? 1 : 0);
+        for (let y = g + 1; y <= top; y++) { world.setRaw(X, y, Z, B.ROCK); cells.set(world.idx(X, y, Z), y & 1); }
+      }
+    }
+  }
+  for (const T of TORS) raiseTor(world, { ...T, prof: torProfile }, cells);
+  for (const T of TORS) for (const S of T.sh) ROCK_SHELTERS.push(cutShelter(world, T, S, cells));
+  paintBeds(world, cells, { top: B.STRATA_D, under: B.ROCK_DARK, faces: [B.ROCK, B.STONE] });
+  // the ground in front of each mouth is graded to its floor, a block a step
+  for (const s of ROCK_SHELTERS) {
+    const [dx, dz] = DIRS[s.face], px = -dz, pz = dx;
+    for (let t = 1; t <= 5; t++) for (let q = -3; q <= 3; q++) {
+      const X = s.mouth.x + dx * t + px * q, Z = s.mouth.z + dz * t + pz * q;
+      if (cells.has(world.idx(X, world.topAt(X, Z), Z))) continue;
+      const g = world.topAt(X, Z), want = Math.max(s.y - 1 - t, Math.min(s.y - 1 + t, g));
+      if (g !== want) setSurface(world, X, Z, want, B.GRASS, B.DIRT);
+    }
+  }
+  // scrub crowding the foot of the ridge: babul, young sal, the odd peepal,
+  // fallen blocks; never in front of a shelter
+  const mouthClear = (x, z) => ROCK_SHELTERS.some((s) => Math.abs(x - s.mouth.x) < 5 && Math.abs(z - s.mouth.z) < 5);
+  const trunks = [];
+  for (const T of TORS) for (let i = 0; i < 16; i++) {
+    const a = hash2(T.seed + i * 3, 61) * Math.PI * 2, r = Math.max(T.rx, T.rz) + 2 + hash2(T.seed + i * 5, 67) * 6;
+    const x = Math.round(T.x + Math.cos(a) * r), z = Math.round(T.z + Math.sin(a) * r);
+    if (mouthClear(x, z) || trunks.some((t) => Math.abs(t.x - x) < 3 && Math.abs(t.z - z) < 3)) continue;
+    const h = plantableAt(world, x, z);
+    if (h < 0) continue;
+    const k = hash2(T.seed + i * 7, 71);
+    trunks.push({ x, z });
+    if (k < 0.25) boulder(world, x, h, z, 1 + Math.floor(hash2(x, z) * 2), B.ROCK);
+    else if (ice) { if (k < 0.75) placeSnag(world, x, h + 1, z, 3 + Math.floor(k * 3)); }
+    else if (k < 0.6) placeAcacia(world, x, h + 1, z, 3 + Math.floor(k * 3));
+    else if (k < 0.85) placeSalTall(world, x, h + 1, z, false, false);
+    else placePeepal(world, x, h + 1, z, 4);
+    if (hash2(x * 3, z * 5) < 0.5) shrub(world, x + 2, z + 1, ice);
+  }
+}
+
+// ---- the bear's den -----------------------------------------------------------
+// A dark knoll of the same sandstone on the walk from the plains east to the
+// grassland, its south-west face cut flat with a den in it: a mouth three wide
+// and three tall, a passage and a round chamber the bear stands up in. The
+// murram trail passes the mouth. SITES.bearCave (inside) and bearCaveMouth.
+function carveBearDen(world, ice) {
+  const C = SITES.bearCave, b = C.y, ox = -Math.SQRT1_2, oz = Math.SQRT1_2; // out of the mouth: south-west
+  const cells = new Map();
+  raiseTor(world, { x: C.x + 1, z: C.z - 1, rx: 8, rz: 8, base: b, H: 7, seed: 977, prof: (h, H) => (h < 1 ? 1 : h < H - 1.5 ? 0.9 : 0.62) }, cells);
+  for (let z = C.z - 12; z <= C.z + 12; z++) for (let x = C.x - 12; x <= C.x + 12; x++) {
+    const vx = x - C.x, vz = z - C.z, along = vx * ox + vz * oz, perp = Math.abs(vx * -oz + vz * ox);
+    if (along > 4.6) { // the cut face: the knoll ends here, and the ground runs on
+      for (let y = b; y < SY; y++) if (cells.has(world.idx(x, y, z))) { world.setRaw(x, y, z, B.AIR); cells.delete(world.idx(x, y, z)); }
+      continue;
+    }
+    if (Math.hypot(vx, vz) < 2.9 || (along > 0 && perp < 1.6)) {
+      for (let y = b; y <= b + 2; y++) { world.setRaw(x, y, z, B.AIR); cells.delete(world.idx(x, y, z)); }
+      world.setRaw(x, b - 1, z, B.ROCK_DARK);
+      for (let y = b + 3; y <= b + 4; y++) if (!cells.has(world.idx(x, y, z))) { world.setRaw(x, y, z, B.ROCK); cells.set(world.idx(x, y, z), 0); }
+    }
+  }
+  paintBeds(world, cells, { top: B.STONE, under: B.ROCK_DARK, faces: [B.ROCK_DARK, B.STONE] });
+  // inside, every wall is dark
+  for (let z = C.z - 6; z <= C.z + 6; z++) for (let x = C.x - 6; x <= C.x + 6; x++) {
+    for (let y = b; y <= b + 3; y++) if (cells.has(world.idx(x, y, z)) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => world.get(x + dx, y, z + dz) === B.AIR && Math.hypot(x + dx - C.x, z + dz - C.z) < 6)) world.setRaw(x, y, z, B.ROCK_DARK);
+  }
+  // the apron: the ground before the face graded to the den floor
+  for (let t = 5; t <= 10; t++) for (let q = -3; q <= 3; q++) {
+    const X = Math.round(C.x + ox * t - oz * q), Z = Math.round(C.z + oz * t + ox * q);
+    const g = world.topAt(X, Z), want = Math.max(b - 1 - (t - 5), Math.min(b - 1 + (t - 5), g));
+    if (g !== want || cells.has(world.idx(X, g, Z))) setSurface(world, X, Z, want, ice ? B.SNOWGRASS : B.GRASS, B.DIRT);
+    if (t < 7) world.setRaw(X, want, Z, B.PATH);
+  }
+  // a babul on the knoll and brush round its shoulders, so it reads as a place
+  const ky = world.topAt(C.x + 3, C.z - 3);
+  if (!ice) placeAcacia(world, C.x + 3, ky + 1, C.z - 3, 3);
+  for (const [dx, dz] of [[-5, -5], [6, 2], [2, 6], [-6, 1]]) shrub(world, C.x + dx, C.z + dz, ice);
+}
+
+// ---- the trail -------------------------------------------------------------------
+// A beaten murram track from the old valley's edge east past the bear's den to
+// the grassland, the Painted Rocks and the lake: broken, a block or two wide.
+const TRAILS = [
+  [[128, 52], [140, 52], [145, 50], [158, 58], [176, 68], [189, 82], [196, 96]],
+  [[176, 68], [172, 100], [176, 140], [172, 168]],
+];
+function layTrails(world) {
+  for (const T of TRAILS) for (let i = 1; i < T.length; i++) {
+    const [ax, az] = T[i - 1], [cx, cz] = T[i], L = Math.hypot(cx - ax, cz - az);
+    for (let s = 0; s <= L; s += 0.5) {
+      const w = (noise2(ax + s * 0.12, az * 0.3) - 0.5) * 3;
+      const x = Math.round(ax + (cx - ax) * s / L - (cz - az) / L * w), z = Math.round(az + (cz - az) * s / L + (cx - ax) / L * w);
+      for (const [dx, dz] of [[0, 0], [1, 0], [0, 1]]) {
+        if ((dx || dz) && hash2(x * 3 + dx, z * 5 + dz) < 0.6) continue;
+        if (hash2(x + dx, z * 7 + dz) < 0.18) continue;
+        const h = world.topAt(x + dx, z + dz), id = world.get(x + dx, h, z + dz);
+        if (id !== B.GRASS && id !== B.SNOWGRASS && id !== B.DIRT) continue;
+        world.setRaw(x + dx, h, z + dz, B.PATH);
+        if (isCross(world.get(x + dx, h + 1, z + dz))) world.setRaw(x + dx, h + 1, z + dz, B.AIR);
+      }
+    }
+  }
+}
+
+// ---- the sal forest (south) ------------------------------------------------------
+// A real sal wood: tall straight trunks on a loose grid five to nine apart, so
+// the trunks read as a colonnade and the crowns meet in one canopy, with grassy
+// clearings left on purpose and the river running through. Leaf litter and a
+// little low growth under the trees. In the ice age it is mostly dead poles,
+// with the odd dark crown.
+const CLEARINGS = [{ x: 84, z: 190, r: 10 }, { x: 36, z: 186, r: 8 }, { x: 122, z: 202, r: 8 }, { x: 58, z: 206, r: 6 }];
+function forestCore(x, z) { // above 0 inside the stand, falling off outside
+  const F = NEW_LAND.forest;
+  return 1 - (((x - F.x) / F.rx) ** 2 + ((z - F.z) / F.rz) ** 2) - (noise2(x * 0.07 + 9.1, z * 0.07 + 2.7) - 0.5) * 0.6;
+}
+function plantSalForest(world, ice) {
+  const F = NEW_LAND.forest, step = 7;
+  for (let gz = F.z - F.rz - 6, row = 0; gz <= F.z + F.rz + 6; gz += step, row++) {
+    for (let gx = F.x - F.rx - 6 + (row & 1) * 3.5; gx <= F.x + F.rx + 6; gx += step) {
+      const x = Math.round(gx + (hash2(gx * 3, gz * 7) - 0.5) * 3), z = Math.round(gz + (hash2(gx * 5, gz * 11) - 0.5) * 3);
+      const core = forestCore(x, z), r = hash2(x * 13, z * 17);
+      if (core < 0 && (core < -0.6 || r > 0.22)) continue;
+      if (CLEARINGS.some((c) => Math.hypot(x - c.x, z - c.z) < c.r)) continue;
+      if (Math.abs(x + 0.5 - riverX(z)) < SOLID_RIVER_CLEARANCE + 1) continue;
+      const big = core > 0.15 && r < 0.72;
+      const y = big ? plantable2(world, x, z) : plantableAt(world, x, z) + 1;
+      if (y <= 0) continue;
+      placeSalTall(world, x, y, z, big, ice);
+      // the forest floor: leaf litter, a fern or two, now and then a low bush
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        const X = x + dx, Z = z + dz, k = hash2(X * 7 + 1, Z * 3 + 2), h = world.topAt(X, Z);
+        if (Math.hypot(dx, dz) > 3.2 || world.get(X, h, Z) !== B.GRASS) continue;
+        const up = world.get(X, h + 1, Z);
+        if (up !== B.AIR && !isCross(up)) continue;
+        if (k < 0.45) world.setRaw(X, h, Z, B.DIRT);
+        if (k > 0.86) world.setRaw(X, h + 1, Z, ice ? B.DEADBUSH : B.FERN);
+        else if (k > 0.83 && Math.abs(X - riverX(Z)) > SOLID_RIVER_CLEARANCE) world.setRaw(X, h + 1, Z, ice ? B.BUSH_BARE : B.LEAVES_DARK);
+      }
+    }
+  }
+}
+// two by two cells of grass at one height, or within a block: the foot of a big trunk
+function plantable2(world, x, z) {
+  let lo = 99, hi = -1;
+  for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    const h = plantableAt(world, x + dx, z + dz);
+    if (h < 0) return -1;
+    lo = Math.min(lo, h); hi = Math.max(hi, h);
+  }
+  return hi - lo > 1 ? -1 : hi + 1;
+}
+// grass with nothing solid on it, above the water
+function plantableAt(world, x, z) {
+  if (x < 1 || z < 1 || x >= SX - 1 || z >= SZ - 1) return -1;
+  const h = world.topAt(x, z), up = world.get(x, h + 1, z);
+  if (h < WATER_LEVEL || world.get(x, h, z) !== B.GRASS || (up !== B.AIR && !isCross(up))) return -1;
+  return h;
+}
+
+// A sal: the lollipop on a pole. A straight clear bole for about three fifths
+// of the height (2x2 for a big tree, 1x1 for a young one), then a crown of
+// four or five lumpy clusters at different heights on short branch stubs, with
+// air between them and flat undersides: dark leaves under, mid green in the
+// body, light on top. The world is 24 tall, so a big tree is 12 to 15 blocks
+// (real sal 18 to 32 m). y is the first trunk block. In the ice age most are
+// dead poles with their stubs; the rest keep a dark crown with frost on top.
+function placeSalTall(world, x, y, z, big, ice) {
+  const r = (k) => hash2(x * 31 + k * 7, z * 17 + k * 13);
+  const H = Math.min(big ? 12 + Math.floor(r(1) * 4) : 8 + Math.floor(r(1) * 3), SY - y);
+  if (H < 6) return;
+  const bole = Math.round(H * 0.6), w = big ? 2 : 1, px = x + w / 2, pz = z + w / 2;
+  const bare = ice && r(2) < 0.72;
+  for (let yy = y - 1; yy <= y + H - (bare ? 2 + Math.floor(r(9) * 3) : 3); yy++) {
+    for (let dz = 0; dz < w; dz++) for (let dx = 0; dx < w; dx++) {
+      if (yy >= y || !isSolid(world.get(x + dx, yy, z + dz))) world.setRaw(x + dx, yy, z + dz, B.WOOD);
+    }
+  }
+  const clusters = [{ a: 0, d: 0, y: y + H - 3, rx: big ? 2.7 : 1.8, L: [0.9, 1, 0.74, 0.4] }];
+  const n = big ? 3 + (r(3) > 0.5 ? 1 : 0) : 2, span = Math.max(1, H - 5 - bole);
+  for (let i = 0; i < n; i++) {
+    clusters.push({
+      a: i * Math.PI * 2 / n + r(10 + i) * 1.2, d: big ? 2.4 + r(20 + i) * 1 : 1.5,
+      y: y + bole + 1 + Math.floor(((i + r(30 + i)) / n) * span), rx: big ? 2 + r(40 + i) * 0.6 : 1.4, L: [0.9, 1, 0.6],
+    });
+  }
+  for (const c of clusters) {
+    const cx = px + Math.cos(c.a) * c.d, cz = pz + Math.sin(c.a) * c.d;
+    // the branch stub out of the trunk, rising a block to the cluster
+    if (c.d) for (let k = w / 2 + 0.3; k <= c.d; k += 0.7) {
+      const bx = Math.floor(px + Math.cos(c.a) * k), bz = Math.floor(pz + Math.sin(c.a) * k);
+      leaf(world, bx, c.y - 2 + (k > c.d * 0.6 ? 1 : 0), bz, B.WOOD);
+    }
+    if (bare) continue;
+    for (let j = 0; j < c.L.length; j++) {
+      const R = c.rx * c.L[j], yy = c.y - 1 + j;
+      for (let Z = Math.floor(cz - R - 1); Z <= cz + R + 1; Z++) for (let X = Math.floor(cx - R - 1); X <= cx + R + 1; X++) {
+        const e = hash2(X * 7 + yy * 13, Z * 11 + yy);
+        if (Math.hypot(X + 0.5 - cx, Z + 0.5 - cz) > R + (e - 0.5) * 0.8) continue;
+        const topLayer = j === c.L.length - 1 || (j === c.L.length - 2 && e > 0.7);
+        const id = ice ? (topLayer && e > 0.35 ? B.ICE : B.LEAVES_DARK)
+          : j === 0 ? B.LEAVES_DARK : topLayer ? B.LEAVES_BRIGHT : B.LEAVES;
+        leaf(world, X, yy, Z, id);
+      }
+    }
+  }
 }
 
 // ---- the waterfall -----------------------------------------------------------
@@ -368,27 +782,150 @@ export function carveTrainingCave(world, ice = false) {
   }
 }
 
+// ---- the open country ---------------------------------------------------------
+// The new land between the places: savanna, not forest. Small groves and lone
+// trees (babul mostly, a peepal or banyan for a landmark, date palms by water),
+// boulders and a few low bedded outcrops, brush, fallen logs, and patches of
+// dry golden grass in the grassland. Fewer, readable things over dense noise:
+// a phone remeshes all of it on every era change.
+const OUTCROPS = [[164, 40, 4], [186, 56, 3], [142, 98, 3], [166, 128, 4], [150, 150, 3], [118, 150, 3], [212, 150, 4], [204, 168, 3], [216, 60, 3], [134, 214, 3]];
+function openCountry(x, z) {
+  if (x < WORLD.CORE_SIZE + 2 && z < WORLD.CORE_SIZE + 2) return false; // the old valley keeps its own
+  if (Math.abs(x - riverX(z)) < SOLID_RIVER_CLEARANCE || nearSite(x, z, 6)) return false;
+  const R = NEW_LAND.rocks, K = NEW_LAND.lake, D = SITES.bearCave;
+  if (x > R.x0 - 4 && x < R.x1 + 4 && z > R.z0 - 4 && z < R.z1 + 6) return false;
+  if (((x - K.x) / K.rx) ** 2 + ((z - K.z) / K.rz) ** 2 < 2.1) return false;
+  if (Math.hypot(x - D.x, z - D.z) < 12 || forestCore(x, z) > -0.25) return false;
+  return Math.hypot(x - NEW_LAND.lookout.x, z - NEW_LAND.lookout.z) > 4;
+}
 function dressOutlands(world, lush, ice) {
-  // New trees do not re-seed vegetation in the original valley.
-  for (let i=0;i<55;i++) {
-    const x=Math.floor(hash2(i+711,91)*(SX-12))+6;
-    const z=Math.floor(hash2(i+941,73)*(SZ-30))+24;
-    if (x<WORLD.CORE_SIZE+4 && z<WORLD.CORE_SIZE+4) continue;
-    if (Math.abs(x-riverX(z))<SOLID_RIVER_CLEARANCE || nearSite(x,z,5)) continue;
-    const h=grassTopAt(world,x,z);
-    if(h<0) continue;
-    if(ice) placeSnag(world,x,h+1,z,3);
-    else placeTree(world,x,h+1,z,3+Math.floor(lush*2));
+  const trunks = [];
+  const tree = (x, z, kind) => {
+    if (!openCountry(x, z) || trunks.some((t) => Math.abs(t.x - x) < 4 && Math.abs(t.z - z) < 4)) return;
+    const h = plantableAt(world, x, z);
+    if (h < 0) return;
+    trunks.push({ x, z });
+    const s = 3 + Math.floor(hash2(x * 3, z * 7) * 2);
+    if (ice) { if (kind !== 'palm' && hash2(x, z * 3) < 0.7) placeSnag(world, x, h + 1, z, s); return; }
+    if (kind === 'babul') placeAcacia(world, x, h + 1, z, s);
+    else if (kind === 'peepal') placePeepal(world, x, h + 1, z, s);
+    else if (kind === 'banyan') placeBanyan(world, x, h + 1, z, s);
+    else if (kind === 'palm') placePalm(world, x, h + 1, z, s);
+    else placeSalTall(world, x, h + 1, z, false, false);
+  };
+  const near = (x, z, p, r) => Math.hypot(x - p.x, z - p.z) < r;
+  const kindAt = (x, z, k) => (near(x, z, NEW_LAND.lake, 34) || Math.abs(x - riverX(z)) < 16 ? (k < 0.5 ? 'palm' : 'babul')
+    : k < 0.6 ? 'babul' : k < 0.78 ? 'peepal' : k < 0.86 ? 'banyan' : 'sal');
+  // groves of three to six
+  for (let i = 0; i < 70; i++) {
+    const gx = Math.floor(8 + hash2(i * 7 + 2001, 13) * (SX - 16)), gz = Math.floor(30 + hash2(i * 11 + 2003, 19) * (SZ - 40));
+    if (!openCountry(gx, gz)) continue;
+    const kind = kindAt(gx, gz, hash2(i, 2011));
+    for (let j = 0; j < 3 + Math.floor(hash2(i, 2017) * 4); j++) {
+      tree(gx + Math.round((hash2(i * 5 + j, 2027) - 0.5) * 12), gz + Math.round((hash2(i * 3 + j, 2029) - 0.5) * 12), kind === 'banyan' && j ? 'babul' : kind);
+    }
+  }
+  // lone trees
+  for (let i = 0; i < 80; i++) {
+    const x = Math.floor(6 + hash2(i * 13 + 2101, 23) * (SX - 12)), z = Math.floor(26 + hash2(i * 17 + 2111, 29) * (SZ - 32));
+    tree(x, z, kindAt(x, z, hash2(i, 2131)));
+  }
+  // low bedded outcrops, and boulders
+  for (const [x, z, H] of OUTCROPS) {
+    const cells = new Map();
+    raiseTor(world, { x, z, rx: H + 0.5, rz: H - 0.5, base: groundHeight(x, z) + 1, H, seed: x * 7 + z, prof: (h, HH) => (h < 1 ? 0.8 : h < HH - 1 ? 1 : 0.6) }, cells);
+    paintBeds(world, cells, { top: B.STRATA_D, under: B.ROCK_DARK, faces: [B.ROCK, B.STONE] });
+    shrub(world, x - H - 1, z + 1, ice); shrub(world, x + 1, z + H, ice);
+  }
+  for (let i = 0; i < 110; i++) {
+    const x = Math.floor(4 + hash2(i * 19 + 2201, 31) * (SX - 8)), z = Math.floor(24 + hash2(i * 23 + 2203, 37) * (SZ - 28));
+    if (!openCountry(x, z) || trunks.some((t) => Math.abs(t.x - x) < 3 && Math.abs(t.z - z) < 3)) continue;
+    const h = plantableAt(world, x, z), k = hash2(i, 2213);
+    if (h < 0) continue;
+    if (k < 0.4) boulder(world, x, h, z, 1 + Math.floor(hash2(i, 2221) * 3), hash2(i, 2223) < 0.5 ? B.ROCK : B.STONE);
+    else if (k < 0.85) shrub(world, x, z, ice);
+    else if (!ice) { // a fallen log on level ground
+      const ax = k > 0.92;
+      let ok = true;
+      for (let s = 0; s < 4 && ok; s++) ok = plantableAt(world, x + (ax ? s : 0), z + (ax ? 0 : s)) === h;
+      for (let s = 0; ok && s < 4; s++) world.setRaw(x + (ax ? s : 0), h + 1, z + (ax ? 0 : s), B.WOOD);
+    }
+  }
+  // dry golden grass in drifts over the grassland
+  const G = NEW_LAND.grass;
+  for (let z = G.z0 - 8; z <= G.z1 + 8; z++) for (let x = G.x0 - 12; x <= G.x1 + 8; x++) {
+    if (noise2(x * 0.08 + 71.3, z * 0.08 + 5.9) < 0.58 || hash2(x * 5 + 7, z * 3 + 1) > 0.3) continue;
+    const h = plantableAt(world, x, z);
+    if (h >= 0 && world.get(x, h + 1, z) === B.AIR) world.setRaw(x, h + 1, z, hash2(x, z * 9) < 0.55 ? B.DEADBUSH : B.TALLGRASS);
   }
   // A readable grove and a forageable meadow reward leaving the main route.
-  for (const [dx,dz] of [[-7,-4],[0,-7],[7,-3],[-6,5],[6,6]]) {
-    const x=SITES.eastGrove.x+dx,z=SITES.eastGrove.z+dz,h=grassTopAt(world,x,z);
-    if(h>=0) { if(ice)placeSnag(world,x,h+1,z,4); else placeTree(world,x,h+1,z,4); }
+  for (const [dx, dz] of [[-7, -4], [0, -7], [7, -3], [-6, 5], [6, 6]]) {
+    const x = SITES.eastGrove.x + dx, z = SITES.eastGrove.z + dz, h = grassTopAt(world, x, z);
+    if (h >= 0) { if (ice) placeSnag(world, x, h + 1, z, 4); else placeTree(world, x, h + 1, z, 4); }
   }
-  for(let i=0;i<16;i++) {
-    const x=SITES.southMeadow.x-9+(i*7)%19,z=SITES.southMeadow.z-7+(i*11)%15;
-    const h=grassTopAt(world,x,z);
-    if(h>=0)world.setRaw(x,h+1,z,i%3===0?B.SHRUB_BERRY:ice?B.SNOWTUFT:B.FLOWER_YELLOW);
+  for (let i = 0; i < 16; i++) {
+    const x = SITES.southMeadow.x - 9 + (i * 7) % 19, z = SITES.southMeadow.z - 7 + (i * 11) % 15;
+    const h = grassTopAt(world, x, z);
+    if (h >= 0) world.setRaw(x, h + 1, z, i % 3 === 0 ? B.SHRUB_BERRY : ice ? B.SNOWTUFT : B.FLOWER_YELLOW);
+  }
+}
+// a rounded lump of rock sunk a block into the ground, `s` 1 to 3 across
+function boulder(world, x, h, z, s, id) {
+  for (let dz = 0; dz < s; dz++) for (let dx = 0; dx < s; dx++) {
+    if ((dx === 0 || dx === s - 1) && (dz === 0 || dz === s - 1) && s > 2) continue;
+    const tall = s === 1 ? 1 : s === 2 ? 1 + (hash2(x + dx, z + dz) > 0.5 ? 1 : 0) : (dx === 1 && dz === 1 ? 2 : 1);
+    const g = world.topAt(x + dx, z + dz);
+    if (g < WATER_LEVEL || g > h + 1) continue;
+    for (let y = g; y <= g + tall; y++) world.setRaw(x + dx, y, z + dz, y === g ? B.ROCK_DARK : y === g + tall ? B.STRATA_D : id);
+  }
+}
+// brush: a block or two of dark leaves (not BUSH, whose red sides read as
+// berries) with a fern or dry tuft at its skirt; bare twigs in the ice age
+function shrub(world, x, z, ice) {
+  const h = plantableAt(world, x, z);
+  if (h < 0 || Math.abs(x - riverX(z)) < SOLID_RIVER_CLEARANCE) return;
+  const id = ice ? B.BUSH_BARE : B.LEAVES_DARK;
+  world.setRaw(x, h + 1, z, id);
+  const side = hash2(x * 3, z) > 0.5 ? 1 : -1;
+  if (plantableAt(world, x + side, z) === h) world.setRaw(x + side, h + 1, z, id);
+  if (!ice && hash2(x, z * 5) > 0.6) world.setRaw(x, h + 2, z, B.LEAVES);
+  if (plantableAt(world, x, z + 1) === h) world.setRaw(x, h + 1, z + 1, ice ? B.DEADBUSH : B.FERN);
+}
+
+// ---- where animals drink --------------------------------------------------------
+// WATER_EDGES: dry standable cells with open water one block away, round the
+// lake and along both river banks, the length of the map. Each is
+// { x, z, y, wx, wz }: the cell to stand in (y = the standing height, the
+// first air block), and the water cell (wx, WATER_LEVEL, wz) beside it. In the
+// ice age the lake's edge is its ice rim, so its points stand on the ice.
+export const WATER_EDGES = [];
+function collectWaterEdges(world) {
+  WATER_EDGES.length = 0;
+  const WL = WATER_LEVEL;
+  const edge = (x, z) => {
+    const h = world.topAt(x, z);
+    if (h < WL || h > WL + 1 || world.get(x, h + 1, z) === B.WATER || nearSite(x, z, 7)) return null;
+    if (isSolid(world.get(x, h + 1, z)) || isSolid(world.get(x, h + 2, z))) return null;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (world.get(x + dx, WL, z + dz) === B.WATER && world.get(x + dx, WL + 1, z + dz) === B.AIR) return { x, z, y: h + 1, wx: x + dx, wz: z + dz };
+    }
+    return null;
+  };
+  const K = NEW_LAND.lake;
+  for (let i = 0; i < 14; i++) {
+    const a = (i + 0.3) / 14 * Math.PI * 2;
+    for (let e = 0.6; e < 2.4; e += 0.05) {
+      const p = edge(Math.round(K.x + Math.cos(a) * K.rx * e), Math.round(K.z + Math.sin(a) * K.rz * e));
+      if (p) { WATER_EDGES.push(p); break; }
+    }
+  }
+  for (let z = 30, i = 0; z < SZ - 4; z += 11, i++) {
+    if (Math.abs(z - 37) < 5) continue; // the log crossing
+    const side = i & 1 ? 1 : -1, rx = Math.round(riverX(z));
+    for (let d = 1; d < 10; d++) {
+      const p = edge(rx + side * d, z);
+      if (p) { WATER_EDGES.push(p); break; }
+    }
   }
 }
 

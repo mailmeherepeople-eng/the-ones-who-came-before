@@ -17,7 +17,7 @@ import { B } from '../world/blocks.js';
 import { SITES, buildSceneA } from '../world/states.js';
 import { placeTree, riverX } from '../world/terrain.js';
 import { FX } from '../fx/fx.js';
-import { Npc, Animal } from '../npc/npc.js';
+import { Npc, Animal, setThreat } from '../npc/npc.js';
 import { AmbientLife, jobHunt, jobFish, jobGather, jobWood } from '../npc/ambient.js';
 import * as P from '../world/props.js';
 import { tween } from '../sky/interstitial.js';
@@ -30,6 +30,9 @@ import { objectiveCue, setBeacon, nearestSite, propAnchor } from '../ui/objectiv
 import { teach, refreshCodexBadge } from '../codex.js';
 import { needsOnboarding, runOnboarding, tutorialCheckpoint, dressTrainingShelter } from './onboarding.js';
 import { addTrainingPost } from '../games/range.js';
+import { installFreeBow } from '../games/freebow.js';
+import { installBear } from '../games/bear.js';
+import { WATER_EDGES } from '../world/terrain.js';
 import { installTaskBoard } from '../ui/taskboard.js';
 import {
   resetStage, addProp, groundY, CAVE_FLOOR_Y, lightFire, douseFires, setStations, addStations,
@@ -92,15 +95,20 @@ function dressSceneACold(world) {
 // cold valley ships with none at all.
 const WILD_BERRY_CLEAR = 5; // blocks kept free around any named site
 
-function scatterWildBerries(world, target = 110) {
+// 2026-11-01: 110 bushes in the old valley became 36 over the whole map
+// ("there are too many berry shrubs. reduce the number of berry shrubs and
+// scatter them through out the map"), kept at least 9 blocks apart.
+function scatterWildBerries(world, target = 36) {
   const sites = Object.values(SITES).flatMap((s) => (Array.isArray(s) ? s : [s]));
+  const placedAt = [];
   let placed = 0;
   // deterministic walk so a reload puts the same bushes in the same places
-  for (let i = 0; i < 6000 && placed < target; i++) {
+  for (let i = 0; i < 9000 && placed < target; i++) {
     let h = Math.imul(i ^ 0x9e3779b9, 2654435761);
     h = (h ^ (h >>> 15)) >>> 0;
-    const x = h % 128;
-    const z = (h >>> 7) % 128;
+    const x = 4 + (h % (WORLD.SIZE_X - 8));
+    const z = 4 + ((h >>> 9) % (WORLD.SIZE_Z - 8));
+    if (placedAt.some(([px, pz]) => Math.abs(px - x) < 9 && Math.abs(pz - z) < 9)) continue;
     if (z < 14) continue;                       // behind the shelter cliff
     if (Math.abs(x - riverX(z)) < 7) continue;  // leave the banks to the reeds
     if (sites.some((s) => Math.abs(x - s.x) <= WILD_BERRY_CLEAR && Math.abs(z - s.z) <= WILD_BERRY_CLEAR)) continue;
@@ -109,6 +117,7 @@ function scatterWildBerries(world, target = 110) {
     if (top !== B.GRASS && top !== B.SNOWGRASS) continue;
     if (world.get(x, gy + 1, z) !== B.AIR) continue;
     world.setRaw(x, gy + 1, z, B.SHRUB_BERRY);  // setRaw: pre-mesh, no dirty flag
+    placedAt.push([x, z]);
     placed++;
   }
   return placed;
@@ -399,25 +408,38 @@ export async function sceneA(G) {
   addProp(G, P.makeDriftwood(dwx, groundY(G, dwx, 48), 48, 0.6));
   addProp(G, P.makeDustMotes(SITES.shelter.x, 10, 16));
 
-  // deer herd on the plains + shells by the river
-  // Six, for a hunt that asks for three. Spooked deer scatter and drift back
-  // to their own home, so the margin is what stops a bad volley from leaving
-  // the player with nothing left to stalk.
-  // Ten now, spread wider, so the plains read as a herd worth crossing the
-  // valley for rather than a firing line. Animals beyond ~46 blocks of the
-  // camera skip their AI and hide (see Animal.update), and the plains sit 57
-  // blocks from camp, so the extra six are free for most of the act.
+  // Herds all over the map, not one herd on the plains (2026-11-01: "the
+  // animals need to be there around the map. not just on the left on one
+  // side" and "spread things out"). Small herds, each with its own home and
+  // its own nearest water (npc.js drinkSpots: they walk down to the lake and
+  // the river to drink). Hares hop about the open ground. A herd you scatter
+  // drifts back to its home, so the land never empties for good.
+  // 2026-11-01, round 2: "reduce the number of deer. make it so that players
+  // have to actually hunt and find animals". Nine deer in four small herds,
+  // none within 60 blocks of the training post, all wary; rabbits on the open
+  // ground, quicker and warier still.
+  const HERDS = [{ x: 176, z: 72, n: 3 }, { x: 104, z: 164, n: 2 }, { x: 200, z: 30, n: 2 }, { x: 26, z: 142, n: 2 }];
   const deer = [];
-  for (let i = 0; i < 10; i++) {
-    deer.push(new Animal(G.renderer.scene, {
-      kind: 'deer',
-      x: SITES.plains.x - 10 + (i % 5) * 5,
-      z: SITES.plains.z - 4 + Math.floor(i / 5) * 7 + (i % 3) * 2,
-      world: G.world, wander: 7,
-    }));
+  for (const h of HERDS) {
+    for (let i = 0; i < h.n; i++) {
+      const a = (i / h.n) * Math.PI * 2;
+      deer.push(new Animal(G.renderer.scene, {
+        kind: 'deer', x: h.x + Math.cos(a) * 3, z: h.z + Math.sin(a) * 3, world: G.world, wander: 8, drinkSpots: WATER_EDGES, wary: 14,
+      }));
+    }
   }
+  const HARES = [[124, 64], [140, 84], [186, 104], [92, 132], [50, 104], [134, 26], [170, 142], [60, 182]];
+  for (const [x, z] of HARES) {
+    deer.push(new Animal(G.renderer.scene, { kind: 'hare', x, z, world: G.world, wander: 6, drinkSpots: WATER_EDGES, wary: 9 }));
+  }
+  setThreat(G.player.pos);
   G.npcs.push(...deer);
   const postTargets = addTrainingPost(G); // by the crossing, on the way to the plains
+  // the bow anywhere it is in hand (games/freebow.js) and the bear in its den
+  const freeBow = installFreeBow(G, { deer, postTargets });
+  G.props.push(freeBow);
+  const bear = installBear(G, { den: SITES.bearCave, mouth: SITES.bearCaveMouth, fire: SITES.fire });
+  freeBow.addTarget(bear.target);
   const shells = addShells(G); // on the bank from the start; picking one starts the beads
   if (Save.getRecord('painting')) placePaintingMesh(G, Save.getRecord('painting').data.png, 1);
 
@@ -478,7 +500,7 @@ export async function sceneA(G) {
   if (training) await runOnboarding(G);
 
   await runCampTasks({
-    G, chest, chestAt: STORE_A, deer, postTargets, berryProps, elder, shells, visitors: null,
+    G, chest, chestAt: STORE_A, deer, postTargets, berryProps, elder, shells, visitors: null, freeBow, bear,
   });
 
   // --- depletion beat: why hunter-gatherers move ---
@@ -490,8 +512,10 @@ export async function sceneA(G) {
   wildBerryPatch.setBerries(false);
   G.interactables = G.interactables.filter(o => !String(o.id).startsWith('wild-'));
   for (const d of deer) {
-    // herds wander beyond the ridge — clamped inside world bounds
-    d.home = { x: Math.min(120, d.home.x + 22), z: Math.max(8, d.home.z - 24) };
+    if (d.downed) continue;
+    // the herds drift away, further out from the camp, inside the world
+    const ax = d.home.x - SITES.campA.x, az = d.home.z - SITES.campA.z, al = Math.hypot(ax, az) || 1;
+    d.home = { x: Math.max(6, Math.min(WORLD.SIZE_X - 6, d.home.x + (ax / al) * 30)), z: Math.max(8, Math.min(WORLD.SIZE_Z - 6, d.home.z + (az / al) * 30)) };
     d.wanderR = 3;
     d.goTo(d.home.x, d.home.z);
   }

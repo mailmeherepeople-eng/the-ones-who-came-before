@@ -7,6 +7,7 @@ export const S = {
   onboarding: {
     title: 'Your first steps', progress: (n,total) => `${n} of ${total}`,
     skip: 'Skip practice', help: 'Show me', retry: 'Return to this step',
+    fold: 'Hide the steps', unfold: 'Show the steps',
     helpTitle: 'Try it at your own pace', closeHelp: 'Let me try',
     complete: 'You did it!', selectTool: 'Choose a tool',
     equipAction: 'Equip', putAway: 'Put away', equipped: 'Equipped',
@@ -15,7 +16,7 @@ export const S = {
     equipNeededTouch: 'Your basket is put away. Tap Equip to hold it before picking berries.',
     wake: 'Sheltered stone above you. A little light reaches into the cave.',
     look: 'Look towards the circle of light.',
-    lookKey: 'Hold the mouse button and drag to look around.',
+    lookKey: 'Click the world once, then move the mouse to look around.',
     lookTouch: 'Drag across the world to look around.',
     forward: 'Walk into the circle of light.', forwardKey: 'Hold W or ↑ to walk forward. Release it to stop.',
     forwardTouch: 'Push the movement stick up. Let go to stop.',
@@ -23,7 +24,7 @@ export const S = {
     left: 'Now take a few steps to the left.', leftKey: 'Hold A or ←.', leftTouch: 'Push the movement stick left.',
     right: 'And a few steps to the right.', rightKey: 'Hold D or →.', rightTouch: 'Push the movement stick right.',
     jump: 'Follow the light over the fallen rock.', jumpKey: 'Face the rock. Move forward and press Space to jump over it.',
-    jumpTouch: 'Face the rock. Move forward and tap ↥ to jump over it.',
+    jumpTouch: 'Face the rock. Push the stick forward and tap Jump to go over it.',
     basket: 'Borrow your group’s basket.', basketKey: 'Walk close to the basket. Press E or click its prompt to pick it up.',
     basketTouch: 'Walk close to the basket. Tap its prompt to pick it up.',
     equip: 'Carrying it is different from holding it.', equipKey: 'Press Q or click Equip. Watch the basket appear in your hand.',
@@ -37,8 +38,8 @@ export const S = {
     campTouch: 'Follow the golden light. You can look around and explore along the way.',
     helpBody: 'Watch the control below, then try it yourself. There is no timer. If you have wandered away, return to this step for another try.',
     controls: 'Controls', controlsTitle: 'Make yourself at home',
-    controlsBody: 'Move: WASD or arrow keys. Look: hold a mouse button and drag. Jump: Space. Interact: E or Enter. Equip or put away: Q. Adjust the camera distance: mouse wheel.',
-    controlsTouch: 'Move with the movement stick. Drag the world to look. Tap ↥ to jump. Tap an object’s prompt to interact. Use Equip or Put away for your selected tool. Pinch the world to adjust the camera distance.',
+    controlsBody: 'Move: WASD or arrow keys. Look: move the mouse (click the world first). Jump: Space. Shoot: hold the left mouse button and let go. Dodge: Shift. Interact: E or Enter. Equip or put away: Q. Adjust the camera distance: mouse wheel.',
+    controlsTouch: 'Move with the movement stick. Drag the world to look. Tap Jump to jump. Tap an object’s prompt to interact. Use Equip or Put away for your selected tool. Pinch the world to adjust the camera distance.',
     gatherReady: 'You already have a basket. Keep it equipped and follow the light to the berry bushes. Gather 12 berries, put them in the open food box for everyone, then return the basket to the tool chest.',
   },
   discoveries: {
@@ -218,7 +219,7 @@ export const S = {
     zoomOutHint: 'Zoom out to rise into the sky',
     zoomInHint: 'Zoom in to return to the ground',
     joystickHint: 'Left: move · Right: look',
-    desktopHint: 'WASD to move · drag the mouse to look · Space to jump · E to interact · Q to equip · scroll to zoom',
+    desktopHint: 'WASD to move · click, then move the mouse to look · Space to jump · E to interact · Q to equip · scroll to zoom',
     objective: 'To do',
     evidence: 'Evidence',
     sourceCards: 'Source Cards',
@@ -234,8 +235,15 @@ export const S = {
     setRichNote: 'Moving shadows, cloud shadows and smoother edges. Turn this off if the game stutters on your phone.',
     setVivid: 'Vivid style',
     setVividNote: 'Bold storybook colours, the game\'s usual look. Turn this off for softer, realistic light.',
-    setLockCamera: 'Lock camera behind me',
-    setLockCameraNote: 'The camera swings around to stay behind you as you walk, so you do not have to keep dragging. Dragging still works whenever you want it.',
+    setLockCamera: 'Camera follows behind me (phone or tablet)',
+    setLockCameraNote: 'The camera swings round behind you as you walk, so you never have to keep dragging. Drag to look around; it settles back behind you soon after. Off: the camera stays where you leave it.',
+    dodge: 'Dodge',
+    skipSweep: 'Skip',
+    settingsTabs: { controls: 'Controls', display: 'Display', sound: 'Sound', play: 'Play', story: 'My story' },
+    setAimEyes: 'Aim the bow through my eyes',
+    setAimEyesNote: 'On: you see your hands on the bow. Off: the camera sits over your shoulder and you see yourself draw.',
+    setTouch: 'I am playing on a phone or tablet',
+    setTouchNote: 'On: a movement stick and buttons on the screen, and instructions about them. Off: keyboard and mouse.',
     talk: 'Talk',
   },
 
@@ -249,6 +257,7 @@ export const S = {
     waterskin: 'Waterskin',
     berry: 'Berries',
     meat: 'Meat',
+    rabbit: 'Rabbit',
     fish: 'Fish',
     firewood: 'Firewood',
   },
@@ -330,7 +339,7 @@ export const S = {
     huntSuccess: 'The hunt succeeds. The tribe eats tonight.',
     huntMiss: 'It bolts. Steady the aim in the centre of the ring, then release.',
     predatorNear: 'Something watches from the tall grass. Stay close to the fire after dark.',
-    predatorChase: 'RUN. It does not like the fire, get to camp!',
+    predatorChase: 'Run to the camp fire, or stand and fight!',
     predatorSafe: 'It turns away from the flames. The tribe pulls closer together.',
 
     obj_fish: 'Try the river. Tap when the float dips',
@@ -452,8 +461,11 @@ export const S = {
     storeLesson: "The tribe's tools belong to everyone. Take what the task needs. Bring it back for the next hands.",
     obj_store_bow: "Take the bow from the Community Chest",
     obj_store_rod: "Take the fishing rod from the Community Chest",
-    obj_huntN: (n, total) => `Hunt deer for the tribe (${n}/${total})`,
+    obj_huntN: (n, total) => `Hunt deer or rabbits for the tribe (${n}/${total} meat)`,
     obj_meatN: (n, total) => `Pick up the meat (${n}/${total})`,
+    obj_meatPick: (n, total) => `Pick up the meat where the deer fell (${n}/${total} in the store)`,
+    obj_meatHome: (n, total) => `Carry the meat to the store box (${n}/${total})`,
+    huntPracticeTip: 'The painted targets by the river are there if you want to practise first. Deer take two good arrows.',
     obj_depositBerries: 'Put the berries in the store box',
     obj_depositMeat: 'Put the meat in the store box',
     obj_depositFish: 'Put the fish in the store box',
@@ -470,6 +482,7 @@ export const S = {
     openStore: 'Open the store box',
     pickBerry: 'Pick berries',
     takeMeat: 'Take the meat',
+    takeRabbit: 'Take the rabbit',
     castLine: 'Cast a line',
 
     // Interact labels. The prompt used to be a bare emoji and the player had to
@@ -497,8 +510,8 @@ export const S = {
 
     // The second hunt, which is a ruse: it exists to walk the player out to
     // the plains, still carrying the bow, so the bear can appear far from camp.
-    moreMeat: 'One day of food is not a winter. The tribe asks you to go back out for more.',
-    obj_huntMore: 'Return to the plains and hunt for more meat',
+    moreMeat: 'One day of food is not a winter. The band asks you to go further out, east to the open grassland, for more.',
+    obj_huntMore: 'Head east to the open grassland for more meat',
     obj_returnBow: 'Put the bow back in the Community Chest',
     returnBowDone: 'You are still shaking, and you still hand it over. It was never yours to keep.',
   },
@@ -1066,16 +1079,17 @@ S.codex['4.28'].tells += ' Experts in literature and languages also help interpr
 S.reviewQuestions['4.20'] = {question:'Which plural of millennium is correct?',options:['Both millenniums and millennia','Only millenniums','Only millennia'],answer:0};
 S.reviewQuestions['4.51'] = {question:S.textbook.rolesQuestion,options:S.textbook.rolesOptions,answer:0};
 
-// The bow and the training post (games/bow.js, games/range.js, games/hunt.js).
+// The bow and the training post (games/bow.js, games/range.js, games/freebow.js).
 S.range = {
   drawBtn: 'Draw', drawSub: 'hold, then let go',
   hintTouch: 'Drag to aim. Hold Draw to pull the string back, then let go to shoot. A full pull flies straight and fast.',
-  hintKeys: 'Move the mouse to aim (if the view does not follow, click once, or drag). Hold Space or the right mouse button to pull the string back, then let go to shoot.',
+  hintKeys: 'Move the mouse to aim. Hold the left mouse button to pull the string back, then let go to shoot.',
   equipHint: 'Bow put away. Equip it again and your aim comes back.',
   obj_practice: 'Practise at the training post by the river',
   obj_practiceN: (n, total) => `Hit the painted targets (${n}/${total})`,
   practiceDone: 'A full pull flies true. The herd is out on the plains.',
-  hit: 'Hit!', bull: 'Centre!', straw: 'Straw', miss: 'Miss',
+  stepBack: 'Step back behind the red line to shoot',
+  hit: 'Hit!', bull: 'Centre!', straw: 'Straw', miss: 'Miss', down: 'Down!', hitAgain: 'Hit! Once more',
   plus: (n) => `+${n}`,
   streak: (n) => `${n} in a row! +5 a hit`,
   scoreLabel: (n) => `Score ${n}`,
@@ -1149,4 +1163,17 @@ S.tasks = {
     trade: 'Meet the visitors by the tents',
     fire: 'Sit with the tribe at the fire',
   },
+};
+
+// The great bear (games/bear.js), 2026-11-01: a boss with a home.
+S.bear = {
+  name: 'The Great Bear',
+  wakes: 'The Great Bear wakes',
+  oneMore: 'One more blow will finish you. Dodge when it rears up!',
+  dodged: 'Dodged!',
+  givesUp: 'It turns back to its den',
+  fire: 'It will not come near the fire',
+  wokeByFire: 'You wake by the fire, aching. The band pulled you back. Somewhere out east, the bear licks its wounds, whole again.',
+  slain: 'THE GREAT BEAR FALLS',
+  slainStory: 'The great bear lies still. One hunter, alone, against a bear: the band will tell this story around the fire for a long time.',
 };

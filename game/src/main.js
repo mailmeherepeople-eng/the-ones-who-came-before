@@ -86,7 +86,9 @@ const equipment = installEquipment(G);
 // settings -> live game state. subscribe() fires once immediately, so the
 // saved preference is applied at boot without duplicating the logic here.
 Settings.subscribe(() => {
-  G.player.lockCamera = Settings.get('lockCamera');
+  G.input.setTouch(Settings.get('touchControls'));
+  // the follow camera is a phone thing; on a computer the mouse is the camera
+  G.player.lockCamera = Settings.get('lockCamera') && G.input.isTouch;
   G.player.gentleCamera = Settings.get('gentleCamera');
   G.player.lookScale = Settings.get('sensitivity') ? 0.55 : 1;
   document.body.classList.toggle('large-text', Settings.get('largeText'));
@@ -136,6 +138,7 @@ export function clearStage(G) {
   G.npcs.length = 0;
   for (const p of G.props) {
     if (p.group) disposeGroup(G.renderer.scene, p.group);
+    else p.dispose?.(); // systems that own screen parts (games/bear.js, games/freebow.js)
   }
   G.props.length = 0;
 }
@@ -210,11 +213,18 @@ G.renderer.onFrame = (dt) => {
     // runtime, and this is the one place every prop is guaranteed to pass.
     for (const p of G.props) { if (!p._folded) foldIfStatic(p); p.update?.(dt); }
   }
+  // a cutscene flying over the world (sky/interstitial.js valleyReveal): the
+  // camera is the script's, but the herds, the hares and the band keep going
+  if (G.mode === 'cinema') {
+    for (const n of G.npcs) n.update?.(dt);
+    for (const p of G.props) p.update?.(dt);
+  }
   if (G.tick) G.tick(dt, inp);
   FX.update(dt);
   falls.group.visible = G.world.get(fallsLip.x, fallsLip.y, fallsLip.z) === B.WATER;
   if (falls.group.visible) falls.update(dt);
   G.mesher.flush(QUALITY.meshBudget);
+  G.mesher.cullFar(G.renderer.camera); // far chunks off for ground cameras (world/mesher.js)
 };
 
 // ---------- act flow ----------

@@ -10,7 +10,8 @@ import { foldStatic } from '../world/merge.js';
 
 // camera boom: desired follow distance (wheel/pinch adjusts within MIN..MAX),
 // orbit pivot height above the feet, and how far short of a wall hit to stop
-const CAM = { DIST: 4.6, MIN: 2.2, MAX: 7.5, PIVOT: 1.5, PAD: 0.3, HIDE_BELOW: 1.15 };
+const DODGE = { SPEED: 12.5, TIME: 0.26, COOL: 0.75, IFRAMES: 0.4 };
+const CAM = { DIST: 4.6, MIN: 2.2, MAX: 7.5, PIVOT: 1.5, PAD: 0.3, HIDE_BELOW: 1.15, SHOULDER_DIST: 2.8, SHOULDER_SIDE: 0.85 };
 
 // ---- camera feel (docs/CHANGELOG.md section 20) ----
 // Rest FOV, and how far it opens while running: speed reads as speed.
@@ -241,9 +242,16 @@ export class Player {
       this._blobShadow.material.opacity = Math.max(0, 0.19 * (1 - height / 3));
     }
     const hs = Math.hypot(this.vel.x, this.vel.z);
+    if (this.aimHeld) {
+      // the archer faces the aim, whichever way the feet are going
+      let d = Math.atan2(Math.sin(this.yaw), -Math.cos(this.yaw)) + (this._pose?.side ?? 0) - this._modelYaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      this._modelYaw += d * Math.min(1, 16 * dt);
+    }
     if (hs > 0.6) {
       // face where we're going (shortest-arc lerp, matches NPC yaw feel)
-      const want = Math.atan2(this.vel.x, this.vel.z);
+      const want = this.aimHeld ? this._modelYaw : Math.atan2(this.vel.x, this.vel.z);
       let d = want - this._modelYaw;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
@@ -264,6 +272,13 @@ export class Player {
       this._animPhase += dt * 2;
       this._torso.scale.y = 1 + Math.sin(this._animPhase) * 0.012;
     }
+    // a dodge reads as a low dive: crouched, leaning hard into it
+    const dz = (this._dodgeT ?? 0) > 0 ? 1 : 0;
+    this._dodgeLook = (this._dodgeLook ?? 0) + (dz - (this._dodgeLook ?? 0)) * Math.min(1, 22 * dt);
+    if (this._dodgeLook > 0.01) {
+      this._torso.rotation.x = Math.max(this._torso.rotation.x, 0.75 * this._dodgeLook);
+      g.scale.y = 1 - 0.22 * this._dodgeLook;
+    } else if (g.scale.y !== 1) g.scale.y = 1;
     g.rotation.y = this._modelYaw;
   }
 
@@ -412,6 +427,54 @@ export class Player {
     this.syncCamera();
   }
 
+  invulnerable() { return (this._iframes ?? 0) > 0; }
+  // thrown back from `from` (a bear's swipe)
+  knock(from, force = 6) {
+    const dx = this.pos.x - from.x, dz = this.pos.z - from.z, d = Math.hypot(dx, dz) || 1;
+    this.vel.x = (dx / d) * force; this.vel.z = (dz / d) * force;
+    this.vel.y = Math.max(this.vel.y, 4.5);
+    this.onGround = false;
+    this._knockT = 0.3;
+  }
+
+  // Over-the-shoulder sighting for the bow (games/bow.js, games/archer.js):
+  // a short boom, the camera eased right of the head so the crosshair sits
+  // clear of the body, the body turned to face the aim and its arms replaced
+  // by the archer's pose. The old follow distance comes back on exit.
+  setShoulder(on, pose = null) {
+    if (on === !!this._shoulder) return;
+    this._shoulder = on;
+    if (on) {
+      this._shoulderPrevDist = this.camDist;
+      this.camDist = CAM.SHOULDER_DIST;
+      this._snapCam = true;
+      this.setAim(false);
+      let x = document.getElementById('aim-cross');
+      if (!x) {
+        x = document.createElement('div');
+        x.id = 'aim-cross';
+        x.innerHTML = '<span class="gap"></span><span class="dot"></span>';
+        document.body.appendChild(x);
+      }
+      x.style.display = 'block';
+    } else {
+      this.camDist = this._shoulderPrevDist ?? CAM.DIST;
+      this._snapCam = true;
+      const x = document.getElementById('aim-cross');
+      if (x) x.style.display = 'none';
+    }
+    this.holdPose(on ? pose : null);
+    this.syncCamera();
+  }
+
+  // An arm pose that replaces the swinging arms and the held item.
+  holdPose(pose) {
+    if (this._pose) this._pose.group.removeFromParent();
+    this._pose = pose;
+    if (pose && this.model) this.model.add(pose.group);
+    for (const a of [this._armL, this._armR]) if (a) a.visible = !pose;
+  }
+
   // true if the collision box overlaps any solid block
   _embedded() {
     const p = this.pos, r = PLAYER.RADIUS, h = 1.75;
@@ -430,7 +493,10 @@ export class Player {
   syncCamera() {
     // _stepLift eases the camera up after an auto-step so a kerb reads as a
     // stride rather than a jolt; the body itself has already snapped.
-    const px = this.pos.x, py = this.pos.y - this._stepLift + CAM.PIVOT, pz = this.pos.z;
+    let px = this.pos.x, py = this.pos.y - this._stepLift + CAM.PIVOT, pz = this.pos.z;
+    if (this._shoulder) { // right of the head and a touch higher (setShoulder)
+      px += Math.cos(this.yaw) * CAM.SHOULDER_SIDE; pz += Math.sin(this.yaw) * CAM.SHOULDER_SIDE; py += 0.2;
+    }
     const cp = Math.cos(this.pitch);
     const fx = Math.sin(this.yaw) * cp;
     const fy = -Math.sin(this.pitch);
@@ -565,7 +631,14 @@ export class Player {
     // point and nothing moves. Only strafing and back-pedalling pull the yaw
     // round, which is exactly the wanted behaviour. Any active look input wins
     // outright, so dragging still works whenever the player wants it.
-    if (this.lockCamera && !inp.look.x) {
+    //
+    // 2026-11-01 (on for everyone now): after a drag the camera waits 1.2 s
+    // before settling back, so a look around is not snatched away; walking
+    // back towards the camera never spins it round; and while the bow is up
+    // the aim is the player's own (aimHeld, games/bow.js).
+    this._lookIdle = inp.look.x || inp.look.y ? 0 : (this._lookIdle ?? 9) + dt;
+    const backing = inp.move.y < -0.3 && Math.abs(inp.move.x) < 0.6;
+    if (this.lockCamera && !this.aimHeld && this._lookIdle > 1.2 && !backing) {
       const sp = Math.hypot(this.vel.x, this.vel.z);
       if (sp > 0.6) {
         // yaw convention: forward = (sin yaw, -cos yaw)
@@ -579,7 +652,7 @@ export class Player {
     // the sky transition uses the HUD button, not the wheel)
     // ignored while sighting the bow: a stray wheel or pinch must not pull the
     // camera back out of first person mid-shot
-    if (inp.zoom && !this._fpsOn) this.camDist = Math.max(CAM.MIN, Math.min(CAM.MAX, this.camDist + inp.zoom * 0.6));
+    if (inp.zoom && !this._fpsOn && !this._shoulder) this.camDist = Math.max(CAM.MIN, Math.min(CAM.MAX, this.camDist + inp.zoom * 0.6));
 
     // camera forward: syncCamera applies rotateY(-yaw) to (0,0,-1), giving
     // (sin yaw, 0, -cos yaw). Movement MUST use the same basis so W is always
@@ -591,9 +664,30 @@ export class Player {
     const speed = PLAYER.SPEED * (inWater ? 0.55 : 1) * (this.moveMul ?? 1);
     const targetVx = (fwd.x * inp.move.y + right.x * inp.move.x) * speed;
     const targetVz = (fwd.z * inp.move.y + right.z * inp.move.x) * speed;
-    const accel = this.onGround || inWater ? 14 : 5;
-    this.vel.x += (targetVx - this.vel.x) * Math.min(1, accel * dt);
-    this.vel.z += (targetVz - this.vel.z) * Math.min(1, accel * dt);
+    // The dodge (2026-11-01, the bear fight: "a dodging mechanic where a
+    // player can dodge by pressing a button. just like dark souls"): a short
+    // fast dash the way the stick points (straight back with no stick), and
+    // for a moment nothing can hurt you. Shift, or the Dodge button.
+    this._dodgeCd = Math.max(0, (this._dodgeCd ?? 0) - dt);
+    this._iframes = Math.max(0, (this._iframes ?? 0) - dt);
+    this._knockT = Math.max(0, (this._knockT ?? 0) - dt);
+    if (inp.dodge && this._dodgeCd <= 0 && this.onGround && !this.moveLock) {
+      let dx = targetVx, dz = targetVz;
+      if (Math.hypot(dx, dz) < 0.5) { dx = -fwd.x; dz = -fwd.z; }
+      const n = Math.hypot(dx, dz) || 1;
+      this._dodgeDir = { x: dx / n, z: dz / n };
+      this._dodgeT = DODGE.TIME; this._dodgeCd = DODGE.COOL; this._iframes = DODGE.IFRAMES;
+      this.onDodge?.();
+    }
+    if (this._dodgeT > 0) {
+      this._dodgeT -= dt;
+      this.vel.x = this._dodgeDir.x * DODGE.SPEED;
+      this.vel.z = this._dodgeDir.z * DODGE.SPEED;
+    } else if (this._knockT <= 0) {
+      const accel = this.onGround || inWater ? 14 : 5;
+      this.vel.x += (targetVx - this.vel.x) * Math.min(1, accel * dt);
+      this.vel.z += (targetVz - this.vel.z) * Math.min(1, accel * dt);
+    }
 
     if (inWater) {
       // a jump PRESS breaches with full force (≤2-block banks are climbable);

@@ -1829,3 +1829,158 @@ use the mouse, they have to press escape. kids will not remember to press escape
   all PASS; the editor opens. Not checked: real pointer lock (the pane cannot lock the mouse), so the release on a
   narrator box is read from code, not seen.
 
+## 39. The world grown to 224 (2026-11-01 IST)
+
+The user, 10-30: "more to explore + room to hunt. give some place for kids to roam around." On 11-01, picking the
+order: "grow map first, then we build the hamlet and the village boards."
+
+### 39.1 The land
+
+- `WORLD.SIZE_X` and `SIZE_Z` 160 to 224. The old valley (x and z under 128) is untouched: its heights depend only on
+  `CORE_SIZE`, and `regression.mjs` still checks every one of its columns. The ring from 128 to 160 lost its outer
+  edge ridge, which is now open country.
+- New shapes beyond the old ridges, in `NEW_LAND` (`world/terrain.js`), added to the height only outside the core:
+  a grassland with most of the noise taken out (room to stalk), Lookout Hill (a broad cone, rise 11, slopes of a block
+  or less per block), a low sandstone shelf for the Painted Rocks, the lake (carved after the base: a bed two or three
+  below the water, sand shores capped one block per step), and the sal forest (sal mostly, some peepal and banyan,
+  snags in the cold eras, never within 10 of the river). Twelve outcrops stand on the rocks shelf; eight have a
+  shelter cut into the south face (`ROCK_SHELTERS`, for paintings later). Where the two new edge ridges meet in the
+  far corner they take the taller, not the sum, which stood up as a stepped pyramid.
+- `SITES` gains `grassland`, `lookoutHill`, `paintedRocks`, `lake`, `salForest`.
+
+### 39.2 Cost, and what pays for it
+
+Scene C, desktop, `gl.info` from fixed poses (calls / triangles):
+
+| Pose | 160 | 224, all drawn | 224, far chunks skipped |
+|---|---|---|---|
+| Plains looking east (96,14,48) | 53 / 50k | 125 / 108k | 121 / 105k |
+| Camp looking south (40,14,30) | 135 / 105k | 211 / 185k | 142 / 106k |
+| Lookout Hill (204,22,38) | n/a | 266 / 227k | 178 / 131k |
+| Act 2 sky (76,74,106) | 181 / 148k | 185 / 151k | 185 / 151k |
+
+- World build 16 to 26 ms, full remesh 122 to 221 ms (both behind fades).
+- `ChunkMesher.cullFar`: a ground camera skips chunks whose nearest edge is past 140 blocks, where the fog is already
+  85% (it runs 60 to 154). Cameras above y 30 draw everything. Every ground pose now sits under Act 2's existing peak.
+  The far plane stays 160 (the sky dome sits at 138, and Act 2 needs the distance).
+- Not measured on a phone. Act 2's era flips remesh 196 chunks instead of 100 at the same per-frame budget, so the
+  drain after a flip takes about twice as long.
+
+### 39.3 Verified
+
+- `check.mjs` all PASS, with a new regression walk: from the camp to the grassland, Lookout Hill, the Painted Rocks,
+  the sal forest, the lake shore, the plains, the training post and the village, stepping up at most one block, in
+  both the ice age and later; the lake holds water; the hill tops y 17.
+- Browser pane, fixed camera: Lookout Hill over the grassland and outcrops; the lake and its stepped shores; the river
+  through the sal forest; an outcrop shelter. Act 2 frames the village as before. The editor opens; no console errors.
+
+
+## 40. The phone playtest: 19 fixes, a boss, a phone rig (2026-11-01 19:30 IST)
+
+The user played the 224 world on their phone and listed 19 issues (docs/TASKS.md, in their words), then: "Go online,
+find references, make these changes ... If you have any confusion, do not assume. do not guess. ask me". Two rounds
+of questions settled the open choices (answers in TASKS). References: sal forests (Kanha), Bhimbetka, archery form,
+Roblox's Classic and Follow touch cameras, CoD and Minecraft fire-button aiming, NN/g touch sizes.
+
+### 40.1 The phone rig (`game/tools/phone-rig.mjs`, scenarios in `game/tools/rig/`)
+
+- Plays the game by touch as an iPhone SE and an iPhone 15 (WebKit, Safari's engine) and a Galaxy S8 and A55
+  (Chromium), with Playwright installed outside the repo in `~/.towcb-rig`. Real taps; synthetic touch for the
+  joystick and drag-look (WebKit will not construct `Touch`, so the events carry touch-shaped lists); pointer presses
+  for the Draw button. Saves at the camp, mid-hunt and in the hamlet. Pictures and console errors per phone.
+
+### 40.2 Screens and controls
+
+- Settings: "I am playing on a phone or tablet" (guessed from the pointer, the player's answer wins; every control and
+  instruction follows, live); "Camera follows behind me" on for everyone (settings version 3); "Aim the bow through
+  my eyes". The follow camera waits 1.2 s after a drag, never spins when you walk back, leaves the aim alone.
+- Jump says "Jump". The cave lessons show pictures of the phone's own controls (a stick pushed the right way, the
+  Jump and Equip buttons, a finger dragging), never arrow keys. The lesson card folds to its heading; the task line
+  folds to one line 7 s after it changes, a tap opens it. A phone pass shrinks the HUD and keeps the middle clear.
+- Skip practice hands you the basket and leaves you to walk out of the cave; the valley sweep still plays outside.
+
+### 40.3 The bow, the hunt and the bear
+
+- `games/archer.js`: two looks. Through the eyes: a fist round the grip, the draw hand on the nock, forearms out of
+  frame. Over the shoulder (default): the body side-on, a two-bone bow arm and draw arm following the string, the
+  camera high behind. Both are first drafts for the user to choose between.
+- `games/freebow.js`: in the band camp the bow is up whenever it is in hand and equipped, anywhere; nothing plants
+  the feet. Deer have 6 health, an arrow does 3; a downed deer becomes meat where it fell (saved). The hunt is done
+  when three meat are in the store box. The post's three practice hits are optional. `games/hunt.js` and
+  `practiceAtPost` are gone. The Draw button is also a look surface (the holding thumb aims).
+- The title screen's post: walk while you shoot; an arrow only looses from behind the red line.
+- `games/bear.js`: the great bear sleeps in its den (`SITES.bearCave`), wakes when you come within 15 of the mouth or
+  shoot it, and shows its name and a long bar; you get two hearts and a Dodge button (Shift on a keyboard: a short
+  dash with 0.4 s where nothing hurts). It rears up before a swipe, charges whenever an arrow lands, gives up past 58
+  from home or near the fire (keeping its wounds). Two swipes and you wake by the fire, the bear whole again. 100
+  health, 3 an arrow: very hard alone. The "more meat" errand now heads east past the den.
+
+### 40.4 The world (a helper agent, `world/terrain.js`)
+
+- The old boundary ridges are gone; only the world's outer edges rise. The sal forest is tall 2x2 and 1x1 boles with
+  lumpy layered crowns on a jittered grid, with clearings. The Painted Rocks are four bedded sandstone tors after
+  Bhimbetka with walk-in shelters (`ROCK_SHELTERS` fields documented in place). A bear's knoll and den, a murram trail
+  east, savanna dressing between places (groves, boulders, logs, dry grass), and `WATER_EDGES` (drinking places round
+  the lake and along the river). `regression.mjs` walks to every one of them.
+- Herds in seven places across the map, hares, animals drink at the water, and they stay visible to 64 blocks. Wild
+  berry bushes 110 to 36 over the whole map; the three shells spread along the river.
+- The sweep out of the cave is a 30 s flight over the whole map with the world living underneath (`main.js` cinema
+  mode); a Skip button after 2 s.
+
+### 40.5 Cost
+
+Scene A, A55 profile in the rig (software GL), draw calls: plains east 84, camp south 107, grassland 79, Lookout Hill
+130 (Act 2 is 185). Full remesh 353 ms in software GL (not comparable to §39's desktop numbers). Not run on a phone.
+
+## 41. Bow round 2: mouse look, rabbits, wary animals, Skyrim stance, tabs (2026-11-01 21:00 IST)
+
+The user looked at both bow views beside Oblivion, Skyrim and Mount and Blade pictures and listed eight changes
+(docs/TASKS.md, in their words); answers settled the rest.
+
+- Computer: the mouse is the camera in the world, always (pointer lock wanted whenever not touch; the first click on
+  the world catches it, every text, choice and panel lets it go). The follow camera is phones only. A click draws
+  and shoots (left once caught, right always); Space, F and E no longer draw, so Space jumps with the bow up.
+- Rabbits: hunted like deer, health 3 (one arrow), a small body to hit, quick, a `rabbit` item worth half a meat.
+  The hunt counts meat plus half the rabbits in the store box ("Hunt deer or rabbits for the tribe (1½/3 meat)").
+- Fewer deer: nine in four herds, none within 60 blocks of the post. Every wild animal is wary (`Animal.wary`,
+  `setThreat` in npc.js): deer bolt at 14 blocks, rabbits at 9, so a hunt is a stalk and a shot from range.
+- A health bar over an animal you hit (games/freebow.js): red for what is left, pale for what was just lost,
+  growing with distance so it reads, gone after three seconds or when it falls.
+- Over the shoulder, Skyrim and Oblivion style: the body turned 0.35 rad, not side-on; the camera 2.8 back, 0.85
+  right, at eye height. The default view; through the eyes stays in Settings.
+- Through the eyes, third try (the user: "in FPS, the bow and arrow view is not good at all ... it looked better
+  before"). Seen head-on the arrow was a dot, the bow's curve vanished into a stick and the string lay along it. Now
+  placed in screen terms: the arrow rest just below left of the crosshair, the bow upright and turned 0.55 rad so its
+  curve shows, the nock drawn back to the lower right so the arrow is a long line to the crosshair and the string a
+  V; the bow arm leaves down-left, the draw arm right, never crossing; a size smaller on a tall screen.
+- Settings in five tabs (`SETTING_TABS`): Controls, Display, Sound, Play, My story; the last tab is remembered for
+  the session.
+
+Checked in the phone rig on WebKit and Chromium: the tabs, a rabbit bolting and falling to one arrow, a deer's bar
+after one hit, both bow views in portrait and landscape. The mouse look is not run in a desktop browser yet.
+
+## 42. Real arrow flight, and the Oblivion Remastered first-person bow (2026-11-01 22:30 IST)
+
+The user: "no matter the distance, if we aim, it hits exactly at the center. using bow and arrow should involve
+skill" and, with a 31 s comparison video, "the oblivion remastered view. copy it exactly like that ... including
+the subtle zoom in effect when the bow is fully drawn".
+
+### 42.1 Arrow flight (research: UESP and the Creation Kit wiki, Skyrim archery mods)
+
+- The solved arc is gone. The arrow leaves along the crosshair's line, straight at what the crosshair is on (or 90
+  blocks out), and falls under arrow gravity 3.0 (Skyrim: about 51 m/s and 0.35 of the world's gravity, no tilt).
+- Speed grows with the draw (the Oblivion model): 17.5 at the shortest pull, 50 at full. Measured at the post, full
+  draw, aimed dead centre: 0.06 low at 11 blocks, 0.24 at 21, 0.53 at 31; about 2 at 60. A full draw does 3 damage,
+  a rushed one 1. Draw time 0.55 to 0.85 s. Medal thresholds at the post were set with the old aim and may now be
+  harder.
+
+### 42.2 Through the eyes, after Oblivion Remastered (games/archer.js)
+
+Studied frame by frame (contact sheets at 1, 4 and 10 frames a second, in the session scratchpad, not the repo):
+lowered at rest with only the fist and the bow's edge in view; an arrow slides in from the lower right, then the bow
+rises; at full draw the bow lies on its side across the lower third, the bow arm (a hide bracer here) comes up from
+the bottom left, the arrow lies on the knuckle pointing at the crosshair, the draw hand and string out of frame; a
+zoom of about a tenth eases in over the last of the draw (`fovZoom` 0.42, about 7.5 degrees); on release the bow
+snaps, right end up and the string straight, and drops back to rest in about half a second. Positions are in half
+screen heights, so a phone sees the middle of what a monitor sees, as in the video. The over-the-shoulder view is
+unchanged apart from the gentler zoom.
