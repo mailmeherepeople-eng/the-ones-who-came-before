@@ -31,14 +31,23 @@ export class Input {
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => { this.keys.clear(); this.clearEdges(); });
 
-    // ---- mouse look (pointer lock) ----
+    // ---- mouse look ----
+    // The mouse is caught (pointer lock) only while something asks for it:
+    // the bow, while it is up (games/bow.js capture()). Everywhere else a
+    // drag turns the camera and the pointer stays free, so a child never has
+    // to know about Escape to click a box, a button or a choice (2026-10-31:
+    // "kids will not remember to press escape every time"). Anything that
+    // puts text or a choice up lets go (release(), ui/hud.js, ui/activity.js);
+    // a click on the world takes it back while it is still wanted.
+    this.captureWanted = false;
     canvas.addEventListener('click', () => {
-      if (!this.isTouch && this.enabled && !this._pointerLocked) {
+      if (!this.isTouch && this.enabled && this.captureWanted && !this._pointerLocked) {
         canvas.requestPointerLock?.()?.catch?.(() => {});
       }
     });
     document.addEventListener('pointerlockchange', () => {
       this._pointerLocked = document.pointerLockElement === canvas;
+      if (this._pointerLocked && !this.captureWanted) document.exitPointerLock?.();
     });
     // drag-look fallback: pointer lock is not available everywhere (embedded
     // browsers, iframes) — a held left-drag on the canvas must always rotate.
@@ -221,6 +230,17 @@ export class Input {
     this.equipPressed = false;
     this.zoomDelta = 0;
     return out;
+  }
+
+  // Ask for the mouse (the bow is up) or give it back for good.
+  capture(on) {
+    this.captureWanted = on;
+    if (on && !this.isTouch && !this._pointerLocked) this.canvas.requestPointerLock?.()?.catch?.(() => {});
+    if (!on && this._pointerLocked) document.exitPointerLock?.();
+  }
+  // Let go for now (a box or a choice is up); a click on the world takes it back.
+  release() {
+    if (this._pointerLocked) document.exitPointerLock?.();
   }
 
   setEnabled(on) {

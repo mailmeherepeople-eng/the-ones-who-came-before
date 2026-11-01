@@ -1755,3 +1755,77 @@ targets, oldest first, no clock).
   on the results card with medal and board. With an Act 1 save, the equip control is hidden at the title's post
   and still shows at the story's practice stop. `check.mjs` all PASS; the editor opens. Cache `towcb-v20`.
 
+## 37. The band camp as a task board, in any order (2026-10-31 IST)
+
+§36 shipped in 87645c2. Then: "i tried equipping bow and arrow but it is not working. i havent completed the berry
+task yet. is that why? also i want it to be tasks. players should be able to do any task and not have to
+compulsorily do berry task first." The bow could be carried, but it shot only in the hunt beat, and the hunt waited
+for the berries, which waited for nothing but came first.
+
+### 37.1 The split
+
+- `acts/act1.js` (1,547 lines, frozen) is now 500: the scene list and scenes B to D. Scene A is
+  `acts/sceneA.js` (setup, the wake, the scheduler, the move and the burial), its tasks `acts/campTasks.js`, the
+  helpers every scene shares `acts/act1kit.js`. The code moved as it was; the kiln's fire handles go through
+  `forgetFire`. The frozen cap on act1 is gone (AGENTS.md, `check.mjs`).
+
+### 37.2 The board
+
+- Eight tasks: gather, hunt (the bear stays part of it: the ruse needs the bow still in hand), fish, knap, paint,
+  beads, trade, fire circle. Six are open from the start. The trade waits for beads and the gathering; the fire
+  circle for the gathering and three other tasks. Both carry a recall question about a term taught at the gather
+  (`huntGather`, `band`), and the fire circle's comes after a real gap, as before.
+- Doing the thing starts the task: taking the bow (hunt), the rod (fish), the basket near a bush or a wild berry
+  pick (gather), the knapping stone, the shelter wall, picking up a shell (beads; shells now lie on the bank from
+  the start), the visitors by the tents (they arrive when the trade opens), sitting at the fire. Holding the basket
+  alone does not start the gather, so the tutorial's basket does not lock a player into berries.
+- One task at a time: each is the scripted beat it always was. The others show "When you finish ..." and no Show
+  me, so the beacon stays on the running task. A reload resumes the running task (`campTasks.current`).
+- The Tasks pill sits under the satchel; the panel lists each task's state and how to start it; Show me points the
+  beacon. A short toast marks each finished task. The fire circle, unguarded before, now has `fireCircle.done`.
+- Wild berry picks still count toward the gather at any time but move the objective only while gathering.
+- The gather intro no longer says "Your first task".
+
+### 37.3 Verified
+
+- Browser pane at 375x812, from saves: the board lists eight tasks with two locked and why; Show me points the
+  beacon; the knapping stone started knapping first and finished (1/8); taking the bow then started the hunt with
+  no berries; a reload resumed the hunt with the rest waiting; with seven done only the fire circle was armed, and
+  it ran through the recall, the move, the burial, the thaw and into Scene C, with the pill gone; a shell started
+  the beads (1/3); the basket by a bush started the gather. `check.mjs` all PASS; the editor opens. Cache
+  `towcb-v21`. Not checked: the full tutorial into the board, and fish, paint and trade started live (they use the
+  same two arms as the bow and the knapping stone).
+
+## 38. The task board as a painted hide, and a mouse that stays free (2026-10-31 IST)
+
+The user, playing §37: "the board should be an object in the game. like a message board. also, when people have to
+use the mouse, they have to press escape. kids will not remember to press escape every time."
+
+### 38.1 The task hide
+
+- The Tasks pill is gone. The board is a hide stretched on a frame at `SITES.taskHide` (48, 21), in a line with the
+  chest and the store box. The band has no writing (Act 1's lesson is that their language is lost), so it carries a
+  picture per task, drawn from the game's own icon set, with a ring of red ochre round each one done, dots under the
+  running one, and the locked ones faded. Its back is bare skin. Walking up to it ("Look at the task hide") opens
+  the same list as before; while no task runs, the objective names the hide and the guide light stands beside it.
+- New icons for the bow and the fire (`ui/icons.js`), used by the hide, the list and the fire circle's prompt.
+
+### 38.2 The mouse
+
+- Before: one click on the world caught the mouse (pointer lock), and every narrator box, choice and button then
+  needed Escape first. Now nothing catches it except the bow while it is up (`input.capture()`, called by
+  `Bow.raise`, given back by `lower`, `rest`, `stop`). Walking, a drag with either button turns the camera, like most
+  third-person games children play, and the pointer is always there to click.
+- Anything that puts something up to click lets go: narrator, card and choice (`input.release()` in `ui/hud.js`),
+  and every panel already did (`ui/activity.js`). With the bow still up, a click on the world takes the mouse back.
+- Texts: the tutorial's look step, the controls card and the desktop hint say drag; the bow hint says move the
+  mouse (click once if the view does not follow).
+
+### 38.3 Verified
+
+- Browser pane: the hide stands by the store box, its pictures read at walking distance from the camp side, the
+  knapping task shows its ring, the back is plain; using it opens the list and it closes; the objective names the
+  hide. At the training post the mouse is asked for only during a round, not on the title or the menu. `check.mjs`
+  all PASS; the editor opens. Not checked: real pointer lock (the pane cannot lock the mouse), so the release on a
+  narrator box is read from code, not seen.
+

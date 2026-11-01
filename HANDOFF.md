@@ -3,8 +3,10 @@
 Cap 6 KB, only what is current. Read `AGENTS.md` first. When something here is done, take it out (the record goes
 in `docs/CHANGELOG.md`).
 
-## Resume here (2026-10-31 IST)
+## Resume here (2026-11-01 IST)
 
+- Live once pushed: the band camp's task board in any order (§37, `act1.js` split by scene), the board as a painted
+  hide and a mouse caught only while aiming (§38), cache `towcb-v21`. The user played it ("its fine").
 - Live on Pages: the bow (dd65fa8, §33, §34), the crosshair on equip (06c6a81, §35), the Oldest first date round
   (§36, the commit after it; the user played it: "its good"), service worker `towcb-v20`. The bow: hold to
   draw, honest crosshair, stuck arrows, the hunt in `games/hunt.js`, a training post at `SITES.trainingPost` (Scene
@@ -33,6 +35,9 @@ in `docs/CHANGELOG.md`).
 
 ## Next, in order
 
+0. **Task boards for the hamlet and the village** (the user's "tasks in any order", 10-31): plant, goats and the
+   chief's errand in any order; pot and basket in any order. Same arms as the camp (CL §37).
+
 From the 30 Oct playground proposal (`docs/plans/2026-10-30-playground.md`), the user's call ("its a game +
 education. right now its just education and very little game"):
 
@@ -56,7 +61,7 @@ Then the 27 Oct brief (`docs/plans/2026-10-27-improvements.md`):
 6. Then: camp and people (V5, V6), Act 2 declutter (V8), dig in layers (V11), `?beat=` jumps and a beat runner (W3),
    a taught-before-used check (W4), a floor-phone bench (P1), silent playtests (P2).
 
-Also open: split `act1.js` along its scenes before slices 2 to 4 grow it (frozen at 1,547 lines); a leftover
+Also open: a leftover
 worktree branch `claude/infallible-almeida-b0bbe1` whose one fix is already on `main` (the user's call to delete); the Hindi strings
 swap; vendor the Spectral and Cinzel fonts for offline; retune the lit style for the new palette; the world edge is a
 flat wall into fog; `?fast` is dead (no act uses a countdown).

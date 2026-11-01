@@ -49,7 +49,7 @@ systems; `acts/beats.js` checkpoints each beat, and a beat whose record exists i
 | `audio.js`, `sound.js` | synth bed and stingers; file audio (voice streams, sfx decode, voice pools, iOS session) |
 | `engine/renderer.js` | scene, camera, sky dome, sun, clouds, lights, 30 fps limiter, hidden-tab heartbeat, context loss, `setSky`, `setRich`, shadows |
 | `engine/post.js` | the Rich tier's one full-screen pass (FXAA, grade, ACES; FXAA only under Vivid) |
-| `engine/input.js` | keyboard, mouse, pointer lock, touch joystick, drag-look, tap, pinch, `injectInteract()` |
+| `engine/input.js` | keyboard, mouse, pointer lock on request (`capture()`, `release()`), touch joystick, drag-look, tap, pinch, `injectInteract()` |
 | `world/voxel.js`, `blocks.js` | the Uint8Array world and dirty chunks; ~40 block defs, `registerBlock()` (custom ids from 64) |
 | `world/terrain.js` | deterministic valley, river, cliffs, shelter, training cave, trees and flora, `SITES`, `TRAINING_CAVE` |
 | `world/states.js` | era world-states 0 to 7, band drift, mound, log crossing, present day |
@@ -59,7 +59,11 @@ systems; `acts/beats.js` checkpoints each beat, and a beat whose record exists i
 | `player/player.js` | AABB physics, jump, swim and breach, camera boom, model (face, topknot, fur, beads, hide wrap; each moving part folded, CL §31.3), equip, trauma shake, character collision |
 | `npc/npc.js`, `npc/ambient.js` | `Npc` and `Animal`: movement, carry, poses, bubbles, talk voice, looks (`LOOKS` per named character, a hashed mix otherwise, `modern: true` for Act 3; CL §32.2); the working-day scheduler |
 | `fx/fx.js` | pooled particles (2 draw calls), rings, pillars, waves, motes |
-| `acts/act1.js` | Act 1 scenes A to D (1,547 lines: frozen, split it before it grows) |
+| `acts/act1.js` | Act 1's scene list and scenes B to D (thaw, hamlet, village) |
+| `acts/sceneA.js` | Scene A, the band camp: setup, the wake, the task scheduler, the move and the burial |
+| `acts/campTasks.js` | the camp's tasks, one function each (hunt with the bear, fish, knap, paint, beads, trade, fire circle) |
+| `acts/act1kit.js` | helpers every Act 1 scene shares: props, ground height, fires, the chest and store box, waits |
+| `ui/taskboard.js` | the task hide by the store box (pictures, ochre rings for done) and its panel (states: done, active, open, next, locked; Show me points the beacon) |
 | `games/bow.js` | the shared bow: hold to draw, release, arcs zeroed on the crosshair, stuck arrows, hit feel, the bow in view |
 | `games/targets.js`, `hunt.js` | painted stand, swinging and running targets with ring scoring; the Act 1 hunt's shooting |
 | `games/range.js`, `scores.js` | the training post (title screen rounds, Scene A practice stop, lane clearing); local bests, medals, board |
@@ -102,7 +106,7 @@ Engine details worth knowing:
 | Action | Desktop | Touch |
 |---|---|---|
 | Move | WASD or arrows | left joystick |
-| Look | drag, or click for pointer lock | drag the right side |
+| Look | drag with either mouse button; the pointer stays free (the mouse is caught only while the bow is up, and let go for any text, choice or panel) | drag the right side |
 | Interact | E or Enter, or click the prompt pill | tap the world or the pill |
 | Jump | Space | jump button |
 | Equip / put away | Q, or the equipment button | equipment button; a selector appears with several tools |
@@ -148,11 +152,11 @@ Engine details worth knowing:
 **Boot.** Title over the orbiting valley. Begin, or Continue (Start over asks first). A new game shows one promise
 card ("Make a life here. Leave something behind.") and the era card. A resumed game shows its saved objective.
 
-**Act 1, LIVE** (`acts/act1.js`). Every made thing is saved as a record with its position; Act 3 digs these up.
+**Act 1, LIVE** (`acts/act1.js`, Scene A in `acts/sceneA.js`). Every made thing is saved as a record with its position; Act 3 digs these up.
 
 | Scene | Beats |
 |---|---|
-| A, Ice (about 38,000 years ago) | Wake lying in the training cave, tap to rise (once per story). 12-stage tutorial: look, walk, back, strafe left and right, jump the sill, pick up the basket, equip, put away, equip, exit, reach camp (Skip practice exists). Valley reveal on stepping out (about 13.6 s, skippable, once). Gather: basket equipped, 12 berries, deposit in the store box, return the basket. Hunt: borrow the bow, stop at the training post for three hits on the painted targets (once, `hunt.practised`), reach the plains (the crosshair comes up because the bow is equipped), draw and release, down 3 deer, take and deposit the meat. Second hunt is a ruse: the bear appears 73 blocks from camp, run to the fire, return the bow. Fish: borrow the rod, timing ring at one of 4 spots, deposit, return. Fire circle: the elder speaks in pictograms; recall `band`. Knapping (timing, 3 strikes). Cave painting on a rock canvas, saved verbatim and mounted on the shelter wall. Three shells, beads at the knapping stone. Trade with a strange band; recall `huntGather`. Depletion and the move. The burial: place beads and blade; "Perhaps they believed something continued." |
+| A, Ice (about 38,000 years ago) | Wake lying in the training cave, tap to rise (once per story). 12-stage tutorial: look, walk, back, strafe left and right, jump the sill, pick up the basket, equip, put away, equip, exit, reach camp (Skip practice exists). Valley reveal on stepping out (about 13.6 s, skippable, once). Then the task board (`sceneA.js`, CL §37): eight tasks in any order, one at a time; doing the thing starts it. Gather (basket equipped near a bush, or a wild pick): 12 berries, deposit in the store box, return the basket. Hunt (take the bow): the training post's three hits (once, `hunt.practised`), the plains (the crosshair comes with the equipped bow), down 3 deer, take and deposit the meat, then the ruse: the band wants more, the bear appears 73 blocks from camp, run to the fire, return the bow. Fish (take the rod): timing ring at one of 4 spots, deposit, return. Knap (the knapping stone): timing, 3 strikes. Paint (the shelter wall): a rock canvas saved verbatim and mounted. Beads (pick up a shell): three shells, drill at the knapping stone. Trade (after beads and gather; visitors wait by the tents): recall `huntGather`. Fire circle (after gather and three other tasks): the elder in pictograms; recall `band`. Depletion and the move. The burial: place beads and blade; "Perhaps they believed something continued." |
 | B, Thaw (to 10,000 BCE) | Cinematic glimpse; the world thaws; protected caption on the last Ice Age |
 | C, Roots (7,000 BCE) | Plant 4 fields, lead the goats into the pen, the granary question (no one sack is yours), recall `lostTongues`, the chieftain's waterskin task, the water dispute and the lean week |
 | D, Fire and Clay (to 5,400 BCE) | Shape a pot and engrave your maker's mark (saved), weave a basket in one tap, shelf both in your hut, the copper trader, the grain delivery run to the neighbour village, recall `farming`, the lingering shot |
@@ -217,6 +221,14 @@ village (later slices change both).
   recorded `sfx/bow-loose` would win. The overlay `#ui-root > .bow-ui` must stay `pointer-events: none` (only the Draw
   button takes presses), or it eats every look drag (CL §34). In the story the bow is up whenever it is equipped
   (`equipBow`, `bowFollowsEquip`, CL §35); the equip control stays on screen while it is up, as the way to put it away.
+- **Camp task board** (`acts/sceneA.js`, `ui/taskboard.js`, CL §37): each task's start is an arm (a poll or an
+  interactable) that can be called off; while idle every open task is armed and the first to fire runs. One task
+  runs at a time; `campTasks.current` resumes it after a reload. Locked tasks name what they wait for. A task is
+  done by its record (`gathered`, `bear`, `fished`, `arrowheads`, `painting`, `beads`, `obsidian`) or
+  `fireCircle.done`; when all are done the move and the burial play.
+  The board is a painted hide on a frame at `SITES.taskHide`, beside the store box: one picture per task, an ochre
+  ring for done, three dots for the running task, faded for locked. Walking up to it opens the list; while idle the
+  guide light stands beside it.
 - **Training post** (`games/range.js`): the title's Training post button builds Scene B, clears the lanes (plants,
   and whole trees whose trunk is in the box; wild berry bushes stay; ground untouched), and runs rounds of 10
   arrows: Still (10, 20, 30 steps, x1 x2 x3), Swinging hide (x2, faster per hit), Running deer (x2, faster per hit; an erratic pace: it picks a new speed every 0.5 to 1.6 s, freezes, doubles back).

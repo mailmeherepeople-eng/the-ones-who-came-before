@@ -29,6 +29,8 @@ export const SITES = {
   // the archer's mark at the training post (games/range.js). Its lanes run
   // east over flat ground (height 10 from x 84 to 116, z 34 to 39)
   trainingPost: { x: 84, z: 36 },
+  // the band's task hide, beside the store box (acts/sceneA.js, ui/taskboard.js)
+  taskHide: { x: 48, z: 21 },
   fishSpot: { x: 60, z: 46 },
   village: { x: 76, z: 80 }, // scenes C/D village → act 3 mound
   fields: { x: 66, z: 86 }, // river-side plots

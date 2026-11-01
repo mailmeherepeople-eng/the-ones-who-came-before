@@ -143,6 +143,7 @@ export class Bow {
     this.ui.classList.add('on');
     this.ui.classList.toggle('touch', G.input.isTouch);
     document.body.classList.add('bow-up'); // css: Draw takes the jump button's corner
+    G.input.capture?.(true); // the mouse aims while the bow is up (engine/input.js)
     document.body.classList.toggle('bow-equip', !!this.followsEquip); // ui/equipment.js: Put away stays on screen
   }
 
@@ -154,6 +155,7 @@ export class Bow {
     this.vm.group.removeFromParent();
     this.ui.classList.remove('on');
     document.body.classList.remove('bow-up', 'bow-equip');
+    this.G.input.capture?.(false);
     const p = this.G.player;
     p.setFirstPerson(false);
     p.noJump = false; p.aimLookMul = 1; p.fovZoom = 0; p.moveMul = 1;
@@ -166,6 +168,7 @@ export class Bow {
     this._cancelDraw();
     this.ui.classList.remove('on');
     document.body.classList.remove('bow-up', 'bow-equip');
+    this.G.input.capture?.(false);
     const p = this.G.player;
     p.aimLookMul = 1; p.fovZoom = 0; p.moveMul = 1;
   }

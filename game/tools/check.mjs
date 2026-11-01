@@ -115,7 +115,7 @@ runTool('audio manifest in sync', 'sync-audio-manifest.mjs', ['--check']);
   const repo = join(gameDir, '..');
   const DOC_CAPS = { 'AGENTS.md': 8192, 'HANDOFF.md': 6144, 'CLAUDE.md': 512 };
   const LINE_CAP = 1500;
-  const FROZEN = { 'src/acts/act1.js': 1547, 'src/dev/editor.js': 1615 };
+  const FROZEN = { 'src/dev/editor.js': 1615 };
   const bad = [];
   const notes = [];
   for (const [doc, cap] of Object.entries(DOC_CAPS)) {

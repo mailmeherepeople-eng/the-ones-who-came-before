@@ -264,6 +264,7 @@ export class HUD {
   // fast the player taps. A tap still skips ahead at any point. With no
   // recording the behaviour is exactly what it always was: wait for a tap.
   narrator(text, { tapLabel = S.ui.continue, voice = null } = {}) {
+    this.input?.release?.(); // the pointer must be free to tap this (engine/input.js)
     return new Promise((resolve) => {
       const el = document.createElement('div');
       el.className = 'narrator';
@@ -359,6 +360,7 @@ export class HUD {
   // tap still skips at any point. With no recording the behaviour is what it
   // always was, wait for the button.
   async card(entries, { holdMs = 0 } = {}) {
+    this.input?.release?.(); // the pointer must be free to tap this (engine/input.js)
     const list = Array.isArray(entries) ? entries : [entries];
     const el = document.createElement('div');
     el.className = 'card-overlay';
@@ -420,6 +422,7 @@ export class HUD {
 
   // choice prompt; returns chosen index
   choice(title, options) {
+    this.input?.release?.(); // the pointer must be free to tap this (engine/input.js)
     return new Promise((resolve) => {
       const el = document.createElement('div');
       el.className = 'choice-box';
